@@ -18,13 +18,16 @@ repositories {
 }
 
 dependencies {
+	// JPA（Entity / Repository）與 spring-jdbc（JdbcClient、JdbcTemplate）
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	runtimeOnly 'com.mysql:mysql-connector-j'
+	// PostgreSQL driver：編譯期用不到，只需要執行期在 classpath 上（版本由 Spring Boot BOM 決定）
+	runtimeOnly 'org.postgresql:postgresql'
+	// runtimeOnly 'com.mysql:mysql-connector-j'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'

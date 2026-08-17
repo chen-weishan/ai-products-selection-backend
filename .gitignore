@@ -1,6 +1,14 @@
 HELP.md
 .gradle
 build/
+
+### 機密設定 ###
+# 真正的密碼只留在本機，範本 .env.example 才進版控
+.env
+.env.local
+!.env.example
+application-local.properties
+
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
