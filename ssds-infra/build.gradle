@@ -1,0 +1,22 @@
+// ssds-infra：Entity、Repository、Flyway migration、排程
+// 依賴 ssds-core（使用其中的 enum 與領域型別），反向不成立。
+dependencies {
+	api project(':ssds-core')
+
+	api libs.spring.boot.starter.data.jpa
+	implementation libs.jackson.databind
+
+	// Flyway：schema 版控（規格書 §3.2）
+	implementation libs.spring.boot.starter.flyway
+	// Flyway 10 起，各資料庫的支援拆成獨立模組，PostgreSQL 需額外引入
+	runtimeOnly libs.flyway.postgresql
+
+	// 排程去重（多節點時避免同一任務重複執行）
+	implementation libs.shedlock.spring
+	implementation libs.shedlock.jdbc
+
+	// PostgreSQL driver：編譯期用不到，只需執行期在 classpath 上
+	runtimeOnly libs.postgresql
+
+	testImplementation libs.test.data.jpa
+}

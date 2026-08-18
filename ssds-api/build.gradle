@@ -1,0 +1,39 @@
+// ssds-api：Controller、DTO、Security 設定，也是可執行 jar 的產出模組
+plugins {
+	alias(libs.plugins.spring.boot)
+}
+
+dependencies {
+	implementation project(':ssds-core')
+	implementation project(':ssds-infra')
+	implementation project(':ssds-ai')
+	implementation project(':ssds-ingest')
+	implementation project(':ssds-calibration')
+
+	implementation libs.spring.boot.starter.webmvc
+	implementation libs.spring.boot.starter.security
+	implementation libs.spring.boot.starter.validation
+	implementation libs.spring.boot.starter.aspectj
+	// 規格書 §3.3：後端為 OpenAPI 契約的單一事實來源
+	implementation libs.springdoc.openapi
+
+	developmentOnly libs.spring.boot.devtools
+	runtimeOnly libs.postgresql
+
+	testImplementation libs.test.webmvc
+	testImplementation libs.test.security
+	testImplementation libs.test.validation
+}
+
+// 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改
+tasks.named('bootJar') {
+	archiveFileName = 'ssds.jar'
+}
+
+tasks.named('bootRun') {
+	// application.properties 以 spring.config.import=optional:file:./.env 讀機密值，
+	// 而 .env 放在 repo 根目錄。Gradle 預設把子專案目錄當工作目錄，
+	// 不改的話 ./.env 指到 ssds-api/.env（不存在），
+	// 密碼會退回未解析的預設值而在連線時才報 authentication failed。
+	workingDir = rootProject.projectDir
+}

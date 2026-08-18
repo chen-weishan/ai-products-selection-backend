@@ -1,0 +1,11 @@
+// ssds-core：領域模型、ScoringEngine、RiskRuleEngine
+// 依賴方向的最底層，不依賴任何其他 ssds 模組，也不依賴 JPA。
+// 刻意保持「純 Java + 少量 Spring」：計分邏輯要能不開資料庫就單元測試。
+dependencies {
+	implementation libs.spring.boot.starter.validation
+	// 需要 @Component / @Service 等註解，但不要整個 web 或 jpa
+	implementation 'org.springframework:spring-context'
+	implementation libs.jackson.databind
+
+	testImplementation libs.test.spring.boot
+}

@@ -1,0 +1,64 @@
+# ===================================================================
+# Gradle Version Catalog
+# ===================================================================
+# 規格書 §3.2：除 Java 與 Spring Boot 外，其餘相依套件不指定版本，
+# 一律由 Spring Boot BOM（io.spring.dependency-management）決定，
+# 因此本檔的 [versions] 只保留「Boot BOM 管不到」的套件。
+# 用法：build.gradle 內以 libs.xxx.yyy 引用（點號對應 TOML 的連字號）。
+
+[versions]
+springBoot = "4.1.0"
+springDependencyManagement = "1.1.7"
+# 以下三者不在 Spring Boot BOM 管理範圍內，必須自行指定版本
+springdoc = "3.1.0"
+shedlock = "7.8.0"
+commonsMath = "3.6.1"
+# Resilience4j 不在 Spring Boot BOM 管理範圍內
+resilience4j = "2.4.0"
+
+[libraries]
+# --- Spring Boot starters（版本由 BOM 決定，故不寫 version） ---
+spring-boot-starter-webmvc      = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-data-jpa    = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
+spring-boot-starter-security    = { module = "org.springframework.boot:spring-boot-starter-security" }
+spring-boot-starter-validation  = { module = "org.springframework.boot:spring-boot-starter-validation" }
+spring-boot-starter-cache       = { module = "org.springframework.boot:spring-boot-starter-cache" }
+# Spring Boot 4 把 spring-boot-starter-aop 更名為 spring-boot-starter-aspectj
+spring-boot-starter-aspectj     = { module = "org.springframework.boot:spring-boot-starter-aspectj" }
+spring-boot-devtools            = { module = "org.springframework.boot:spring-boot-devtools" }
+
+# --- 測試 starters ---
+# 別名刻意不用 spring-boot-starter-xxx-test 的形式：version catalog 的存取器
+# 會把連字號展開成點號，而 libs.spring.boot.starter.webmvc 已經是個葉節點，
+# 後面再接 .test 會直接編譯失敗。改用 test- 前綴自成一支。
+test-webmvc        = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
+test-data-jpa      = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
+test-security      = { module = "org.springframework.boot:spring-boot-starter-security-test" }
+test-validation    = { module = "org.springframework.boot:spring-boot-starter-validation-test" }
+test-spring-boot   = { module = "org.springframework.boot:spring-boot-starter-test" }
+test-junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+# --- 資料層 ---
+# Spring Boot 4 把 Flyway 的自動組態拆到獨立的 spring-boot-flyway 模組，
+# 只放 flyway-core 的話 classpath 上有 Flyway 卻不會被觸發（migration 靜靜地不執行）。
+# 一律用 starter，讓自動組態一起進來。
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+flyway-core        = { module = "org.flywaydb:flyway-core" }
+flyway-postgresql  = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql         = { module = "org.postgresql:postgresql" }
+
+# --- 工具 ---
+lombok       = { module = "org.projectlombok:lombok" }
+caffeine     = { module = "com.github.ben-manes.caffeine:caffeine" }
+resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
+
+# --- 需自行指定版本者 ---
+springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+shedlock-spring   = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
+shedlock-jdbc     = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
+commons-math3     = { module = "org.apache.commons:commons-math3", version.ref = "commonsMath" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }

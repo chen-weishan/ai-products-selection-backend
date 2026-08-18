@@ -1,0 +1,19 @@
+// ssds-ai：AiOrchestrator、PromptTemplate、OpenRouterClient、MCP client
+// 依賴 ssds-core（讀領域型別、寫回分析結果的型別），不依賴 ssds-infra。
+dependencies {
+	implementation project(':ssds-core')
+
+	implementation 'org.springframework:spring-context'
+	implementation libs.jackson.databind
+	// LLM 呼叫用的 HTTP client（Spring 6.1+ RestClient 在 spring-web 內）
+	implementation 'org.springframework:spring-web'
+	implementation libs.spring.boot.starter.validation
+
+	// 規格書 §6.7：LLM 呼叫限流
+	implementation libs.resilience4j.ratelimiter
+	// 規格書 §3.2：LLM 結果與趨勢資料快取
+	implementation libs.spring.boot.starter.cache
+	implementation libs.caffeine
+
+	testImplementation libs.test.spring.boot
+}
