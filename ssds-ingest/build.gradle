@@ -1,0 +1,13 @@
+// ssds-ingest：熱度來源 Adapter（規格書 §3.3 / FR-14）
+// 每個外部來源一個 adapter 子套件，統一實作 HeatSourceAdapter 介面。
+dependencies {
+	implementation project(':ssds-core')
+
+	implementation 'org.springframework:spring-context'
+	implementation 'org.springframework:spring-web'
+	implementation libs.jackson.databind
+	implementation libs.spring.boot.starter.cache
+	implementation libs.caffeine
+
+	testImplementation libs.test.spring.boot
+}

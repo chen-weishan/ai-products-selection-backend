@@ -1,43 +1,74 @@
+// ===================================================================
+// 根建置腳本
+// ===================================================================
+// 規格書 §3.3「建置腳本約定」：
+//   - Groovy DSL，副檔名一律 .gradle
+//   - 共用設定寫在根 build.gradle 的 subprojects { }
+//   - 相依版本以 gradle/libs.versions.toml（version catalog）鎖定
+// 根專案本身不產出 artifact，只負責統一設定。
+
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '4.1.0'
-	id 'io.spring.dependency-management' version '1.1.7'
+	// apply false：外掛在此只註冊版本，實際套用由各子模組決定
+	alias(libs.plugins.spring.boot) apply false
+	alias(libs.plugins.spring.dependency.management) apply false
 }
 
-group = 'com.example'
-version = '0.0.1-SNAPSHOT'
+allprojects {
+	group = 'com.example'
+	version = '0.0.1-SNAPSHOT'
+}
 
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
+subprojects {
+	// java-library 而非 java：ssds-infra 需要用 api 把 ssds-core 的領域型別
+	// 傳遞給上游模組（Repository 的回傳型別本來就包含那些 enum），
+	// 只有 java 外掛的話沒有 api 這個 configuration
+	apply plugin: 'java-library'
+	// 每個子模組都要套 dependency-management，才能吃到 Spring Boot BOM，
+	// 相依才可以不寫版本號（見 libs.versions.toml 註解）
+	apply plugin: 'io.spring.dependency-management'
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(21)
+		}
 	}
-}
 
-repositories {
-	mavenCentral()
-}
+	repositories {
+		mavenCentral()
+	}
 
-dependencies {
-	// JPA（Entity / Repository）與 spring-jdbc（JdbcClient、JdbcTemplate）
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	compileOnly 'org.projectlombok:lombok'
-	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	// PostgreSQL driver：編譯期用不到，只需要執行期在 classpath 上（版本由 Spring Boot BOM 決定）
-	runtimeOnly 'org.postgresql:postgresql'
-	// runtimeOnly 'com.mysql:mysql-connector-j'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testCompileOnly 'org.projectlombok:lombok'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	testAnnotationProcessor 'org.projectlombok:lombok'
-}
+	dependencyManagement {
+		imports {
+			mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+		}
+	}
 
-tasks.named('test') {
-	useJUnitPlatform()
+	dependencies {
+		// Lombok 全模組共用：編譯期產碼，不進 runtime classpath
+		compileOnly rootProject.libs.lombok
+		annotationProcessor rootProject.libs.lombok
+		testCompileOnly rootProject.libs.lombok
+		testAnnotationProcessor rootProject.libs.lombok
+		testRuntimeOnly rootProject.libs.test.junit.launcher
+	}
+
+	tasks.withType(JavaCompile).configureEach {
+		options.encoding = 'UTF-8'
+		// -parameters：Spring Data 的衍生查詢與 @Value 需要保留參數名
+		options.compilerArgs << '-parameters'
+	}
+
+	tasks.withType(Javadoc).configureEach {
+		options.encoding = 'UTF-8'
+	}
+
+	tasks.named('test') {
+		useJUnitPlatform()
+		// 規格書 §3.2：時區統一 Asia/Taipei，資料庫存 UTC。
+		// 測試 JVM 固定 UTC，避免開發者本機時區影響時間斷言
+		systemProperty 'user.timezone', 'UTC'
+		// 與 bootRun 同理：.env 在 repo 根目錄，而 Gradle 預設用子專案目錄當
+		// 工作目錄，會讓 spring.config.import 的 ./.env 找不到檔案
+		workingDir = rootProject.projectDir
+	}
 }

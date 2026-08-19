@@ -1,0 +1,13 @@
+// ssds-calibration：統計迴歸與回測（規格書 FR-15）
+// 規格 AC-15-2：建議權重必須由統計迴歸產生，AI 只負責解讀，
+// 因此迴歸計算放在這裡，與 ssds-ai 分離。
+dependencies {
+	implementation project(':ssds-core')
+
+	implementation 'org.springframework:spring-context'
+	implementation libs.jackson.databind
+	// 迴歸分析與相關係數（皮爾森相關、OLS）
+	implementation libs.commons.math3
+
+	testImplementation libs.test.spring.boot
+}
