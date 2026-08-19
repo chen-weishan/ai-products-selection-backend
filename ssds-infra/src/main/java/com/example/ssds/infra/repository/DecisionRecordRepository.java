@@ -44,4 +44,7 @@ public interface DecisionRecordRepository extends JpaRepository<DecisionRecord, 
     long countByDecidedAtBetween(Instant from, Instant to);
 
     long countByFollowedAiFalseAndDecidedAtBetween(Instant from, Instant to);
+
+    /** SceneClassifierAgent 的歷史開團次數輸入。 */
+    long countByProductId(Long productId);
 }

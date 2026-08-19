@@ -3,6 +3,7 @@ package com.example.ssds.infra.repository;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.AiTaskItem;
 import java.util.List;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
+    @EntityGraph(attributePaths = {"product"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */

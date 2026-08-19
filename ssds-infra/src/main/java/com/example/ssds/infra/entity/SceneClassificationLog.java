@@ -4,8 +4,11 @@ import com.example.ssds.core.domain.SceneType;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 情境判定與人工覆寫紀錄（規格書 §7.2 scene_classification_log）。
@@ -45,6 +48,15 @@ public class SceneClassificationLog {
     private String aiReasoning;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "alternative_scene_type", length = 24)
+    private SceneType alternativeSceneType;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "signals", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> signals = List.of();
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "final_scene_type", nullable = false, length = 24)
     private SceneType finalSceneType;
 
@@ -55,6 +67,22 @@ public class SceneClassificationLog {
     /** 覆寫時必填（資料庫端亦有 CHECK 約束）。 */
     @Column(name = "override_reason", length = 255)
     private String overrideReason;
+
+    @Column(name = "fallback_applied", nullable = false)
+    @Builder.Default
+    private boolean fallbackApplied = false;
+
+    @Column(name = "fallback_reason", length = 32)
+    private String fallbackReason;
+
+    @Column(length = 80)
+    private String model;
+
+    @Column(name = "prompt_version", length = 20)
+    private String promptVersion;
+
+    @Column(name = "heat_bucket", nullable = false, length = 16)
+    private String heatBucket;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
