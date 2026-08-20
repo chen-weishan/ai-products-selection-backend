@@ -128,24 +128,33 @@ class MigrationVerificationTest {
 
         flyway("classpath:db/migration").migrate();
 
+        // 套用後立刻建立 probe，讓底下的掃描同時涵蓋兩件事：
+        //   1. 既有物件的權限有沒有被收乾淨
+        //   2. ALTER DEFAULT PRIVILEGES 對「V12 之後新建的物件」有沒有生效
+        // probe 若在掃描之後才建立，routine 掃描會因為 public 底下沒有函式而空過。
+        execute("CREATE TABLE public.probe_table_after_v12 (id INT)");
+        execute("CREATE FUNCTION public.probe_fn_after_v12() RETURNS INT LANGUAGE SQL AS 'SELECT 1'");
+
         // 查「有效權限」而非 information_schema 的直接授權紀錄：
         // has_*_privilege 會把經由偽角色 PUBLIC 繼承來的權限一併算進去，
         // 只查 role_table_grants 的話，PUBLIC 那條路會整個看不到。
         // 含 flyway_schema_history：它不在 RLS 的保護範圍內，這裡是唯一的防線。
-        List<String> reachableTables = queryStrings("""
-                SELECT c.relname || ' / ' || r.rolname
+        // relkind 與權限清單都對齊 V12 第一層 REVOKE 的涵蓋範圍，
+        // 測試的守備範圍不應該比 migration 本身還窄：
+        //   r 一般表 / p 分割表 / v 檢視 / m 具體化檢視 / f 外部表
+        List<String> reachableRelations = queryStrings("""
+                SELECT c.relkind::text || ' ' || c.relname || ' / ' || r.rolname || ' / ' || p.priv
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 CROSS JOIN (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                                   ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS p(priv)
                 WHERE n.nspname = 'public'
-                  AND c.relkind IN ('r', 'p')
-                  AND (has_table_privilege(r.rolname, c.oid, 'SELECT')
-                    OR has_table_privilege(r.rolname, c.oid, 'INSERT')
-                    OR has_table_privilege(r.rolname, c.oid, 'UPDATE')
-                    OR has_table_privilege(r.rolname, c.oid, 'DELETE'))
+                  AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                  AND has_table_privilege(r.rolname, c.oid, p.priv)
                 ORDER BY 1
                 """);
-        assertTrue(reachableTables.isEmpty(), "以下資料表仍可被存取：" + reachableTables);
+        assertTrue(reachableRelations.isEmpty(), "以下物件仍可被存取：" + reachableRelations);
 
         List<String> reachableSequences = queryStrings("""
                 SELECT c.relname || ' / ' || r.rolname
@@ -161,24 +170,20 @@ class MigrationVerificationTest {
                 """);
         assertTrue(reachableSequences.isEmpty(), "以下 sequence 仍可被存取：" + reachableSequences);
 
-        // default privileges 也要收掉，否則下一支 migration 建的物件又會自動對外開放。
-        // 函式特別重要：它的預設授權對象是 PUBLIC，Supabase 的 RPC 端點走這條路。
-        execute("CREATE TABLE public.probe_table_after_v12 (id INT)");
-        execute("CREATE FUNCTION public.probe_fn_after_v12() RETURNS INT LANGUAGE SQL AS 'SELECT 1'");
-
-        List<String> probeReachable = queryStrings("""
-                SELECT 'probe_table_after_v12 / ' || rolname
-                FROM (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
-                WHERE has_table_privilege(rolname, 'public.probe_table_after_v12', 'SELECT')
-                UNION ALL
-                SELECT 'probe_fn_after_v12() / ' || rolname
-                FROM (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
-                WHERE has_function_privilege(rolname, 'public.probe_fn_after_v12()', 'EXECUTE')
+        // 掃描 public 底下全部 routines（含上面建立的 probe）。
+        // migration 本身不建立任何函式，這道防線守的是「日後有人加了函式」。
+        List<String> reachableRoutines = queryStrings("""
+                SELECT p.proname || ' / ' || r.rolname
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                CROSS JOIN (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                WHERE n.nspname = 'public'
+                  AND has_function_privilege(r.rolname, p.oid, 'EXECUTE')
                 ORDER BY 1
                 """);
-        assertTrue(probeReachable.isEmpty(),
-                "V12 之後新建的物件仍可被存取：" + probeReachable
-                        + "，代表 ALTER DEFAULT PRIVILEGES 沒有涵蓋到");
+        assertTrue(reachableRoutines.isEmpty(), "以下 routine 仍可被呼叫：" + reachableRoutines);
+
+        assertTrue(reachableRoutines.isEmpty(), "以下 routine 仍可被呼叫：" + reachableRoutines);
     }
 
     // ---------------------------------------------------------------
