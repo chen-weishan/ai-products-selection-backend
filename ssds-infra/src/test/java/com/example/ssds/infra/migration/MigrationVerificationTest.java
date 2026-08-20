@@ -35,11 +35,12 @@ class MigrationVerificationTest {
 
     /**
      * 刻意不加 static：每個測試方法各起一個全新容器，確保「從空庫開始」。
-     * 版本對齊共用資料庫的 PostgreSQL 17.6。
+     * 映像鎖定 17.6 而非浮動的 17-alpine，與共用資料庫的 PostgreSQL 17.6 一致；
+     * 浮動標籤會讓「本機驗過」與「共用庫實際跑的版本」悄悄分岔。
      */
     @Container
     private final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:17-alpine");
+            new PostgreSQLContainer<>("postgres:17.6-alpine");
 
     @Test
     @DisplayName("prod 版面：只載入 db/migration，從空庫建到最新且無待套用項目")
@@ -83,8 +84,9 @@ class MigrationVerificationTest {
      * {@code ALTER TABLE <表名> ENABLE ROW LEVEL SECURITY;}
      *
      * <p>flyway_schema_history 例外：migration 執行期間 Flyway 另一條連線正持有
-     * 該表的鎖，在 migration 內對它下 ALTER TABLE 會永久互等。它改由「收回
-     * schema public 的 USAGE」保護，見 V12 檔頭。
+     * 該表的鎖，在 migration 內對它下 ALTER TABLE 會永久互等。它改由第一層的
+     * REVOKE 收乾淨權限來保護（REVOKE 的鎖層級較弱，實測不受影響），
+     * 由 supabaseLikeRolesAreLockedDown 驗證。
      */
     @Test
     @DisplayName("安全底線：套用完畢後 public 底下沒有任何未啟用 RLS 的表")
@@ -96,7 +98,7 @@ class MigrationVerificationTest {
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'public'
-                  AND c.relkind = 'r'
+                  AND c.relkind IN ('r', 'p')
                   AND c.relname <> 'flyway_schema_history'
                   AND NOT c.relrowsecurity
                 ORDER BY c.relname
@@ -126,29 +128,57 @@ class MigrationVerificationTest {
 
         flyway("classpath:db/migration").migrate();
 
-        // 含 flyway_schema_history：它不在 RLS 的保護範圍內，
-        // 唯一的防線就是這裡，必須一併收乾淨
-        List<String> stillGranted = queryStrings("""
-                SELECT DISTINCT table_name
-                FROM information_schema.role_table_grants
-                WHERE table_schema = 'public'
-                  AND grantee IN ('anon', 'authenticated')
-                ORDER BY table_name
+        // 查「有效權限」而非 information_schema 的直接授權紀錄：
+        // has_*_privilege 會把經由偽角色 PUBLIC 繼承來的權限一併算進去，
+        // 只查 role_table_grants 的話，PUBLIC 那條路會整個看不到。
+        // 含 flyway_schema_history：它不在 RLS 的保護範圍內，這裡是唯一的防線。
+        List<String> reachableTables = queryStrings("""
+                SELECT c.relname || ' / ' || r.rolname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                CROSS JOIN (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND (has_table_privilege(r.rolname, c.oid, 'SELECT')
+                    OR has_table_privilege(r.rolname, c.oid, 'INSERT')
+                    OR has_table_privilege(r.rolname, c.oid, 'UPDATE')
+                    OR has_table_privilege(r.rolname, c.oid, 'DELETE'))
+                ORDER BY 1
                 """);
-        assertTrue(stillGranted.isEmpty(), "以下資料表仍對 anon/authenticated 授權：" + stillGranted);
+        assertTrue(reachableTables.isEmpty(), "以下資料表仍可被存取：" + reachableTables);
 
-        // default privileges 也要收掉，否則下一支 migration 建的表又會自動對外開放
-        execute("CREATE TABLE public.probe_after_v12 (id INT)");
-        List<String> probeGranted = queryStrings("""
-                SELECT DISTINCT grantee
-                FROM information_schema.role_table_grants
-                WHERE table_schema = 'public'
-                  AND table_name = 'probe_after_v12'
-                  AND grantee IN ('anon', 'authenticated')
+        List<String> reachableSequences = queryStrings("""
+                SELECT c.relname || ' / ' || r.rolname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                CROSS JOIN (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                WHERE n.nspname = 'public'
+                  AND c.relkind = 'S'
+                  AND (has_sequence_privilege(r.rolname, c.oid, 'SELECT')
+                    OR has_sequence_privilege(r.rolname, c.oid, 'USAGE')
+                    OR has_sequence_privilege(r.rolname, c.oid, 'UPDATE'))
+                ORDER BY 1
                 """);
-        assertTrue(probeGranted.isEmpty(),
-                "V12 之後新建的表仍被自動授權給：" + probeGranted
-                        + "，代表 ALTER DEFAULT PRIVILEGES 沒有生效");
+        assertTrue(reachableSequences.isEmpty(), "以下 sequence 仍可被存取：" + reachableSequences);
+
+        // default privileges 也要收掉，否則下一支 migration 建的物件又會自動對外開放。
+        // 函式特別重要：它的預設授權對象是 PUBLIC，Supabase 的 RPC 端點走這條路。
+        execute("CREATE TABLE public.probe_table_after_v12 (id INT)");
+        execute("CREATE FUNCTION public.probe_fn_after_v12() RETURNS INT LANGUAGE SQL AS 'SELECT 1'");
+
+        List<String> probeReachable = queryStrings("""
+                SELECT 'probe_table_after_v12 / ' || rolname
+                FROM (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                WHERE has_table_privilege(rolname, 'public.probe_table_after_v12', 'SELECT')
+                UNION ALL
+                SELECT 'probe_fn_after_v12() / ' || rolname
+                FROM (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
+                WHERE has_function_privilege(rolname, 'public.probe_fn_after_v12()', 'EXECUTE')
+                ORDER BY 1
+                """);
+        assertTrue(probeReachable.isEmpty(),
+                "V12 之後新建的物件仍可被存取：" + probeReachable
+                        + "，代表 ALTER DEFAULT PRIVILEGES 沒有涵蓋到");
     }
 
     // ---------------------------------------------------------------

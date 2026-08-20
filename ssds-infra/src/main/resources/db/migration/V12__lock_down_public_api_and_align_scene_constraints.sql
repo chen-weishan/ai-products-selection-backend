@@ -10,9 +10,11 @@
 -- SELECT / INSERT / UPDATE / DELETE / TRUNCATE 權限且 RLS 全數關閉 ——
 -- 任何取得專案 URL 與 anon key 的人可以讀光，也可以清空整個資料庫。
 --
--- 本檔做兩層防護：
+-- 本檔做三層防護：
 --   第一層：收回 anon / authenticated 的權限，並改掉 default privileges，
 --           使日後新建的表不會再被自動授權。
+--   第一層之二：收回偽角色 PUBLIC 的函式 EXECUTE。函式的預設授權對象是
+--           PUBLIC 而非個別角色，逐角色 REVOKE 收不到，必須另外處理。
 --   第二層：對 public 既有資料表啟用 RLS 且不建立任何 policy（預設全拒）。
 --
 -- 為什麼不會弄壞後端：public 下所有表的 owner 都是 postgres，且該角色的
@@ -75,7 +77,7 @@ BEGIN
         END LOOP;
 
         EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM %I', api_role);
-        EXECUTE format('REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM %I', api_role);
+        EXECUTE format('REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM %I', api_role);
 
         -- 收掉 Supabase 直接授與的 schema USAGE。這不是防線（PUBLIC 的那份
         -- 收不掉，見檔頭），只是減少一個不必要的授權
@@ -90,9 +92,32 @@ BEGIN
         EXECUTE format(
             'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM %I', api_role);
         EXECUTE format(
-            'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM %I', api_role);
+            'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON ROUTINES FROM %I', api_role);
     END LOOP;
 END $$;
+
+
+-- ===================================================================
+-- 第一層之二：收回偽角色 PUBLIC 的函式 EXECUTE
+-- ===================================================================
+-- 上面的逐角色 REVOKE 收不掉這一份。PostgreSQL 對新建函式的內建預設是把
+-- EXECUTE 授給偽角色 PUBLIC，而每個角色都隱含繼承 PUBLIC 的授權，
+-- 因此 anon / authenticated 仍可呼叫 public 底下的函式 ——
+-- Supabase 的 RPC 端點走的就是這條路。
+--
+-- 實測（PostgreSQL 17）：
+--   ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ... FROM PUBLIC → 無效
+--   ALTER DEFAULT PRIVILEGES            REVOKE ... FROM PUBLIC → 有效
+-- 也就是不能加 IN SCHEMA，必須用不限定 schema 的形式。
+--
+-- 取捨：不限定 schema 代表 postgres 日後在「任何 schema」建立的函式都不再
+-- 自動授與 PUBLIC EXECUTE。本專案只在 public 建立物件，可以接受；
+-- 但日後若把擴充套件裝進 public，其函式需要明確 GRANT 才能被非 owner 呼叫。
+--
+-- 現況：套用當下 public 底下沒有任何函式（已查證），故第一行是空操作，
+-- 真正生效的是第二行對未來函式的預設。
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA public FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON ROUTINES FROM PUBLIC;
 
 
 -- ===================================================================
@@ -112,7 +137,9 @@ BEGIN
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public'
-          AND c.relkind = 'r'
+          -- 'p' = partitioned table。父表的 RLS 不會下傳到分割區，
+          -- 分割區本身是 'r'，兩者都要各自啟用
+          AND c.relkind IN ('r', 'p')
           AND c.relname <> 'flyway_schema_history'
           AND NOT c.relrowsecurity
     LOOP
