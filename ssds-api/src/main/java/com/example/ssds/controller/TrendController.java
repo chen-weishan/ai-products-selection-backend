@@ -1,7 +1,7 @@
-package com.example.ssds.api.controller;
+package com.example.ssds.controller;
 
 import com.example.ssds.core.dto.TrendSignalProjection;
-import com.example.ssds.core.service.TrendService;
+import com.example.ssds.infra.service.TrendService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +17,7 @@ public class TrendController {
 
     private final TrendService trendService;
 
-    // 服務生 (Controller) 呼叫主廚 (Service)
+
     public TrendController(TrendService trendService) {
         this.trendService = trendService;
     }
@@ -27,7 +27,6 @@ public class TrendController {
      */
     @GetMapping
     public List<TrendSignalProjection> getTrends() {
-        // 接到客人點單，直接轉交給主廚處理，並把結果當作 JSON 端出去
         return trendService.getAllTrendSignals();
     }
 }

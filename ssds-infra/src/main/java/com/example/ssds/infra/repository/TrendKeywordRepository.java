@@ -44,7 +44,7 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
                 ON t.keyword_id = t7.keyword_id AND t7.reading_date = t.reading_date - INTERVAL '7 days'
             LEFT JOIN DailyComposite t30 
                 ON t.keyword_id = t30.keyword_id AND t30.reading_date = t.reading_date - INTERVAL '30 days'
-            WHERE t.reading_date = CURRENT_DATE 
+            WHERE t.reading_date = (SELECT MAX(reading_date) FROM heat_reading)
         )
         SELECT 
             tk.keyword AS keyword,

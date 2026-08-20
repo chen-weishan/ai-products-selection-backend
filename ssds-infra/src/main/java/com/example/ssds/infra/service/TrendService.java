@@ -15,7 +15,7 @@ public class TrendService {
 
     private final TrendKeywordRepository trendKeywordRepository;
 
-    // 透過建構子注入 Repository (Spring Boot 官方推薦做法)
+
     public TrendService(TrendKeywordRepository trendKeywordRepository) {
         this.trendKeywordRepository = trendKeywordRepository;
     }
