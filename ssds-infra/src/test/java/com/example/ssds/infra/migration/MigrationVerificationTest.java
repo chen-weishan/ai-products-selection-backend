@@ -139,16 +139,20 @@ class MigrationVerificationTest {
         // has_*_privilege 會把經由偽角色 PUBLIC 繼承來的權限一併算進去，
         // 只查 role_table_grants 的話，PUBLIC 那條路會整個看不到。
         // 含 flyway_schema_history：它不在 RLS 的保護範圍內，這裡是唯一的防線。
-        // relkind 與權限清單都對齊 V12 第一層 REVOKE 的涵蓋範圍，
+        // relkind 與權限清單都對齊 V12 第一層 REVOKE ALL 的涵蓋範圍，
         // 測試的守備範圍不應該比 migration 本身還窄：
         //   r 一般表 / p 分割表 / v 檢視 / m 具體化檢視 / f 外部表
+        // MAINTAIN 是 PostgreSQL 17 新增的表權限，GRANT ALL 會授與它，
+        // 但 information_schema 不顯示（那是 SQL 標準視圖，不認得此權限）——
+        // 這正是本處必須用 has_table_privilege 而非查 information_schema 的原因。
         List<String> reachableRelations = queryStrings("""
                 SELECT c.relkind::text || ' ' || c.relname || ' / ' || r.rolname || ' / ' || p.priv
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 CROSS JOIN (SELECT unnest(ARRAY['anon', 'authenticated']) AS rolname) r
                 CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
-                                   ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS p(priv)
+                                   ('TRUNCATE'), ('REFERENCES'), ('TRIGGER'),
+                                   ('MAINTAIN')) AS p(priv)
                 WHERE n.nspname = 'public'
                   AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
                   AND has_table_privilege(r.rolname, c.oid, p.priv)
@@ -181,7 +185,6 @@ class MigrationVerificationTest {
                   AND has_function_privilege(r.rolname, p.oid, 'EXECUTE')
                 ORDER BY 1
                 """);
-        assertTrue(reachableRoutines.isEmpty(), "以下 routine 仍可被呼叫：" + reachableRoutines);
 
         assertTrue(reachableRoutines.isEmpty(), "以下 routine 仍可被呼叫：" + reachableRoutines);
     }
