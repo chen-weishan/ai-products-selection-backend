@@ -1,6 +1,7 @@
 package com.example.ssds.infra.dao;
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.dao.projection.ProductListRow;
 import com.example.ssds.infra.dao.query.ProductListCriteria;
@@ -25,18 +26,19 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class ProductListDao {
 
-    private static final Map<String, String> SORT_COLUMNS = Map.of(
-            "name", "p.name",
-            "categoryName", "c.name",
-            "supplierName", "supplier.name",
-            "cost", "p.cost",
-            "suggestedPrice", "p.suggested_price",
-            "marginRate", "p.margin_rate",
-            "latestScore", "latest_score.final_score",
-            "grade", "latest_score.grade",
-            "status", "p.status",
-            "updatedAt", "p.updated_at"
-    );
+    private static final Map<String, String> SORT_COLUMNS = Map.ofEntries(
+            Map.entry("name", "p.name"),
+            Map.entry("categoryName", "c.name"),
+            Map.entry("supplierName", "supplier.name"),
+            Map.entry("cost", "p.cost"),
+            Map.entry("suggestedPrice", "p.suggested_price"),
+            Map.entry("marginRate", "p.margin_rate"),
+            Map.entry("latestScore", "latest_score.final_score"),
+            Map.entry("grade", "latest_score.grade"),
+            Map.entry("trackType", "p.track_type"),
+            Map.entry("sourcingStatus", "p.sourcing_status"),
+            Map.entry("status", "p.status"),
+            Map.entry("updatedAt", "p.updated_at"));
 
     private static final String FROM_SQL = """
             FROM product p
@@ -87,6 +89,7 @@ public class ProductListDao {
                        latest_score.final_score AS latest_score,
                        latest_score.grade,
                        p.track_type,
+                       p.sourcing_status,
                        p.status,
                        EXISTS (
                            SELECT 1
@@ -175,6 +178,14 @@ public class ProductListDao {
             );
         }
 
+        if (criteria.sourcingStatus() != null) {
+            where.append(" AND p.sourcing_status = :sourcingStatus ");
+            parameters.put(
+                    "sourcingStatus",
+                    criteria.sourcingStatus().name()
+            );
+        }
+
         if (criteria.status() != null) {
             where.append(" AND p.status = :status ");
             parameters.put(
@@ -240,6 +251,7 @@ public class ProductListDao {
     ) throws SQLException {
 
         String gradeValue = resultSet.getString("grade");
+        String sourcingStatusValue = resultSet.getString("sourcing_status");
 
         OffsetDateTime updatedAt = resultSet.getObject(
                 "updated_at",
@@ -266,6 +278,9 @@ public class ProductListDao {
                 TrackType.valueOf(
                         resultSet.getString("track_type")
                 ),
+                sourcingStatusValue == null
+                        ? null
+                        : SourcingStatus.valueOf(sourcingStatusValue),
                 ProductStatus.valueOf(
                         resultSet.getString("status")
                 ),

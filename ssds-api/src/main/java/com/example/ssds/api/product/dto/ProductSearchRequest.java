@@ -1,4 +1,4 @@
-package com.example.ssds.infra.dao.query;
+package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
@@ -7,12 +7,9 @@ import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 
 /**
- * FR-03 品項清單查詢條件。
- *
- * <p>這是資料查詢條件，不是 HTTP Request DTO，
- * 因此放在 infra，不能依賴 ssds-api。
+ * GET /api/v1/products 的查詢條件。
  */
-public record ProductListCriteria(
+public record ProductSearchRequest(
         String keyword,
         Long categoryId,
         Long supplierId,
@@ -23,9 +20,22 @@ public record ProductListCriteria(
         BigDecimal minScore,
         BigDecimal maxScore,
         Boolean hasRisk,
-        int page,
-        int size,
-        String sortField,
-        boolean ascending
+        Integer page,
+        Integer size,
+        String sort
 ) {
+
+    public int resolvedPage() {
+        return page == null ? 0 : page;
+    }
+
+    public int resolvedSize() {
+        return size == null ? 20 : size;
+    }
+
+    public String resolvedSort() {
+        return sort == null || sort.isBlank()
+                ? "latestScore,desc"
+                : sort.trim();
+    }
 }

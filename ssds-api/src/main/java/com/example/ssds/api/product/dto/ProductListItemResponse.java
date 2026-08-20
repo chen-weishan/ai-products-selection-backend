@@ -1,4 +1,4 @@
-package com.example.ssds.infra.dao.projection;
+package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
@@ -8,13 +8,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * FR-03 品項清單的資料庫查詢結果。
- *
- * <p>這不是 JPA Entity，而是跨表查詢的唯讀 projection。
+ * FR-03 品項清單的單筆回應。
  */
-public record ProductListRow(
-        Long productId,
-        String productName,
+public record ProductListItemResponse(
+        Long id,
+        String name,
         Long categoryId,
         String categoryName,
         Long supplierId,
