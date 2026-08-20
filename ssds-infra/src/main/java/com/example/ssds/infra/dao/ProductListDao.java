@@ -58,7 +58,6 @@ public class ProductListDao {
             """;
 
     private final JdbcClient jdbcClient;
-
     public ProductListDao(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
     }

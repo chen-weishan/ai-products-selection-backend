@@ -2,18 +2,28 @@ package com.example.ssds.api.product.controller;
 
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
+import com.example.ssds.api.product.dto.ProductCreateRequest;
+import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
+import com.example.ssds.api.product.dto.ProductUpdateRequest;
+import com.example.ssds.api.product.dto.ProductUpdateResponse;
+import com.example.ssds.api.product.service.ProductCommandService;
 import com.example.ssds.api.product.service.ProductQueryService;
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,11 +31,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
     private final ProductQueryService productQueryService;
+    private final ProductCommandService productCommandService;
 
     public ProductController(
-            ProductQueryService productQueryService
+            ProductQueryService productQueryService,
+            ProductCommandService productCommandService
     ) {
         this.productQueryService = productQueryService;
+        this.productCommandService = productCommandService;
     }
 
     @GetMapping
@@ -81,6 +94,29 @@ public class ProductController {
                 );
         return ApiResponse.success(
                 productQueryService.search(request)
+        );
+    }
+
+    /** FR-03-2 新增品項。 */
+    @PostMapping
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
+    public ApiResponse<ProductCreateResponse> create(
+            @Valid @RequestBody ProductCreateRequest request
+    ) {
+        return ApiResponse.success(
+                productCommandService.create(request)
+        );
+    }
+
+    /** FR-03-2 修改品項基本資料，商品狀態由獨立 API 管理。 */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
+    public ApiResponse<ProductUpdateResponse> update(
+            @PathVariable(name = "id") Long id,
+            @Valid @RequestBody ProductUpdateRequest request
+    ) {
+        return ApiResponse.success(
+                productCommandService.update(id, request)
         );
     }
 }
