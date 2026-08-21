@@ -14,7 +14,7 @@ import org.hibernate.annotations.CreationTimestamp;
  *
  * <p>§5.4 約束：AI 必須輸出判定理由與依據訊號，否則判定無法稽核；
  * 信心值低於 0.5 或 Schema 驗證失敗時 {@link #aiSceneType} 為 null，
- * {@link #finalSceneType} 退回 STAPLE_RESTOCK。
+ * {@link #finalSceneType} 退回 REPLENISHMENT。
  */
 @Getter
 @Setter
