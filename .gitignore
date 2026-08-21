@@ -2,6 +2,10 @@ HELP.md
 .gradle
 build/
 
+### 代理工作區 ###
+# 進度檔與草稿只給下一個 session 接手用，不進版控
+.scratch/
+
 ### 機密設定 ###
 # 真正的密碼只留在本機，範本 .env.example 才進版控
 .env

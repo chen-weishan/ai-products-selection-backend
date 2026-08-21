@@ -189,6 +189,116 @@ class MigrationVerificationTest {
         assertTrue(reachableRoutines.isEmpty(), "以下 routine 仍可被呼叫：" + reachableRoutines);
     }
 
+    /**
+     * V16 之後的約定：public 底下每一張啟用 RLS 的表都必須有給 ssds_app 的 policy。
+     *
+     * <p>為什麼需要這道守門：V16 的 ALTER DEFAULT PRIVILEGES 會讓新表自動取得
+     * 表層 GRANT，但 PostgreSQL 沒有「預設 policy」這種東西。少寫 policy 的新表
+     * 對 ssds_app 就是一張永遠回 0 列的表，而且不會有任何錯誤訊息 ——
+     * 這種故障在應用程式裡看起來像「資料沒寫進去」，極難追。
+     *
+     * <p>補救方式是在該支 migration 內加上：
+     * {@code CREATE POLICY p_ssds_app_rw ON <表名> FOR ALL TO ssds_app
+     * USING (true) WITH CHECK (true);}
+     */
+    @Test
+    @DisplayName("安全底線：每一張啟用 RLS 的表都有給 ssds_app 的 policy")
+    void everyRlsTableHasPolicyForRestrictedRole() {
+        flyway("classpath:db/migration").migrate();
+
+        List<String> uncovered = queryStrings("""
+                SELECT c.relname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND c.relrowsecurity
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM pg_policy pol
+                      WHERE pol.polrelid = c.oid
+                        AND 'ssds_app'::regrole = ANY (pol.polroles)
+                  )
+                ORDER BY c.relname
+                """);
+
+        assertTrue(uncovered.isEmpty(),
+                "以下資料表對 ssds_app 沒有任何 policy，會被 RLS 全數擋下，"
+                        + "請在對應的 migration 內補上 CREATE POLICY p_ssds_app_rw ...：" + uncovered);
+    }
+
+    /**
+     * 實際以 ssds_app 連線，驗證 V16 的邊界：讀得到、寫得進去，但改不了結構。
+     *
+     * <p>只查系統目錄不夠 —— GRANT 與 RLS policy 是兩套獨立機制，兩邊各自看起來
+     * 都對，合起來仍可能是「查詢成功但永遠 0 列」。這個測試走真實連線，
+     * 是唯一能同時驗到兩者的方式。
+     *
+     * <p>V16 刻意不在 migration 內設密碼（檔案進版控），所以這裡自行設一組
+     * 只在容器生命週期內存在的密碼。
+     */
+    @Test
+    @DisplayName("V16：ssds_app 讀寫得了資料，但建不了表、清不了表、改不了 Flyway 帳本")
+    void restrictedRoleCanUseDataButNotChangeSchema() {
+        flyway("classpath:db/migration").migrate();
+        execute("ALTER ROLE ssds_app WITH PASSWORD 'probe-only-in-container'");
+
+        List<String> tables = queryStrings("""
+                SELECT c.relname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND c.relname <> 'flyway_schema_history'
+                ORDER BY c.relname
+                """);
+        assertFalse(tables.isEmpty(), "掃不到任何資料表，測試前提就不成立");
+
+        try (Connection conn = DriverManager.getConnection(
+                postgres.getJdbcUrl(), "ssds_app", "probe-only-in-container")) {
+
+            // 每一張表都讀得到（GRANT SELECT 與 RLS policy 兩者缺一都會在這裡現形）
+            for (String table : tables) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.executeQuery("SELECT 1 FROM public.\"" + table + "\" LIMIT 1");
+                } catch (Exception e) {
+                    throw new AssertionError("ssds_app 讀不到 " + table, e);
+                }
+            }
+
+            // Flyway 帳本：讀得到、寫不進去
+            assertAllowed(conn, "SELECT 1 FROM public.flyway_schema_history LIMIT 1");
+            assertDenied(conn, "DELETE FROM public.flyway_schema_history WHERE version = '1'");
+
+            // 結構變更一律擋掉
+            assertDenied(conn, "CREATE TABLE public.probe_by_ssds_app (id INT)");
+            assertDenied(conn, "DROP TABLE public.\"" + tables.get(0) + "\"");
+            assertDenied(conn, "TRUNCATE public.\"" + tables.get(0) + "\"");
+            assertDenied(conn, "ALTER TABLE public.\"" + tables.get(0) + "\" ADD COLUMN probe INT");
+        } catch (AssertionError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("以 ssds_app 連線失敗", e);
+        }
+    }
+
+    private void assertAllowed(Connection conn, String sql) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+        } catch (Exception e) {
+            throw new AssertionError("ssds_app 應該被允許卻失敗：" + sql, e);
+        }
+    }
+
+    private void assertDenied(Connection conn, String sql) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+        } catch (Exception expected) {
+            return;
+        }
+        throw new AssertionError("ssds_app 不該被允許執行：" + sql);
+    }
+
     // ---------------------------------------------------------------
 
     private Flyway flyway(String... locations) {
