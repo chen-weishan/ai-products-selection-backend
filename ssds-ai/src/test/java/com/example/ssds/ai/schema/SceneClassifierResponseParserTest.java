@@ -18,7 +18,7 @@ class SceneClassifierResponseParserTest {
                 以下是判定結果：
                 ```json
                 {
-                  "sceneType": "VIRAL_TOPIC",
+                  "sceneType": "VIRAL",
                   "confidence": 0.82,
                   "reasoning": "熱度上升，補充說明包含 {括號}。",
                   "alternativeScene": "SEASONAL",
@@ -27,7 +27,7 @@ class SceneClassifierResponseParserTest {
                 ```
                 """);
 
-        assertEquals(SceneCode.VIRAL_TOPIC, output.sceneType());
+        assertEquals(SceneCode.VIRAL, output.sceneType());
         assertEquals("熱度上升，補充說明包含 {括號}。", output.reasoning());
     }
 
@@ -68,7 +68,7 @@ class SceneClassifierResponseParserTest {
         assertThrows(AiSchemaValidationException.class, () -> parser.parse("""
                 result follows:
                 {
-                  "sceneType": "VIRAL_TOPIC",
+                  "sceneType": "VIRAL",
                   "confidence": 0.82,
                   "reasoning": "熱度上升",
                   "alternativeScene": null,

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SceneClassifierPromptFactory {
-    public static final String PROMPT_VERSION = "scene-v3";
+    public static final String PROMPT_VERSION = "scene-v4";
     private final ObjectMapper objectMapper;
 
     public SceneClassifierPromptFactory(ObjectMapper objectMapper) {
@@ -17,10 +17,10 @@ public class SceneClassifierPromptFactory {
     public String systemPrompt() {
         return """
                 你是零售團購採購決策輔助系統的情境原型分類器。
-                請將 INPUT_JSON 中的單一品項分類為 VIRAL_TOPIC、FESTIVAL、REPLENISHMENT、SEASONAL 之一。
+                請將 INPUT_JSON 中的單一品項分類為 VIRAL、FESTIVAL、REPLENISHMENT、SEASONAL 之一。
 
                 判定原則：
-                - VIRAL_TOPIC：短期熱度明顯上升，且不是由明確節慶或季節性主導。
+                - VIRAL：短期熱度明顯上升，且不是由明確節慶或季節性主導。
                 - FESTIVAL：輸入中的 festivalMatches 有明確節慶匹配訊號。
                 - SEASONAL：輸入中的季節與熱度資料呈現明確季節性。
                 - REPLENISHMENT：需求與歷史開團較穩定，或資料不足以支持其他情境。

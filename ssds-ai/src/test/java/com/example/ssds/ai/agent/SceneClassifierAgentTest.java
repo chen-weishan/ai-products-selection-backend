@@ -22,7 +22,7 @@ class SceneClassifierAgentTest {
     void validMockLlmResponseReturnsEnumeratedScene() {
         CountingFakeClient fake = new CountingFakeClient("""
                 {
-                  "sceneType": "VIRAL_TOPIC",
+                  "sceneType": "VIRAL",
                   "confidence": 0.82,
                   "reasoning": "近七日熱度快速上升且歷史開團次數少",
                   "alternativeScene": "SEASONAL",
@@ -32,7 +32,7 @@ class SceneClassifierAgentTest {
 
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.VERY_HIGH), false);
 
-        assertEquals(SceneCode.VIRAL_TOPIC, result.output().sceneType());
+        assertEquals(SceneCode.VIRAL, result.output().sceneType());
         assertEquals(new BigDecimal("0.82"), result.output().confidence());
         assertFalse(result.fallbackApplied());
         assertEquals(1, fake.calls.get());
@@ -61,7 +61,7 @@ class SceneClassifierAgentTest {
     void schemaWithWeightFieldRetriesOnceFallsBackAndIsNotCached() {
         CountingFakeClient fake = new CountingFakeClient("""
                 {
-                  "sceneType": "VIRAL_TOPIC",
+                  "sceneType": "VIRAL",
                   "confidence": 0.90,
                   "reasoning": "熱度上升",
                   "alternativeScene": null,
@@ -84,16 +84,31 @@ class SceneClassifierAgentTest {
     void schemaFailureRetriesOnceWithNextModel() {
         CountingFakeClient fake = new CountingFakeClient(
                 """
-                {"sceneType":"VIRAL_TOPIC","confidence":0.9,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"],"weights":{"TREND":0.9}}
+                {"sceneType":"VIRAL","confidence":0.9,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"],"weights":{"TREND":0.9}}
                 """,
                 """
-                {"sceneType":"VIRAL_TOPIC","confidence":0.82,"reasoning":"熱度上升","alternativeScene":"SEASONAL","signals":["heatSlope7d: 3.40"]}
+                {"sceneType":"VIRAL","confidence":0.82,"reasoning":"熱度上升","alternativeScene":"SEASONAL","signals":["heatSlope7d: 3.40"]}
                 """);
 
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.HIGH), false);
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/fallback"), fake.models);
+    }
+
+    @Test
+    void legacyViralCodeIsRejectedAndFallsBackAfterSchemaRetry() {
+        String legacyScene = "VIRAL" + "_TOPIC";
+        CountingFakeClient fake = new CountingFakeClient(("""
+                {"sceneType":"%s","confidence":0.82,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"]}
+                """).formatted(legacyScene));
+
+        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.HIGH), false);
+
+        assertTrue(result.fallbackApplied());
+        assertEquals(FallbackReason.SCHEMA_INVALID, result.fallbackReason());
+        assertEquals(SceneCode.REPLENISHMENT, result.output().sceneType());
+        assertEquals(2, fake.calls.get());
     }
 
     @Test

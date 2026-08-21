@@ -35,7 +35,7 @@ public final class SceneClassifierSchema {
     private static JsonNode enumNode(ObjectMapper objectMapper) {
         ObjectNode node = objectMapper.createObjectNode().put("type", "string");
         node.set("enum", objectMapper.createArrayNode()
-                .add("VIRAL_TOPIC").add("FESTIVAL").add("REPLENISHMENT").add("SEASONAL"));
+                .add("VIRAL").add("FESTIVAL").add("REPLENISHMENT").add("SEASONAL"));
         return node;
     }
 }

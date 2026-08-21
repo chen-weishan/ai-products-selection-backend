@@ -3,7 +3,6 @@ package com.example.ssds.api.review;
 import com.example.ssds.ai.agent.ReviewRiskAgent;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
-import com.example.ssds.ai.prompt.ReviewRiskPromptFactory;
 import com.example.ssds.api.exception.BusinessException;
 import com.example.ssds.api.exception.ErrorCode;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
@@ -112,7 +111,13 @@ public class ReviewRiskService {
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(null),
-                ReviewRiskPromptFactory.PROMPT_VERSION,
+                reviews.stream()
+                        .map(ProductReview::getAnalysis)
+                        .filter(Objects::nonNull)
+                        .map(ReviewAnalysis::getPromptVersion)
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElse(null),
                 latestAnalyzedAt);
     }
 
@@ -146,10 +151,10 @@ public class ReviewRiskService {
                 review.setAnalysis(entity);
             }
             entity.setSentiment(value.sentiment());
-            // V13 尚未合併前，暫存於既有 aspects；V13 後改寫正式 risk_topic 欄位。
-            entity.setAspects(value.riskTopic() == null ? null : value.riskTopic().name());
+            entity.setRiskTopic(value.riskTopic());
             entity.setKeyPhrase(null);
             entity.setModel(result.model());
+            entity.setPromptVersion(result.promptVersion());
             entity.setAnalyzedAt(analyzedAt);
             return entity;
         }).toList();
@@ -158,11 +163,7 @@ public class ReviewRiskService {
 
     private static ReviewRiskTopic persistedTopic(ReviewAnalysis analysis) {
         if (analysis.getSentiment() != Sentiment.NEGATIVE) return null;
-        try {
-            return ReviewRiskTopic.valueOf(analysis.getAspects());
-        } catch (IllegalArgumentException | NullPointerException ignored) {
-            return ReviewRiskTopic.OTHER;
-        }
+        return analysis.getRiskTopic();
     }
 
     private static List<ReviewTopicStatistic> statisticsFrom(List<ReviewRiskAnalysis> analyses) {

@@ -43,7 +43,7 @@ class MistralTrackAClientTest {
                         {
                           "type":"message.output",
                           "model":"test-model",
-                          "content":"{\\\"sceneType\\\":\\\"VIRAL_TOPIC\\\",\\\"confidence\\\":0.82,\\\"reasoning\\\":\\\"熱度上升\\\",\\\"alternativeScene\\\":null,\\\"signals\\\":[\\\"heatSlope7d: 3.40\\\"]}"
+                          "content":"{\\\"sceneType\\\":\\\"VIRAL\\\",\\\"confidence\\\":0.82,\\\"reasoning\\\":\\\"熱度上升\\\",\\\"alternativeScene\\\":null,\\\"signals\\\":[\\\"heatSlope7d: 3.40\\\"]}"
                         }
                       ],
                       "usage":{"prompt_tokens":120,"completion_tokens":45}
@@ -54,7 +54,7 @@ class MistralTrackAClientTest {
         AiClientResponse response = client().complete(request());
 
         assertEquals("test-model", response.model());
-        assertTrue(response.content().contains("\"sceneType\":\"VIRAL_TOPIC\""));
+        assertTrue(response.content().contains("\"sceneType\":\"VIRAL\""));
         assertEquals(120, response.promptTokens());
         assertEquals(45, response.completionTokens());
         JsonNode sent = objectMapper.readTree(requestBody.get());
