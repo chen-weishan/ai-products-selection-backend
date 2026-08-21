@@ -2,12 +2,14 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.KeywordLifecycle;
 import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.core.dto.TrendChartProjection;
 import com.example.ssds.core.dto.TrendSignalProjection;
 
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** 關鍵字查詢（規格書 §7.2 trend_keyword、FR-06）。 */
@@ -21,6 +23,7 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
 
     List<TrendKeyword> findByLifecycle(KeywordLifecycle lifecycle);
 
+    
      @Query(value = """
         WITH DailyComposite AS (
             SELECT 
@@ -61,5 +64,37 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
         JOIN trend_keyword tk ON sc.keyword_id = tk.id
     """, nativeQuery = true)
     List<TrendSignalProjection> findTrendSignals();
+
+
+
+    //取得單一關鍵字近 90 天的歷史合成熱度 (用於繪製折線圖)
+   
+    @Query(value = """
+        WITH DailyComposite AS (
+            SELECT 
+                hr.keyword_id,
+                hr.reading_date,
+                SUM(hr.percentile_within_source * hs.composite_weight) AS composite_heat
+            FROM heat_reading hr
+            JOIN heat_source hs ON hr.source_id = hs.id
+            WHERE hs.enabled = TRUE 
+              AND hs.availability = 'AVAILABLE'
+            GROUP BY hr.keyword_id, hr.reading_date
+        ),
+
+        SELECT 
+            reading_date AS date,
+            ROUND(composite_heat,2) AS heatScore
+        FROM DailyComposite
+         WHERE  keyword_id = :keywordId
+         AND reading_date >= CURRENT_DATE -INTERVAL '90 days'
+        
+        ORDER BY reading_date ASC
+    """, nativeQuery = true)
+    List<TrendChartProjection> findTrendChartByKeywordId(@Param("keywordId") Long keywordId);
 }
 
+
+
+
+    
