@@ -54,12 +54,12 @@ INSERT INTO product (id, name, category_id, supplier_id, cost, suggested_price, 
 
 CREATE TEMP TABLE seed904_meta (score_id BIGINT, product_id BIGINT, scene_type VARCHAR(24));
 INSERT INTO seed904_meta VALUES
-  (200, 130, 'STAPLE_RESTOCK'),
-  (201, 131, 'VIRAL_TOPIC'),
+  (200, 130, 'REPLENISHMENT'),
+  (201, 131, 'VIRAL'),
   (202, 132, 'SEASONAL'),
-  (203, 133, 'STAPLE_RESTOCK'),
+  (203, 133, 'REPLENISHMENT'),
   (204, 134, 'FESTIVAL'),
-  (205, 135, 'STAPLE_RESTOCK');
+  (205, 135, 'REPLENISHMENT');
 
 CREATE TEMP TABLE seed904_bonus (
     product_id BIGINT, factor_code VARCHAR(32),
@@ -188,7 +188,7 @@ WHERE s.id = c.id;
 --   −10  熱度來源降級（INSTAGRAM 目前為 DEGRADED，全品項皆扣）
 --   −20  同品類樣本 < 10（即本次走了 §5.3.1 的退回分支）
 --   −8   每個缺資料的加分因子
---   −10  情境判定信心 < 0.7（含判定失敗退回 STAPLE_RESTOCK 的情況）
+--   −10  情境判定信心 < 0.7（含判定失敗退回 REPLENISHMENT 的情況）
 
 WITH sample_size AS (
     SELECT s.period, p.category_id, COUNT(*) AS n
