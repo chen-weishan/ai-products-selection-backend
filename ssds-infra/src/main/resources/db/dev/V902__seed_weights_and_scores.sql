@@ -61,15 +61,15 @@ INSERT INTO weight_version (id, version_no, name, status, effective_from,
 INSERT INTO weight_profile (version_id, scene_type, factor_code, weight)
 SELECT v.id, w.scene_type, w.factor_code, w.weight
 FROM (VALUES
-    ('VIRAL_TOPIC',    'HEAT_SLOPE',  0.550), ('VIRAL_TOPIC',    'MARGIN',     0.100),
-    ('VIRAL_TOPIC',    'CONVERSION',  0.100), ('VIRAL_TOPIC',    'FESTIVAL',   0.150),
-    ('VIRAL_TOPIC',    'CLIMATE',     0.100),
+    ('VIRAL',    'HEAT_SLOPE',  0.550), ('VIRAL',    'MARGIN',     0.100),
+    ('VIRAL',    'CONVERSION',  0.100), ('VIRAL',    'FESTIVAL',   0.150),
+    ('VIRAL',    'CLIMATE',     0.100),
     ('FESTIVAL',       'HEAT_SLOPE',  0.200), ('FESTIVAL',       'MARGIN',     0.200),
     ('FESTIVAL',       'CONVERSION',  0.200), ('FESTIVAL',       'FESTIVAL',   0.300),
     ('FESTIVAL',       'CLIMATE',     0.100),
-    ('STAPLE_RESTOCK', 'HEAT_SLOPE',  0.150), ('STAPLE_RESTOCK', 'MARGIN',     0.350),
-    ('STAPLE_RESTOCK', 'CONVERSION',  0.350), ('STAPLE_RESTOCK', 'FESTIVAL',   0.050),
-    ('STAPLE_RESTOCK', 'CLIMATE',     0.100),
+    ('REPLENISHMENT', 'HEAT_SLOPE',  0.150), ('REPLENISHMENT', 'MARGIN',     0.350),
+    ('REPLENISHMENT', 'CONVERSION',  0.350), ('REPLENISHMENT', 'FESTIVAL',   0.050),
+    ('REPLENISHMENT', 'CLIMATE',     0.100),
     ('SEASONAL',       'HEAT_SLOPE',  0.200), ('SEASONAL',       'MARGIN',     0.250),
     ('SEASONAL',       'CONVERSION',  0.200), ('SEASONAL',       'FESTIVAL',   0.050),
     ('SEASONAL',       'CLIMATE',     0.300)
@@ -79,15 +79,15 @@ FROM (VALUES
 -- v3 草稿：校準建議把話題爆款型的熱度斜率拆出一部分給熱度絕對量級，
 -- 用意是防止「3 則變 9 則」這種小基數暴衝被誤判為爆款（§5.2.1）。
 INSERT INTO weight_profile (version_id, scene_type, factor_code, weight) VALUES
-  (3, 'VIRAL_TOPIC',    'HEAT_SLOPE', 0.420), (3, 'VIRAL_TOPIC',    'HEAT_VOLUME', 0.130),
-  (3, 'VIRAL_TOPIC',    'MARGIN',     0.100), (3, 'VIRAL_TOPIC',    'CONVERSION',  0.100),
-  (3, 'VIRAL_TOPIC',    'FESTIVAL',   0.150), (3, 'VIRAL_TOPIC',    'CLIMATE',     0.100),
+  (3, 'VIRAL',    'HEAT_SLOPE', 0.420), (3, 'VIRAL',    'HEAT_VOLUME', 0.130),
+  (3, 'VIRAL',    'MARGIN',     0.100), (3, 'VIRAL',    'CONVERSION',  0.100),
+  (3, 'VIRAL',    'FESTIVAL',   0.150), (3, 'VIRAL',    'CLIMATE',     0.100),
   (3, 'FESTIVAL',       'HEAT_SLOPE', 0.150), (3, 'FESTIVAL',       'HEAT_VOLUME', 0.050),
   (3, 'FESTIVAL',       'MARGIN',     0.200), (3, 'FESTIVAL',       'CONVERSION',  0.200),
   (3, 'FESTIVAL',       'FESTIVAL',   0.300), (3, 'FESTIVAL',       'CLIMATE',     0.100),
-  (3, 'STAPLE_RESTOCK', 'HEAT_SLOPE', 0.120), (3, 'STAPLE_RESTOCK', 'HEAT_VOLUME', 0.030),
-  (3, 'STAPLE_RESTOCK', 'MARGIN',     0.350), (3, 'STAPLE_RESTOCK', 'CONVERSION',  0.350),
-  (3, 'STAPLE_RESTOCK', 'FESTIVAL',   0.050), (3, 'STAPLE_RESTOCK', 'CLIMATE',     0.100),
+  (3, 'REPLENISHMENT', 'HEAT_SLOPE', 0.120), (3, 'REPLENISHMENT', 'HEAT_VOLUME', 0.030),
+  (3, 'REPLENISHMENT', 'MARGIN',     0.350), (3, 'REPLENISHMENT', 'CONVERSION',  0.350),
+  (3, 'REPLENISHMENT', 'FESTIVAL',   0.050), (3, 'REPLENISHMENT', 'CLIMATE',     0.100),
   (3, 'SEASONAL',       'HEAT_SLOPE', 0.160), (3, 'SEASONAL',       'HEAT_VOLUME', 0.040),
   (3, 'SEASONAL',       'MARGIN',     0.250), (3, 'SEASONAL',       'CONVERSION',  0.200),
   (3, 'SEASONAL',       'FESTIVAL',   0.050), (3, 'SEASONAL',       'CLIMATE',     0.300);
@@ -111,23 +111,23 @@ CREATE TEMP TABLE seed_score_meta (
 --   −8   每個缺資料的加分因子
 --   −10  情境判定信心 < 0.7
 INSERT INTO seed_score_meta VALUES
-  (1,  101, 'VIRAL_TOPIC',    90),
+  (1,  101, 'VIRAL',    90),
   (2,  102, 'SEASONAL',       90),
-  (3,  103, 'STAPLE_RESTOCK', 90),
-  (4,  104, 'STAPLE_RESTOCK', 90),
-  (5,  105, 'STAPLE_RESTOCK', 90),
+  (3,  103, 'REPLENISHMENT', 90),
+  (4,  104, 'REPLENISHMENT', 90),
+  (5,  105, 'REPLENISHMENT', 90),
   (6,  106, 'SEASONAL',       90),
   (7,  107, 'FESTIVAL',       90),
-  (8,  108, 'STAPLE_RESTOCK', 90),
-  (9,  109, 'STAPLE_RESTOCK', 90),
-  (10, 110, 'STAPLE_RESTOCK', 90),
-  (11, 111, 'STAPLE_RESTOCK', 90),
-  (12, 112, 'STAPLE_RESTOCK', 82),   -- −8：CONVERSION 無資料
-  (13, 113, 'VIRAL_TOPIC',    70),   -- −20：彩妝類樣本不足 10 筆
-  (14, 114, 'STAPLE_RESTOCK', 44),   -- −20 樣本 −16 兩個因子缺 −10 情境信心 0.62
+  (8,  108, 'REPLENISHMENT', 90),
+  (9,  109, 'REPLENISHMENT', 90),
+  (10, 110, 'REPLENISHMENT', 90),
+  (11, 111, 'REPLENISHMENT', 90),
+  (12, 112, 'REPLENISHMENT', 82),   -- −8：CONVERSION 無資料
+  (13, 113, 'VIRAL',    70),   -- −20：彩妝類樣本不足 10 筆
+  (14, 114, 'REPLENISHMENT', 44),   -- −20 樣本 −16 兩個因子缺 −10 情境信心 0.62
   (15, 115, 'SEASONAL',       70),   -- −20：小家電類樣本不足
-  (16, 116, 'STAPLE_RESTOCK', 90),
-  (17, 117, 'VIRAL_TOPIC',    82);   -- −8：B 軌轉入，無歷史開團紀錄
+  (16, 116, 'REPLENISHMENT', 90),
+  (17, 117, 'VIRAL',    82);   -- −8：B 軌轉入，無歷史開團紀錄
 
 -- 加分因子的正規化值（0–100，同品類百分位）。
 -- data_available = FALSE 者不填 normalized_value，權重會分攤給其餘因子（§5.7）。
@@ -379,14 +379,14 @@ DROP TABLE seed_score_meta;
 -- 三種情況都要有，否則 FR-11-3 的覆寫率指標永遠是 0：
 --   1. AI 判定且採納
 --   2. AI 判定但被人工覆寫（override_reason 必填）
---   3. AI 信心不足 → ai_scene_type 為 NULL，退回 STAPLE_RESTOCK（§5.4）
+--   3. AI 信心不足 → ai_scene_type 為 NULL，退回 REPLENISHMENT（§5.4）
 
 INSERT INTO scene_classification_log
     (product_id, ai_scene_type, ai_confidence, ai_reasoning, final_scene_type,
      overridden_by, override_reason, created_at) VALUES
-  (101, 'VIRAL_TOPIC', 0.88,
+  (101, 'VIRAL', 0.88,
    '近 7 日 Threads 討論量成長 340%，無明確節慶對應，歷史開團 2 次。訊號：heat_slope_7d +340%、history_records 2、festival_match none',
-   'VIRAL_TOPIC', NULL, NULL, now() - interval '2 days'),
+   'VIRAL', NULL, NULL, now() - interval '2 days'),
 
   (107, 'SEASONAL', 0.71,
    '品項名稱含「中秋」，但熱度曲線呈現典型秋季上升形態，判定為季節導向',
@@ -394,26 +394,26 @@ INSERT INTO scene_classification_log
    '蛋黃酥是中秋專屬品項，檔期一過需求歸零，屬節慶檔期型而非季節導向；季節導向會低估節慶時間窗的權重',
    now() - interval '2 days'),
 
-  (113, 'VIRAL_TOPIC', 0.83,
+  (113, 'VIRAL', 0.83,
    '絲絨唇釉近 14 日於 Threads 與 IG 討論同步竄升，色號開箱貼文為主要驅動',
-   'VIRAL_TOPIC', NULL, NULL, now() - interval '2 days'),
+   'VIRAL', NULL, NULL, now() - interval '2 days'),
 
-  -- 信心不足：§5.4 規定退回 STAPLE_RESTOCK 並標示
+  -- 信心不足：§5.4 規定退回 REPLENISHMENT 並標示
   (114, NULL, 0.62,
    '訊號分歧：熱度斜率為負但毛利率與同類表現落差大，無法明確歸類。信心值低於門檻 0.7',
-   'STAPLE_RESTOCK', NULL, NULL, now() - interval '2 days'),
+   'REPLENISHMENT', NULL, NULL, now() - interval '2 days'),
 
-  (117, 'VIRAL_TOPIC', 0.79,
+  (117, 'VIRAL', 0.79,
    '由 B 軌尋源成案轉入，探索期間熱度持續上升且尚未進入高原期',
-   'VIRAL_TOPIC', NULL, NULL, now() - interval '2 days'),
+   'VIRAL', NULL, NULL, now() - interval '2 days'),
 
-  (104, 'STAPLE_RESTOCK', 0.75,
+  (104, 'REPLENISHMENT', 0.75,
    '需求穩定、重複開團 3 次，無明顯社群竄升訊號',
    'SEASONAL', 1,
    '冷凍甜點在夏季需求明顯高於冬季，過去兩年夏季開團量為冬季的 2.4 倍，應以季節導向計算',
    now() - interval '9 days'),
 
-  (102, 'VIRAL_TOPIC', 0.68,
+  (102, 'VIRAL', 0.68,
    '近 7 日討論量成長 124%，判定為話題竄升',
    'SEASONAL', 6,
    '草莓年糕是每年冬季固定回歸的品項，去年同期熱度曲線幾乎一致，這波成長是季節性而非話題性；'
