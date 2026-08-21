@@ -1,6 +1,8 @@
 package com.example.ssds.api.aitask;
 
+import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.scene.SceneClassificationService;
+import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
@@ -16,14 +18,17 @@ public class AiTaskWorker {
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
     private final SceneClassificationService sceneClassificationService;
+    private final ReviewRiskService reviewRiskService;
 
     public AiTaskWorker(
             AiTaskRepository taskRepository,
             AiTaskItemRepository itemRepository,
-            SceneClassificationService sceneClassificationService) {
+            SceneClassificationService sceneClassificationService,
+            ReviewRiskService reviewRiskService) {
         this.taskRepository = taskRepository;
         this.itemRepository = itemRepository;
         this.sceneClassificationService = sceneClassificationService;
+        this.reviewRiskService = reviewRiskService;
     }
 
     @Async
@@ -41,9 +46,23 @@ public class AiTaskWorker {
             item.setStatus(TaskStatus.RUNNING);
             itemRepository.save(item);
             try {
-                sceneClassificationService.classify(item.getProduct().getId(), event.forceRefresh());
+                switch (task.getTaskType()) {
+                    case SCENE_CLASSIFY -> sceneClassificationService.classify(
+                            item.getProduct().getId(), event.forceRefresh());
+                    case REVIEW_RISK -> {
+                        var response = reviewRiskService.analyze(
+                                item.getProduct().getId(), event.forceRefresh());
+                        if (response.fallbackApplied()) {
+                            item.setErrorMessage("評論分析未完成");
+                        }
+                    }
+                    default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
+                }
                 item.setStatus(TaskStatus.SUCCESS);
-                item.setErrorMessage(null);
+                if (task.getTaskType() != AiTaskType.REVIEW_RISK
+                        || item.getErrorMessage() == null) {
+                    item.setErrorMessage(null);
+                }
                 successes++;
             } catch (RuntimeException exception) {
                 item.setStatus(TaskStatus.FAILED);

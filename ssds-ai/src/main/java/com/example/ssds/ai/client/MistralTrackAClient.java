@@ -53,7 +53,7 @@ public class MistralTrackAClient implements TrackAAiClient {
         Map<String, Object> responseFormat = Map.of(
                 "type", "json_schema",
                 "json_schema", Map.of(
-                        "name", "scene_classifier_output",
+                        "name", request.taskType().name().toLowerCase() + "_output",
                         "strict", true,
                         "schema", request.responseSchema()));
         Map<String, Object> completionArgs = Map.of(
