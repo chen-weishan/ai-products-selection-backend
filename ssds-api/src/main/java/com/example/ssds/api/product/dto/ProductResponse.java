@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Set;
 
-/** FR-03 品項新增／修改後的單筆回應。 */
+/** FR-03 品項詳情及新增／修改後的單筆回應。 */
 public record ProductResponse(
         Long id,
         String name,

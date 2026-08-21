@@ -5,6 +5,7 @@ import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
+import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
 import com.example.ssds.api.product.dto.ProductUpdateResponse;
@@ -97,6 +98,17 @@ public class ProductController {
         );
     }
 
+    /** FR-03-2 取得品項完整資料，供編輯畫面載入。 */
+    @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<ProductResponse> getById(
+            @PathVariable(name = "id") Long id
+    ) {
+        return ApiResponse.success(
+                productQueryService.getById(id)
+        );
+    }
+
     /** FR-03-2 新增品項。 */
     @PostMapping
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
@@ -108,7 +120,7 @@ public class ProductController {
         );
     }
 
-    /** FR-03-2 修改品項基本資料，商品狀態由獨立 API 管理。 */
+    /** FR-03-2 修改品項基本資料；成功後由服務自動標記為待評分。 */
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
     public ApiResponse<ProductUpdateResponse> update(

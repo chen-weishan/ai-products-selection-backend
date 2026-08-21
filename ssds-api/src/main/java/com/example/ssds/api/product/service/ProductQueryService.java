@@ -4,14 +4,22 @@ import com.example.ssds.api.common.error.ApiException;
 import com.example.ssds.api.common.response.ApiErrorResponse.FieldError;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
+import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.dao.ProductListDao;
 import com.example.ssds.infra.dao.projection.ProductListRow;
 import com.example.ssds.infra.dao.query.ProductListCriteria;
+import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.infra.repository.ProductRepository;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,9 +54,14 @@ public class ProductQueryService {
             BigDecimal.valueOf(100);
 
     private final ProductListDao productListDao;
+    private final ProductRepository productRepository;
 
-    public ProductQueryService(ProductListDao productListDao) {
+    public ProductQueryService(
+            ProductListDao productListDao,
+            ProductRepository productRepository
+    ) {
         this.productListDao = productListDao;
+        this.productRepository = productRepository;
     }
 
     public PageResponse<ProductListItemResponse> search(
@@ -83,6 +96,43 @@ public class ProductQueryService {
                         .map(this::toResponse);
 
         return PageResponse.from(result);
+    }
+
+    /** 取得品項完整資料；Repository 以 EntityGraph 一次載入關聯資料。 */
+    public ProductResponse getById(Long productId) {
+        Product product = productRepository.findWithDetailsById(productId)
+                .orElseThrow(() -> new ApiException(
+                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+
+        Supplier supplier = product.getSupplier();
+        Set<Long> keywordIds = product.getKeywords().stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        return new ProductResponse(
+                product.getId(),
+                product.getName(),
+                product.getCategory().getId(),
+                product.getCategory().getName(),
+                supplier == null ? null : supplier.getId(),
+                supplier == null ? null : supplier.getName(),
+                product.getCost(),
+                product.getSuggestedPrice(),
+                product.getMarginRate(),
+                product.getMoq(),
+                product.getSeason(),
+                product.getTargetAudience(),
+                product.getStatus(),
+                product.getTrackType(),
+                product.getSourcingStatus(),
+                product.getLogisticsCondition(),
+                product.getShelfLifeDays(),
+                Collections.unmodifiableSet(keywordIds),
+                product.getCreatedAt(),
+                product.getUpdatedAt()
+        );
     }
 
     private void validate(ProductSearchRequest request) {

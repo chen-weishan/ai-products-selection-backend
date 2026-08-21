@@ -25,12 +25,10 @@ public record ProductCreateRequest(
         @Positive(message = "供應商 ID 必須大於 0")
         Long supplierId,
 
-        @NotNull(message = "成本不可為空")
         @PositiveOrZero(message = "成本不可小於 0")
         @Digits(integer = 8, fraction = 2, message = "成本最多 8 位整數及 2 位小數")
         BigDecimal cost,
 
-        @NotNull(message = "建議售價不可為空")
         @Positive(message = "建議售價必須大於 0")
         @Digits(integer = 8, fraction = 2, message = "建議售價最多 8 位整數及 2 位小數")
         BigDecimal suggestedPrice,

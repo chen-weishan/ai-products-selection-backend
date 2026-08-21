@@ -20,6 +20,7 @@ import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -68,6 +69,11 @@ public class ProductCommandService {
                 trackType,
                 request.sourcingStatus()
         );
+        validatePricing(
+                trackType,
+                request.cost(),
+                request.suggestedPrice()
+        );
 
         Product product = Product.builder()
                 .name(name)
@@ -78,15 +84,13 @@ public class ProductCommandService {
                 .moq(request.moq())
                 .season(request.season() == null ? Season.ALL : request.season())
                 .targetAudience(normalizeNullable(request.targetAudience()))
-                .status(ProductStatus.DRAFT)
+                .status(ProductStatus.EVALUATING)
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
                 .logisticsCondition(normalizeNullable(request.logisticsCondition()))
                 .shelfLifeDays(request.shelfLifeDays())
                 .keywords(keywords)
                 .build();
-
-        validatePricing(product);
 
         List<String> warnings = new ArrayList<>();
         if (productRepository.existsByCategoryIdAndNameIgnoreCase(
@@ -106,7 +110,8 @@ public class ProductCommandService {
     /**
      * 完整修改品項基本資料。
      *
-     * <p>狀態由獨立的 PATCH API 管理；本方法保留既有 status、createdBy 與建立時間。
+     * <p>成功修改後重新標記為 EVALUATING，供下一次 A 軌批次評分取件；
+     * createdBy 與建立時間仍保留原值。
      */
     public ProductUpdateResponse update(
             Long productId,
@@ -119,11 +124,16 @@ public class ProductCommandService {
         Set<TrendKeyword> keywords = findKeywords(request.resolvedKeywordIds());
 
         TrackType trackType = request.trackType() == null
-                ? TrackType.A
+                ? product.getTrackType()
                 : request.trackType();
         SourcingStatus sourcingStatus = resolveSourcingStatus(
                 trackType,
                 request.sourcingStatus()
+        );
+        validatePricing(
+                trackType,
+                request.cost(),
+                request.suggestedPrice()
         );
 
         product.setName(name);
@@ -134,14 +144,13 @@ public class ProductCommandService {
         product.setMoq(request.moq());
         product.setSeason(request.season() == null ? Season.ALL : request.season());
         product.setTargetAudience(normalizeNullable(request.targetAudience()));
+        product.setStatus(ProductStatus.EVALUATING);
         product.setTrackType(trackType);
         product.setSourcingStatus(sourcingStatus);
         product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
         product.setShelfLifeDays(request.shelfLifeDays());
         product.getKeywords().clear();
         product.getKeywords().addAll(keywords);
-
-        validatePricing(product);
 
         List<String> warnings = new ArrayList<>();
         if (productRepository.existsDuplicateName(
@@ -210,25 +219,58 @@ public class ProductCommandService {
             TrackType trackType,
             SourcingStatus sourcingStatus
     ) {
-        if (trackType == TrackType.B && sourcingStatus == null) {
+        if (trackType == TrackType.A) {
+            return null;
+        }
+        if (sourcingStatus == null) {
             return SourcingStatus.PENDING;
         }
         return sourcingStatus;
     }
 
-    private void validatePricing(Product product) {
-        if (product.isPricingAcceptable()) {
-            return;
+    /**
+     * A 軌必須具備可計算毛利率的完整定價；B 軌定價可留空。
+     *
+     * <p>Create 與 Update 共用此入口，避免兩條寫入流程產生不同規則。
+     */
+    private void validatePricing(
+            TrackType trackType,
+            BigDecimal cost,
+            BigDecimal suggestedPrice
+    ) {
+        List<FieldError> fieldErrors = new ArrayList<>();
+
+        if (trackType == TrackType.A) {
+            if (cost == null) {
+                fieldErrors.add(new FieldError(
+                        "cost",
+                        "A 軌品項成本不可為空"
+                ));
+            }
+            if (suggestedPrice == null) {
+                fieldErrors.add(new FieldError(
+                        "suggestedPrice",
+                        "A 軌品項建議售價不可為空"
+                ));
+            }
         }
 
-        throw new ApiException(
-                ApiErrorCode.VALIDATION_FAILED,
-                "商品資料驗證失敗",
-                List.of(new FieldError(
+        if (cost != null
+                && suggestedPrice != null
+                && suggestedPrice.compareTo(cost) <= 0) {
+            fieldErrors.add(new FieldError(
                         "suggestedPrice",
                         "建議售價必須大於成本"
-                ))
-        );
+                ));
+        }
+
+        if (!fieldErrors.isEmpty()) {
+            throw new ApiException(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    "商品資料驗證失敗",
+                    fieldErrors
+            );
+        }
     }
 
     private ProductResponse toResponse(Product product) {
