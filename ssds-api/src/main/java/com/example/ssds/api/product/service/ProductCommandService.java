@@ -34,237 +34,261 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class ProductCommandService {
 
-    private static final String DUPLICATE_NAME_WARNING =
-            "同類別已有相同名稱的品項，資料仍已儲存";
+        private static final String DUPLICATE_NAME_WARNING = "同類別已有相同名稱的品項，資料仍已儲存";
 
-    private final ProductRepository productRepository;
-    private final CategoryRepository categoryRepository;
-    private final SupplierRepository supplierRepository;
-    private final TrendKeywordRepository trendKeywordRepository;
+        private final ProductRepository productRepository;
+        private final CategoryRepository categoryRepository;
+        private final SupplierRepository supplierRepository;
+        private final TrendKeywordRepository trendKeywordRepository;
 
-    public ProductCommandService(
-            ProductRepository productRepository,
-            CategoryRepository categoryRepository,
-            SupplierRepository supplierRepository,
-            TrendKeywordRepository trendKeywordRepository
-    ) {
-        this.productRepository = productRepository;
-        this.categoryRepository = categoryRepository;
-        this.supplierRepository = supplierRepository;
-        this.trendKeywordRepository = trendKeywordRepository;
-    }
-
-    /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
-    public ProductCreateResponse create(ProductCreateRequest request) {
-        String name = request.name().trim();
-        Category category = findCategory(request.categoryId());
-        Supplier supplier = findSupplier(request.supplierId());
-        Set<TrendKeyword> keywords = findKeywords(request.resolvedKeywordIds());
-
-        TrackType trackType = request.trackType() == null
-                ? TrackType.A
-                : request.trackType();
-        SourcingStatus sourcingStatus = resolveSourcingStatus(
-                trackType,
-                request.sourcingStatus()
-        );
-
-        Product product = Product.builder()
-                .name(name)
-                .category(category)
-                .supplier(supplier)
-                .cost(request.cost())
-                .suggestedPrice(request.suggestedPrice())
-                .moq(request.moq())
-                .season(request.season() == null ? Season.ALL : request.season())
-                .targetAudience(normalizeNullable(request.targetAudience()))
-                .status(ProductStatus.DRAFT)
-                .trackType(trackType)
-                .sourcingStatus(sourcingStatus)
-                .logisticsCondition(normalizeNullable(request.logisticsCondition()))
-                .shelfLifeDays(request.shelfLifeDays())
-                .keywords(keywords)
-                .build();
-
-        validatePricing(product);
-
-        List<String> warnings = new ArrayList<>();
-        if (productRepository.existsByCategoryIdAndNameIgnoreCase(
-                category.getId(),
-                name
-        )) {
-            warnings.add(DUPLICATE_NAME_WARNING);
+        public ProductCommandService(
+                        ProductRepository productRepository,
+                        CategoryRepository categoryRepository,
+                        SupplierRepository supplierRepository,
+                        TrendKeywordRepository trendKeywordRepository) {
+                this.productRepository = productRepository;
+                this.categoryRepository = categoryRepository;
+                this.supplierRepository = supplierRepository;
+                this.trendKeywordRepository = trendKeywordRepository;
         }
 
-        Product savedProduct = productRepository.saveAndFlush(product);
-        return new ProductCreateResponse(
-                toResponse(savedProduct),
-                warnings
-        );
-    }
+        /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
+        public ProductCreateResponse create(ProductCreateRequest request) {
+                String name = request.name().trim();
+                Category category = findCategory(request.categoryId());
+                Supplier supplier = findSupplier(request.supplierId());
+                Set<TrendKeyword> keywords = findKeywords(request.resolvedKeywordIds());
 
-    /**
-     * 完整修改品項基本資料。
-     *
-     * <p>狀態由獨立的 PATCH API 管理；本方法保留既有 status、createdBy 與建立時間。
-     */
-    public ProductUpdateResponse update(
-            Long productId,
-            ProductUpdateRequest request
-    ) {
-        Product product = findProduct(productId);
-        String name = request.name().trim();
-        Category category = findCategory(request.categoryId());
-        Supplier supplier = findSupplier(request.supplierId());
-        Set<TrendKeyword> keywords = findKeywords(request.resolvedKeywordIds());
+                TrackType trackType = request.trackType() == null
+                                ? TrackType.A
+                                : request.trackType();
+                SourcingStatus sourcingStatus = resolveSourcingStatus(
+                                trackType,
+                                request.sourcingStatus());
 
-        TrackType trackType = request.trackType() == null
-                ? TrackType.A
-                : request.trackType();
-        SourcingStatus sourcingStatus = resolveSourcingStatus(
-                trackType,
-                request.sourcingStatus()
-        );
+                Product product = Product.builder()
+                                .name(name)
+                                .category(category)
+                                .supplier(supplier)
+                                .cost(request.cost())
+                                .suggestedPrice(request.suggestedPrice())
+                                .moq(request.moq())
+                                .season(request.season() == null ? Season.ALL : request.season())
+                                .targetAudience(normalizeNullable(request.targetAudience()))
+                                .status(ProductStatus.DRAFT)
+                                .trackType(trackType)
+                                .sourcingStatus(sourcingStatus)
+                                .logisticsCondition(normalizeNullable(request.logisticsCondition()))
+                                .shelfLifeDays(request.shelfLifeDays())
+                                .keywords(keywords)
+                                .build();
 
-        product.setName(name);
-        product.setCategory(category);
-        product.setSupplier(supplier);
-        product.setCost(request.cost());
-        product.setSuggestedPrice(request.suggestedPrice());
-        product.setMoq(request.moq());
-        product.setSeason(request.season() == null ? Season.ALL : request.season());
-        product.setTargetAudience(normalizeNullable(request.targetAudience()));
-        product.setTrackType(trackType);
-        product.setSourcingStatus(sourcingStatus);
-        product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
-        product.setShelfLifeDays(request.shelfLifeDays());
-        product.getKeywords().clear();
-        product.getKeywords().addAll(keywords);
+                validatePricing(product);
 
-        validatePricing(product);
+                List<String> warnings = new ArrayList<>();
+                if (productRepository.existsByCategoryIdAndNameIgnoreCase(
+                                category.getId(),
+                                name)) {
+                        warnings.add(DUPLICATE_NAME_WARNING);
+                }
 
-        List<String> warnings = new ArrayList<>();
-        if (productRepository.existsDuplicateName(
-                category.getId(),
-                name,
-                productId
-        )) {
-            warnings.add(DUPLICATE_NAME_WARNING);
+                Product savedProduct = productRepository.saveAndFlush(product);
+                return new ProductCreateResponse(
+                                toResponse(savedProduct),
+                                warnings);
         }
 
-        Product savedProduct = productRepository.saveAndFlush(product);
-        return new ProductUpdateResponse(
-                toResponse(savedProduct),
-                warnings
-        );
-    }
+        /**
+         * 完整修改品項基本資料。
+         *
+         * <p>
+         * 狀態由獨立的 PATCH API 管理；本方法保留既有 status、createdBy 與建立時間。
+         */
+        public ProductUpdateResponse update(
+                        Long productId,
+                        ProductUpdateRequest request) {
+                Product product = findProduct(productId);
+                String name = request.name().trim();
+                Category category = findCategory(request.categoryId());
+                Supplier supplier = findSupplier(request.supplierId());
+                Set<TrendKeyword> keywords = findKeywords(request.resolvedKeywordIds());
 
-    private Product findProduct(Long productId) {
-        return productRepository.findById(productId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
-                        "找不到指定的品項：" + productId
-                ));
-    }
+                TrackType trackType = request.trackType() == null
+                                ? TrackType.A
+                                : request.trackType();
+                SourcingStatus sourcingStatus = resolveSourcingStatus(
+                                trackType,
+                                request.sourcingStatus());
 
-    private Category findCategory(Long categoryId) {
-        return categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
-                        "找不到指定的類別：" + categoryId
-                ));
-    }
+                product.setName(name);
+                product.setCategory(category);
+                product.setSupplier(supplier);
+                product.setCost(request.cost());
+                product.setSuggestedPrice(request.suggestedPrice());
+                product.setMoq(request.moq());
+                product.setSeason(request.season() == null ? Season.ALL : request.season());
+                product.setTargetAudience(normalizeNullable(request.targetAudience()));
+                product.setTrackType(trackType);
+                product.setSourcingStatus(sourcingStatus);
+                product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
+                product.setShelfLifeDays(request.shelfLifeDays());
+                product.getKeywords().clear();
+                product.getKeywords().addAll(keywords);
 
-    private Supplier findSupplier(Long supplierId) {
-        if (supplierId == null) {
-            return null;
+                validatePricing(product);
+
+                List<String> warnings = new ArrayList<>();
+                if (productRepository.existsDuplicateName(
+                                category.getId(),
+                                name,
+                                productId)) {
+                        warnings.add(DUPLICATE_NAME_WARNING);
+                }
+
+                Product savedProduct = productRepository.saveAndFlush(product);
+                return new ProductUpdateResponse(
+                                toResponse(savedProduct),
+                                warnings);
         }
 
-        return supplierRepository.findById(supplierId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
-                        "找不到指定的供應商：" + supplierId
-                ));
-    }
-
-    private Set<TrendKeyword> findKeywords(Set<Long> keywordIds) {
-        if (keywordIds.isEmpty()) {
-            return new LinkedHashSet<>();
+        private Product findProduct(Long productId) {
+                return productRepository.findById(productId)
+                                .orElseThrow(() -> new ApiException(
+                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                                "找不到指定的品項：" + productId));
         }
 
-        List<TrendKeyword> foundKeywords = trendKeywordRepository.findAllById(keywordIds);
-        Set<Long> missingIds = new LinkedHashSet<>(keywordIds);
-        foundKeywords.forEach(keyword -> missingIds.remove(keyword.getId()));
-
-        if (!missingIds.isEmpty()) {
-            throw new ApiException(
-                    ApiErrorCode.RESOURCE_NOT_FOUND,
-                    "找不到指定的關鍵字：" + missingIds
-            );
+        private Category findCategory(Long categoryId) {
+                return categoryRepository.findById(categoryId)
+                                .orElseThrow(() -> new ApiException(
+                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                                "找不到指定的類別：" + categoryId));
         }
 
-        return new LinkedHashSet<>(foundKeywords);
-    }
+        private Supplier findSupplier(Long supplierId) {
+                if (supplierId == null) {
+                        return null;
+                }
 
-    private SourcingStatus resolveSourcingStatus(
-            TrackType trackType,
-            SourcingStatus sourcingStatus
-    ) {
-        if (trackType == TrackType.B && sourcingStatus == null) {
-            return SourcingStatus.PENDING;
-        }
-        return sourcingStatus;
-    }
-
-    private void validatePricing(Product product) {
-        if (product.isPricingAcceptable()) {
-            return;
+                return supplierRepository.findById(supplierId)
+                                .orElseThrow(() -> new ApiException(
+                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                                "找不到指定的供應商：" + supplierId));
         }
 
-        throw new ApiException(
-                ApiErrorCode.VALIDATION_FAILED,
-                "商品資料驗證失敗",
-                List.of(new FieldError(
-                        "suggestedPrice",
-                        "建議售價必須大於成本"
-                ))
-        );
-    }
+        private Set<TrendKeyword> findKeywords(Set<Long> keywordIds) {
+                if (keywordIds.isEmpty()) {
+                        return new LinkedHashSet<>();
+                }
 
-    private ProductResponse toResponse(Product product) {
-        Supplier supplier = product.getSupplier();
-        Set<Long> keywordIds = product.getKeywords().stream()
-                .map(TrendKeyword::getId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                List<TrendKeyword> foundKeywords = trendKeywordRepository.findAllById(keywordIds);
+                Set<Long> missingIds = new LinkedHashSet<>(keywordIds);
+                foundKeywords.forEach(keyword -> missingIds.remove(keyword.getId()));
 
-        return new ProductResponse(
-                product.getId(),
-                product.getName(),
-                product.getCategory().getId(),
-                product.getCategory().getName(),
-                supplier == null ? null : supplier.getId(),
-                supplier == null ? null : supplier.getName(),
-                product.getCost(),
-                product.getSuggestedPrice(),
-                product.getMarginRate(),
-                product.getMoq(),
-                product.getSeason(),
-                product.getTargetAudience(),
-                product.getStatus(),
-                product.getTrackType(),
-                product.getSourcingStatus(),
-                product.getLogisticsCondition(),
-                product.getShelfLifeDays(),
-                Collections.unmodifiableSet(keywordIds),
-                product.getCreatedAt(),
-                product.getUpdatedAt()
-        );
-    }
+                if (!missingIds.isEmpty()) {
+                        throw new ApiException(
+                                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                                        "找不到指定的關鍵字：" + missingIds);
+                }
 
-    private String normalizeNullable(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
+                return new LinkedHashSet<>(foundKeywords);
         }
-        return value.trim();
-    }
+
+        private SourcingStatus resolveSourcingStatus(
+                        TrackType trackType,
+                        SourcingStatus sourcingStatus) {
+                if (trackType == TrackType.B && sourcingStatus == null) {
+                        return SourcingStatus.PENDING;
+                }
+                return sourcingStatus;
+        }
+
+        private void validatePricing(Product product) {
+                if (product.isPricingAcceptable()) {
+                        return;
+                }
+
+                throw new ApiException(
+                                ApiErrorCode.VALIDATION_FAILED,
+                                "商品資料驗證失敗",
+                                List.of(new FieldError(
+                                                "suggestedPrice",
+                                                "建議售價必須大於成本")));
+        }
+
+        private ProductResponse toResponse(Product product) {
+                Supplier supplier = product.getSupplier();
+                Set<Long> keywordIds = product.getKeywords().stream()
+                                .map(TrendKeyword::getId)
+                                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+                return new ProductResponse(
+                                product.getId(),
+                                product.getName(),
+                                product.getCategory().getId(),
+                                product.getCategory().getName(),
+                                supplier == null ? null : supplier.getId(),
+                                supplier == null ? null : supplier.getName(),
+                                product.getCost(),
+                                product.getSuggestedPrice(),
+                                product.getMarginRate(),
+                                product.getMoq(),
+                                product.getSeason(),
+                                product.getTargetAudience(),
+                                product.getStatus(),
+                                product.getTrackType(),
+                                product.getSourcingStatus(),
+                                product.getLogisticsCondition(),
+                                product.getShelfLifeDays(),
+                                Collections.unmodifiableSet(keywordIds),
+                                product.getCreatedAt(),
+                                product.getUpdatedAt());
+        }
+
+        private String normalizeNullable(String value) {
+                if (value == null || value.isBlank()) {
+                        return null;
+                }
+                return value.trim();
+        }
+
+        public int batchDisable(List<Long> ids) {
+                int count = 0;
+                for (Long id : ids) {
+                        productRepository.findById(id).ifPresent(p -> {
+                                p.setStatus(ProductStatus.REJECTED);
+                                productRepository.save(p);
+                        });
+                        count++;
+                }
+                return count;
+        }
+
+        public int batchAssignCategory(List<Long> ids, Long categoryId) {
+                Category category = categoryRepository.findById(categoryId)
+                                .orElseThrow(() -> new ApiException(ApiErrorCode.RESOURCE_NOT_FOUND,
+                                                "找不到指定的類別：" + categoryId));
+                int count = 0;
+                for (Long id : ids) {
+                        productRepository.findById(id).ifPresent(p -> {
+                                p.setCategory(category);
+                                productRepository.save(p);
+                        });
+                        count++;
+                }
+                return count;
+        }
+
+        public int batchEnqueueForScoring(List<Long> ids) {
+                int count = 0;
+                for (Long id : ids) {
+                        productRepository.findById(id).ifPresent(p -> {
+                                p.setStatus(ProductStatus.EVALUATING);
+                                productRepository.save(p);
+                        });
+                        count++;
+                }
+                return count;
+        }
+
 }
