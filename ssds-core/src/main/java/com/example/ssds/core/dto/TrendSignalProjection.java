@@ -2,6 +2,7 @@ package com.example.ssds.core.dto;
 
 import java.math.BigDecimal;
 
+// 斜率
 public interface TrendSignalProjection {
     String getKeyword();         
     BigDecimal getHeatToday();   

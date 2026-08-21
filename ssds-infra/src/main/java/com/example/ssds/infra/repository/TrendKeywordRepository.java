@@ -80,14 +80,14 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
             WHERE hs.enabled = TRUE 
               AND hs.availability = 'AVAILABLE'
             GROUP BY hr.keyword_id, hr.reading_date
-        ),
+        )
 
         SELECT 
             reading_date AS date,
             ROUND(composite_heat,2) AS heatScore
         FROM DailyComposite
          WHERE  keyword_id = :keywordId
-         AND reading_date >= CURRENT_DATE -INTERVAL '90 days'
+         AND reading_date >= CURRENT_DATE - INTERVAL '90 days'
         
         ORDER BY reading_date ASC
     """, nativeQuery = true)
