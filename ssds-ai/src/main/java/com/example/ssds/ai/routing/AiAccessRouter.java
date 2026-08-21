@@ -6,7 +6,7 @@ import com.example.ssds.ai.client.TrackAAiClient;
 import com.example.ssds.core.domain.AiTaskType;
 import org.springframework.stereotype.Component;
 
-/** A/B 軌存取分流：A 軌直連 OpenRouter；B 軌不得誤走此固定結構化路徑。 */
+/** A/B 軌存取分流：A 軌直連 Mistral；B 軌不得誤走此固定結構化路徑。 */
 @Component
 public class AiAccessRouter {
     private final TrackAAiClient trackAClient;

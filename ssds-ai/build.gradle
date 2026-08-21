@@ -1,4 +1,4 @@
-// ssds-ai：AiOrchestrator、PromptTemplate、OpenRouterClient、MCP client
+// ssds-ai：AiOrchestrator、PromptTemplate、MistralClient、MCP client
 // 依賴 ssds-core（讀領域型別、寫回分析結果的型別），不依賴 ssds-infra。
 dependencies {
 	implementation project(':ssds-core')

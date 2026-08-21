@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class SceneClassifierResponseParser {
     private static final Set<String> ALLOWED_FIELDS = Set.of(
             "sceneType", "confidence", "reasoning", "alternativeScene", "signals");
+    private static final Set<String> ALLOWED_ENVELOPES = Set.of("classification", "data", "result");
     private final ObjectMapper objectMapper;
 
     public SceneClassifierResponseParser(ObjectMapper objectMapper) {
@@ -23,8 +24,8 @@ public class SceneClassifierResponseParser {
 
     public SceneClassifierOutput parse(String raw) {
         try {
-            JsonNode root = objectMapper.readTree(raw);
-            if (!root.isObject()) fail("根節點必須是 object");
+            JsonNode root = parseRoot(raw);
+            if (root == null || !root.isObject()) fail("根節點必須是 object");
             root.fieldNames().forEachRemaining(field -> {
                 if (!ALLOWED_FIELDS.contains(field)) fail("不得包含欄位: " + field);
             });
@@ -50,6 +51,69 @@ public class SceneClassifierResponseParser {
             throw exception;
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             throw new AiSchemaValidationException("SceneClassifier 回應不是有效 Schema", exception);
+        }
+    }
+
+    private JsonNode parseRoot(String raw) throws JsonProcessingException {
+        try {
+            return unwrapKnownEnvelope(objectMapper.readTree(raw));
+        } catch (JsonProcessingException exception) {
+            String candidate = extractSceneObject(raw);
+            if (candidate == null) throw exception;
+            return unwrapKnownEnvelope(objectMapper.readTree(candidate));
+        }
+    }
+
+    private JsonNode unwrapKnownEnvelope(JsonNode root) {
+        if (root == null || !root.isObject() || root.size() != 1) return root;
+        for (String envelope : ALLOWED_ENVELOPES) {
+            JsonNode candidate = root.get(envelope);
+            if (candidate != null && candidate.isObject()) return candidate;
+        }
+        return root;
+    }
+
+    private String extractSceneObject(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        int start = -1;
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int index = 0; index < raw.length(); index++) {
+            char value = raw.charAt(index);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (value == '\\') {
+                    escaped = true;
+                } else if (value == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (value == '"') {
+                inString = true;
+            } else if (value == '{') {
+                if (depth == 0) start = index;
+                depth++;
+            } else if (value == '}' && depth > 0) {
+                depth--;
+                if (depth == 0) {
+                    String candidate = raw.substring(start, index + 1);
+                    if (isSceneObject(candidate)) return candidate;
+                    start = -1;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isSceneObject(String candidate) {
+        try {
+            JsonNode root = unwrapKnownEnvelope(objectMapper.readTree(candidate));
+            return root != null && root.isObject() && root.has("sceneType");
+        } catch (JsonProcessingException exception) {
+            return false;
         }
     }
 

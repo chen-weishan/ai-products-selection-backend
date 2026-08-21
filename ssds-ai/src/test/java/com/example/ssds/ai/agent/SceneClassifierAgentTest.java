@@ -11,6 +11,7 @@ import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.Season;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -57,7 +58,7 @@ class SceneClassifierAgentTest {
     }
 
     @Test
-    void schemaWithWeightFieldFallsBackAndIsNotCached() {
+    void schemaWithWeightFieldRetriesOnceFallsBackAndIsNotCached() {
         CountingFakeClient fake = new CountingFakeClient("""
                 {
                   "sceneType": "VIRAL_TOPIC",
@@ -76,7 +77,49 @@ class SceneClassifierAgentTest {
         assertEquals(SceneCode.REPLENISHMENT, first.output().sceneType());
         assertEquals(FallbackReason.SCHEMA_INVALID, first.fallbackReason());
         assertFalse(second.cacheHit());
-        assertEquals(2, fake.calls.get());
+        assertEquals(4, fake.calls.get());
+    }
+
+    @Test
+    void schemaFailureRetriesOnceWithNextModel() {
+        CountingFakeClient fake = new CountingFakeClient(
+                """
+                {"sceneType":"VIRAL_TOPIC","confidence":0.9,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"],"weights":{"TREND":0.9}}
+                """,
+                """
+                {"sceneType":"VIRAL_TOPIC","confidence":0.82,"reasoning":"熱度上升","alternativeScene":"SEASONAL","signals":["heatSlope7d: 3.40"]}
+                """);
+
+        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.HIGH), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(List.of("fake/primary", "fake/fallback"), fake.models);
+    }
+
+    @Test
+    void rateLimitRetriesWithNextModel() {
+        CountingFakeClient fake = new CountingFakeClient(
+                new AiRateLimitException("rate limited", null),
+                """
+                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 8"]}
+                """);
+
+        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(List.of("fake/primary", "fake/fallback"), fake.models);
+    }
+
+    @Test
+    void rateLimitStopsAfterThreeRetries() {
+        CountingFakeClient fake = new CountingFakeClient(new AiRateLimitException("rate limited", null));
+
+        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
+
+        assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
+        assertEquals(
+                List.of("fake/primary", "fake/fallback", "fake/third", "fake/fourth"),
+                fake.models);
     }
 
     @Test
@@ -133,8 +176,11 @@ class SceneClassifierAgentTest {
                 new SceneClassifierPromptFactory(mapper),
                 new SceneClassifierResponseParser(mapper),
                 mapper,
-                "fake/model",
-                7);
+                "fake/primary",
+                "fake/fallback,fake/third,fake/fourth",
+                3,
+                7,
+                millis -> {});
     }
 
     private static SceneClassifierInput input(Long productId, HeatBucket bucket) {
@@ -153,17 +199,21 @@ class SceneClassifierAgentTest {
     }
 
     private static final class CountingFakeClient implements TrackAAiClient {
-        private final String response;
+        private final List<Object> outcomes;
         private final AtomicInteger calls = new AtomicInteger();
+        private final List<String> models = new ArrayList<>();
 
-        private CountingFakeClient(String response) {
-            this.response = response;
+        private CountingFakeClient(Object... outcomes) {
+            this.outcomes = List.of(outcomes);
         }
 
         @Override
         public AiClientResponse complete(AiPromptRequest request) {
-            calls.incrementAndGet();
-            return new AiClientResponse(response, "fake/model", 100, 30);
+            int call = calls.getAndIncrement();
+            models.add(request.model());
+            Object outcome = outcomes.get(Math.min(call, outcomes.size() - 1));
+            if (outcome instanceof RuntimeException exception) throw exception;
+            return new AiClientResponse((String) outcome, request.model(), 100, 30);
         }
     }
 }

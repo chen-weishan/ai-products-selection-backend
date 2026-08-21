@@ -55,6 +55,8 @@ class SceneClassificationServiceTest {
                 new SceneClassifierResponseParser(mapper),
                 mapper,
                 "fake/model",
+                "fake/fallback",
+                3,
                 7);
         service = new SceneClassificationService(
                 productRepository,
