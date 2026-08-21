@@ -12,10 +12,12 @@ import lombok.*;
 /**
  * 選品分數（規格書 §7.2 product_score、§5.5）。
  *
- * <p>§5.10：每次評分產生一筆新紀錄，保留歷史、不覆寫。決策綁定的是某一筆
+ * <p>
+ * §5.10：每次評分產生一筆新紀錄，保留歷史、不覆寫。決策綁定的是某一筆
  * 歷史列，所以權重改版之後回頭看，當時的分數依然是當時的分數（AC-11-6）。
  *
- * <p>B 軌品項不評分（AC-16-2），本表只有 A 軌資料。
+ * <p>
+ * B 軌品項不評分（AC-16-2），本表只有 A 軌資料。
  */
 @Getter
 @Setter
@@ -40,7 +42,7 @@ public class ProductScore {
     private WeightVersion weightVersion;
 
     /** ISO 週，如 2026W30。 */
-    @Column(nullable = false, length = 8)
+    @Column(name = "period", nullable = false, columnDefinition = "VARCHAR(8)")
     private String period;
 
     @Enumerated(EnumType.STRING)
@@ -58,11 +60,13 @@ public class ProductScore {
     /**
      * 加分小計：{@link #baseScore} 經 §5.3.1 同品類百分位換算後的值（0–100）。
      *
-     * <p>§5.5 的計算範例即為此步驟：加權和 76.3 換算後得 91，再減扣分 4 得 87。
+     * <p>
+     * §5.5 的計算範例即為此步驟：加權和 76.3 換算後得 91，再減扣分 4 得 87。
      * 換算函式為 {@code percentile_rank(x, same_category_values) × 100}；
      * 同品類樣本數 < 10 時退回全品類百分位，並依 §5.9 扣 20 點信心度。
      *
-     * <p>也就是百分位正規化在本系統套用兩次：一次在單一因子層級
+     * <p>
+     * 也就是百分位正規化在本系統套用兩次：一次在單一因子層級
      * （{@link ScoreFactor#getNormalizedValue()}），一次在加權後的總分層級。
      */
     @Column(name = "bonus_subtotal", nullable = false, precision = 5, scale = 2)
