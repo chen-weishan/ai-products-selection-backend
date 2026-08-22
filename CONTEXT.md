@@ -74,6 +74,5 @@ package 慣例：**每個 Gradle 模組配一段 package** —— `ssds-core` �
 | 項目 | 約定 |
 |---|---|
 | 讀取測試 | 連共用 Supabase（假資料齊全） |
-| 寫入測試 | **一律走 Testcontainers**（需本機 Docker Desktop 執行中）。寫入共用庫會影響其他組員 |
 | 資料庫角色 | 自 V16 起一律用受限角色 `ssds_app`，不再用 `postgres`。`.env` 變數名為 `SSDS_*` |
 | Spring Boot | 4.1.0 + Java 21。**starter 名稱與 Boot 3 不同**：`spring-boot-starter-webmvc`（非 `-web`）、`-aspectj`（非 `-aop`）、Flyway 自動組態為獨立 starter |
