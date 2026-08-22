@@ -3,8 +3,8 @@ package com.example.ssds.api.review;
 import com.example.ssds.ai.agent.ReviewRiskAgent;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
-import com.example.ssds.api.exception.BusinessException;
-import com.example.ssds.api.exception.ErrorCode;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import com.example.ssds.core.domain.ReviewRiskTopic;
 import com.example.ssds.core.domain.Sentiment;
@@ -19,6 +19,7 @@ import com.example.ssds.infra.repository.ReviewAnalysisRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReviewRiskService {
     private static final int REVIEW_LIMIT = 200;
+    private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
 
     private final ProductRepository productRepository;
     private final ProductReviewRepository productReviewRepository;
@@ -118,7 +120,7 @@ public class ReviewRiskService {
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(null),
-                latestAnalyzedAt);
+                latestAnalyzedAt == null ? null : latestAnalyzedAt.atZone(API_ZONE).toOffsetDateTime());
     }
 
     private Product loadTrackAProduct(Long productId) {

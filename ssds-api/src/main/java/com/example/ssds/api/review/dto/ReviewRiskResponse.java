@@ -4,6 +4,8 @@ import com.example.ssds.ai.model.ReviewRiskAnalysis;
 import com.example.ssds.ai.model.ReviewRiskResult;
 import com.example.ssds.ai.model.ReviewTopicStatistic;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public record ReviewRiskResponse(
@@ -20,7 +22,9 @@ public record ReviewRiskResponse(
         boolean cacheHit,
         String model,
         String promptVersion,
-        Instant analyzedAt) {
+        OffsetDateTime analyzedAt) {
+
+    private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
 
     public static ReviewRiskResponse from(
             Long productId, int reviewCount, ReviewRiskResult result, Instant analyzedAt) {
@@ -39,6 +43,10 @@ public record ReviewRiskResponse(
                 result.cacheHit(),
                 result.model(),
                 result.promptVersion(),
-                analyzedAt);
+                toApiTime(analyzedAt));
+    }
+
+    private static OffsetDateTime toApiTime(Instant value) {
+        return value == null ? null : value.atZone(API_ZONE).toOffsetDateTime();
     }
 }

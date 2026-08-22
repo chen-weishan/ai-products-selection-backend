@@ -2,8 +2,8 @@ package com.example.ssds.api.scene;
 
 import com.example.ssds.ai.agent.SceneClassifierAgent;
 import com.example.ssds.ai.model.*;
-import com.example.ssds.api.exception.BusinessException;
-import com.example.ssds.api.exception.ErrorCode;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.HeatReading;

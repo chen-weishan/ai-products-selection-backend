@@ -5,6 +5,8 @@ import com.example.ssds.ai.model.SceneCode;
 import com.example.ssds.infra.entity.SceneClassificationLog;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public record SceneClassificationResponse(
@@ -21,8 +23,10 @@ public record SceneClassificationResponse(
         String heatBucket,
         String model,
         String promptVersion,
-        Instant classifiedAt
+        OffsetDateTime classifiedAt
 ) {
+    private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
+
     public static SceneClassificationResponse from(
             SceneClassificationLog log,
             SceneClassificationResult result) {
@@ -40,7 +44,7 @@ public record SceneClassificationResponse(
                 log.getHeatBucket(),
                 result.model(),
                 result.promptVersion(),
-                log.getCreatedAt());
+                toApiTime(log.getCreatedAt()));
     }
 
     public static SceneClassificationResponse from(SceneClassificationLog log) {
@@ -58,6 +62,10 @@ public record SceneClassificationResponse(
                 log.getHeatBucket(),
                 log.getModel(),
                 log.getPromptVersion(),
-                log.getCreatedAt());
+                toApiTime(log.getCreatedAt()));
+    }
+
+    private static OffsetDateTime toApiTime(Instant value) {
+        return value == null ? null : value.atZone(API_ZONE).toOffsetDateTime();
     }
 }

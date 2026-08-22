@@ -1,11 +1,11 @@
 package com.example.ssds.api.review;
 
-import com.example.ssds.api.common.response.AppResponse;
+import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/products/{productId}/review-risk")
+@RequestMapping("/products/{productId}/review-risk")
 public class ReviewRiskController {
     private final ReviewRiskService service;
 
@@ -14,7 +14,7 @@ public class ReviewRiskController {
     }
 
     @GetMapping("/latest")
-    public AppResponse<ReviewRiskResponse> latest(@PathVariable Long productId) {
-        return AppResponse.success(service.latest(productId));
+    public ApiResponse<ReviewRiskResponse> latest(@PathVariable Long productId) {
+        return ApiResponse.success(service.latest(productId));
     }
 }

@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
-import com.example.ssds.api.exception.BusinessException;
+import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;

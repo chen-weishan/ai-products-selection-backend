@@ -1,8 +1,8 @@
 package com.example.ssds.api.aitask;
 
 import com.example.ssds.api.aitask.dto.*;
-import com.example.ssds.api.exception.BusinessException;
-import com.example.ssds.api.exception.ErrorCode;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;

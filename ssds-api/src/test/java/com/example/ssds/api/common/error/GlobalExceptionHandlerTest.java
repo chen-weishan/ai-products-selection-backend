@@ -1,6 +1,6 @@
-package com.example.ssds.api.exception;
+package com.example.ssds.api.common.error;
 
-import com.example.ssds.api.common.response.AppResponse;
+import com.example.ssds.api.common.response.ApiResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,10 +16,9 @@ class GlobalExceptionHandlerTest {
     void businessExceptionUsesConfiguredStatusAndMessage() {
         BusinessException exception = new BusinessException(
                 ErrorCode.RESOURCE_NOT_FOUND,
-                "找不到指定的品項"
-        );
+                "找不到指定的品項");
 
-        ResponseEntity<AppResponse<Void>> response = handler.handleBusinessException(exception);
+        ResponseEntity<ApiResponse<Void>> response = handler.handleBusiness(exception);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertNotNull(response.getBody());
@@ -30,13 +29,12 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void unexpectedExceptionDoesNotExposeInternalMessage() {
-        ResponseEntity<AppResponse<Void>> response = handler.handleUnexpectedException(
-                new IllegalStateException("database password leaked")
-        );
+        ResponseEntity<ApiResponse<Void>> response = handler.handleUnexpected(
+                new IllegalStateException("database password leaked"));
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("INTERNAL_ERROR", response.getBody().error().code());
-        assertEquals(ErrorCode.INTERNAL_ERROR.defaultMessage(), response.getBody().error().message());
+        assertEquals(ErrorCode.INTERNAL_ERROR.getDefaultMessage(), response.getBody().error().message());
     }
 }

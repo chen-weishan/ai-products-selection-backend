@@ -35,13 +35,14 @@ class SsdsApplicationTests {
 
     @Test
     void apiRejectsMissingBasicAuth() throws Exception {
-        mockMvc.perform(get("/api/v1/ai/tasks/999999"))
+        mockMvc.perform(get("/api/v1/ai/tasks/999999").contextPath("/api/v1"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void validBasicAuthPassesSecurityFilter() throws Exception {
         mockMvc.perform(get("/api/v1/ai/tasks/999999")
+                        .contextPath("/api/v1")
                         .with(httpBasic("test-user", "test-password")))
                 .andExpect(status().isNotFound());
     }

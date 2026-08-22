@@ -10,7 +10,7 @@ import com.example.ssds.ai.model.SceneCode;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
 import com.example.ssds.ai.schema.SceneClassifierResponseParser;
-import com.example.ssds.api.exception.BusinessException;
+import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Category;
