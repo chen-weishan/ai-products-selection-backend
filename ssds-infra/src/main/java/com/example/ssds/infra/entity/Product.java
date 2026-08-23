@@ -66,10 +66,6 @@ public class Product extends BaseAuditEntity {
     @Builder.Default
     private Season season = Season.ALL;
 
-    /** 逗號分隔的客群代碼，price_fit 因子比對主力客群價格帶時使用。 */
-    @Column(name = "target_audience", length = 200)
-    private String targetAudience;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default

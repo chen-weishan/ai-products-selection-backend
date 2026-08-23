@@ -15,6 +15,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface CampaignResultRepository extends JpaRepository<CampaignResult, Long> {
 
+    /** 主鍵即 decision_id，等同 findById；保留這個名稱是為了呼叫端讀起來清楚。 */
     Optional<CampaignResult> findByDecisionId(Long decisionId);
 
     long countBySelloutStatus(SelloutStatus selloutStatus);

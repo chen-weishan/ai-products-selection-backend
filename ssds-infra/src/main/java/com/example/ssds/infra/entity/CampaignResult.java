@@ -22,12 +22,17 @@ import lombok.*;
 @Table(name = "campaign_result")
 public class CampaignResult {
 
+    /**
+     * 主鍵即 decision_id（1:1，§7.2.8）。v2.0 另有一個代理鍵 id，
+     * 但本表與 decision_record 永遠一對一，多一個代理鍵只是多一條可以寫錯的路徑。
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "decision_id")
+    private Long decisionId;
 
+    @MapsId
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "decision_id", nullable = false, unique = true)
+    @JoinColumn(name = "decision_id")
     private DecisionRecord decision;
 
     @Column(name = "actual_qty", nullable = false)
@@ -37,13 +42,23 @@ public class CampaignResult {
     @Column(name = "sellout_status", nullable = false, length = 24)
     private SelloutStatus selloutStatus;
 
-    /** 退貨／客訴率，百分比（0–100）。 */
-    @Column(name = "return_rate", precision = 5, scale = 2)
+    /**
+     * 退貨／客訴率，比率 0–1。
+     *
+     * <p>v3.0 §7.2.8 把所有比率欄位統一為 DECIMAL(5,4)：v2.0 同一個概念
+     * 在兩張表上一個是 (5,4)、一個是 (5,2)，值到底是 1.2 還是 0.012 講不清楚。
+     */
+    @Column(name = "return_rate", precision = 5, scale = 4)
     private BigDecimal returnRate;
 
-    /** 實現毛利率（百分比），對照當初預估毛利。 */
-    @Column(name = "realized_margin", precision = 5, scale = 2)
-    private BigDecimal realizedMargin;
+    /**
+     * 實現毛利率，比率 0–1（必填）。
+     *
+     * <p>v2.0 叫 realized_margin 且未說明是金額還是率；若為金額則上限 999.99
+     * 明顯不足。v3.0 更名為 realized_margin_rate 以消除歧義。
+     */
+    @Column(name = "realized_margin_rate", precision = 5, scale = 4)
+    private BigDecimal realizedMarginRate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "post_note_code", length = 32)

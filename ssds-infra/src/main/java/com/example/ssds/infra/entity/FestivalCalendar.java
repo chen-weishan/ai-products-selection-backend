@@ -38,6 +38,10 @@ public class FestivalCalendar {
     @Column(name = "festival_date", nullable = false)
     private LocalDate festivalDate;
 
+    /**
+     * 西元年。型別為 {@code short}：v3.0 §7.2.10 指定 SMALLINT，
+     * 用 int 對映會讓 ddl-auto=validate 判定型別不符而啟動失敗。
+     */
     @Column(nullable = false)
-    private int year;
+    private short year;
 }

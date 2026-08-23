@@ -1,6 +1,5 @@
 package com.example.ssds.infra.entity;
 
-import com.example.ssds.core.domain.KeywordLifecycle;
 import jakarta.persistence.*;
 import java.time.Instant;
 import lombok.*;
@@ -32,14 +31,10 @@ public class TrendKeyword {
     @Builder.Default
     private String geo = "TW";
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 16)
-    private KeywordLifecycle lifecycle;
-
     @Column(name = "last_fetched_at")
     private Instant lastFetchedAt;
 
-    /** 停用後排程不再採集，但既有 trend_daily 保留。 */
+    /** 停用後排程不再採集，但既有熱度資料保留。 */
     @Column(nullable = false)
     @Builder.Default
     private boolean enabled = true;

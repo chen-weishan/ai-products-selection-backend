@@ -48,7 +48,8 @@ public class ScoreFactor {
     private BigDecimal weight;
 
     /** 扣分列的實際扣分值（正數表示扣掉多少）；加分列為 null。 */
-    @Column(name = "penalty_value", precision = 5, scale = 2)
+    /** 扣分因子的扣分（正值）；加分因子為 null。§7.2.6 指定 DECIMAL(4,1)。 */
+    @Column(name = "penalty_value", precision = 4, scale = 1)
     private BigDecimal penaltyValue;
 
     /** 是否為缺值填補（如退回全品類百分位）。 */
