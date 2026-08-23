@@ -16,17 +16,30 @@
 
 ---
 
-## 2. 規格書與實作不一致，以實作為準
+## 2. 規格書與實作的落差：已於 2026-08-23 清空
 
-共用資料庫（Supabase project `aozddonvsfdrtwpuxnqi`）已落地的內容不隨規格書改。
+共用資料庫（Supabase project `aozddonvsfdrtwpuxnqi`）已由 **V17** 完全對齊
+《開發規格書 v3.0》§7.2，本節原本記的五條落差全部消失：
 
-| 項目 | 規格書寫 | 實作 | 裁決 |
-|---|---|---|---|
-| 加分因子代碼 | §7.2.5：`TREND`、`CVR` | `HEAT_SLOPE`、`CONVERSION` | **以實作為準**，共用 DB 已有資料 |
-| 版本生效狀態 | `status` DRAFT／APPROVED／RETIRED + `is_current` 旗標 | `status` DRAFT／**ACTIVE**／RETIRED + partial unique index | **以實作為準**。語意等價，且用索引保證「同時只有一個生效版本」比旗標更嚴格 |
-| 分級門檻 | `weight_version` 上的純量欄位 | `grade_threshold` 表（V13 建立），四榜各一列；`weight_version.grade_a_threshold`／`grade_b_threshold` 仍存在且 NOT NULL | 讀取一律走 `grade_threshold` 表。建立草稿時，純量欄位填 VIRAL 榜的值以滿足 NOT NULL。**此為已知技術債，暫不清理** |
-| `HEAT_VOLUME` | v3.0 §5.2.1-a 已降為門檻條件，不進權重 | `FactorCode` enum 仍保留此值 | enum 保留無妨，但**不得寫入 `weight_profile`** |
-| 資料庫 | §3.2 寫 MySQL | Supabase PostgreSQL | **以實作為準** |
+| 原落差 | 現況 |
+|---|---|
+| 加分因子代碼 `HEAT_SLOPE`／`CONVERSION` | 已改為規格書的 `TREND`／`CVR`；`HEAT_VOLUME` 已自 `FactorCode` 移除（§5.2.1-a 降為門檻條件） |
+| 版本生效狀態 `ACTIVE` | 已改為 `APPROVED`；「生效中」改由新欄位 `is_current` 表示，partial unique index 判準一併換掉 |
+| `weight_version` 的兩個純量門檻欄 | 已 `DROP COLUMN`。門檻一律讀 `grade_threshold` |
+| `HEAT_VOLUME` 不得寫入 `weight_profile` | 已由 CHECK 約束保證，寫不進去 |
+| 資料庫 §3.2 寫 MySQL | 仍以實作（Supabase PostgreSQL）為準。這條不會消失 |
+
+**現在起的規則：規格書 §7.2 與資料庫不一致時，一律以規格書為準，並開一支 migration 修。**
+唯二的例外，兩者都是刻意的、且不算偏離：
+
+1. **`ENUM` 一律以 `VARCHAR(n) + CHECK` 實作**。PostgreSQL 原生 enum 新增值要 `ALTER TYPE`、
+   且無法在交易中刪值，比 CHECK 難維護。屬方言轉譯，語意等價（見 V1 檔頭的完整轉譯表）。
+2. **規格書欄位表未列、但實作已有的欄位一律保留**，視為實作擴充
+   （如 `calibration_report` 的 AI 產出欄位、`sourcing_candidate` 的 `keyword_id`）。
+   只刪規格書**明文**寫「已移除／已廢除」的。規格書未提及的表
+   （`trend_interpretation`、`ai_attempt`）同理保留。
+
+逐表稽核、逐條裁決與套用結果另有完整工作紀錄（未進版控），需要時向 schema 維護者索取。
 
 ---
 

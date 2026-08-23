@@ -42,7 +42,8 @@
 --
 -- 三版都不再出現 HEAT_VOLUME：v3.0 §5.2.1-a 已把它降級為門檻條件
 -- （擋「3 則變 9 則」的小基數暴衝），門檻條件不參與加權。
--- weight_profile 的 CHECK 仍允許 HEAT_VOLUME，本檔不動 schema。
+-- weight_profile 的 CHECK 已於 V17 收斂為 v3.0 的六個加分因子，
+-- HEAT_VOLUME 現在連寫都寫不進去，本檔不需要再處理它。
 
 -- 只刪本檔負責重建的三個假資料版本。
 --
@@ -73,20 +74,20 @@ END $$;
 -- v1（RETIRED）：v2.0 初版的五因子值，從各組最大的因子讓出 0.07 給
 -- PRICE_FIT。這是「舊版加上新因子」該有的樣子，不是規格建議值。
 INSERT INTO weight_profile (version_id, scene_type, factor_code, weight) VALUES
-  (1, 'VIRAL',         'HEAT_SLOPE', 0.480), (1, 'VIRAL',         'MARGIN',     0.100),
-  (1, 'VIRAL',         'CONVERSION', 0.100), (1, 'VIRAL',         'PRICE_FIT',  0.070),
+  (1, 'VIRAL',         'TREND', 0.480), (1, 'VIRAL',         'MARGIN',     0.100),
+  (1, 'VIRAL',         'CVR', 0.100), (1, 'VIRAL',         'PRICE_FIT',  0.070),
   (1, 'VIRAL',         'FESTIVAL',   0.150), (1, 'VIRAL',         'CLIMATE',    0.100),
 
-  (1, 'FESTIVAL',      'HEAT_SLOPE', 0.200), (1, 'FESTIVAL',      'MARGIN',     0.200),
-  (1, 'FESTIVAL',      'CONVERSION', 0.200), (1, 'FESTIVAL',      'PRICE_FIT',  0.070),
+  (1, 'FESTIVAL',      'TREND', 0.200), (1, 'FESTIVAL',      'MARGIN',     0.200),
+  (1, 'FESTIVAL',      'CVR', 0.200), (1, 'FESTIVAL',      'PRICE_FIT',  0.070),
   (1, 'FESTIVAL',      'FESTIVAL',   0.230), (1, 'FESTIVAL',      'CLIMATE',    0.100),
 
-  (1, 'REPLENISHMENT', 'HEAT_SLOPE', 0.150), (1, 'REPLENISHMENT', 'MARGIN',     0.280),
-  (1, 'REPLENISHMENT', 'CONVERSION', 0.350), (1, 'REPLENISHMENT', 'PRICE_FIT',  0.070),
+  (1, 'REPLENISHMENT', 'TREND', 0.150), (1, 'REPLENISHMENT', 'MARGIN',     0.280),
+  (1, 'REPLENISHMENT', 'CVR', 0.350), (1, 'REPLENISHMENT', 'PRICE_FIT',  0.070),
   (1, 'REPLENISHMENT', 'FESTIVAL',   0.050), (1, 'REPLENISHMENT', 'CLIMATE',    0.100),
 
-  (1, 'SEASONAL',      'HEAT_SLOPE', 0.200), (1, 'SEASONAL',      'MARGIN',     0.250),
-  (1, 'SEASONAL',      'CONVERSION', 0.200), (1, 'SEASONAL',      'PRICE_FIT',  0.070),
+  (1, 'SEASONAL',      'TREND', 0.200), (1, 'SEASONAL',      'MARGIN',     0.250),
+  (1, 'SEASONAL',      'CVR', 0.200), (1, 'SEASONAL',      'PRICE_FIT',  0.070),
   (1, 'SEASONAL',      'FESTIVAL',   0.050), (1, 'SEASONAL',      'CLIMATE',    0.230);
 
 -- v2（ACTIVE）：v3.0 §FR-08 的四組建議值，逐格照抄。
@@ -99,42 +100,42 @@ INSERT INTO weight_profile (version_id, scene_type, factor_code, weight) VALUES
 --
 -- AC-08-1：每組加總須為 1.000，上表四列皆成立。
 INSERT INTO weight_profile (version_id, scene_type, factor_code, weight) VALUES
-  (2, 'VIRAL',         'HEAT_SLOPE', 0.500), (2, 'VIRAL',         'MARGIN',     0.100),
-  (2, 'VIRAL',         'CONVERSION', 0.080), (2, 'VIRAL',         'PRICE_FIT',  0.070),
+  (2, 'VIRAL',         'TREND', 0.500), (2, 'VIRAL',         'MARGIN',     0.100),
+  (2, 'VIRAL',         'CVR', 0.080), (2, 'VIRAL',         'PRICE_FIT',  0.070),
   (2, 'VIRAL',         'FESTIVAL',   0.150), (2, 'VIRAL',         'CLIMATE',    0.100),
 
-  (2, 'FESTIVAL',      'HEAT_SLOPE', 0.180), (2, 'FESTIVAL',      'MARGIN',     0.180),
-  (2, 'FESTIVAL',      'CONVERSION', 0.170), (2, 'FESTIVAL',      'PRICE_FIT',  0.070),
+  (2, 'FESTIVAL',      'TREND', 0.180), (2, 'FESTIVAL',      'MARGIN',     0.180),
+  (2, 'FESTIVAL',      'CVR', 0.170), (2, 'FESTIVAL',      'PRICE_FIT',  0.070),
   (2, 'FESTIVAL',      'FESTIVAL',   0.300), (2, 'FESTIVAL',      'CLIMATE',    0.100),
 
-  (2, 'REPLENISHMENT', 'HEAT_SLOPE', 0.130), (2, 'REPLENISHMENT', 'MARGIN',     0.300),
-  (2, 'REPLENISHMENT', 'CONVERSION', 0.300), (2, 'REPLENISHMENT', 'PRICE_FIT',  0.120),
+  (2, 'REPLENISHMENT', 'TREND', 0.130), (2, 'REPLENISHMENT', 'MARGIN',     0.300),
+  (2, 'REPLENISHMENT', 'CVR', 0.300), (2, 'REPLENISHMENT', 'PRICE_FIT',  0.120),
   (2, 'REPLENISHMENT', 'FESTIVAL',   0.050), (2, 'REPLENISHMENT', 'CLIMATE',    0.100),
 
-  (2, 'SEASONAL',      'HEAT_SLOPE', 0.180), (2, 'SEASONAL',      'MARGIN',     0.220),
-  (2, 'SEASONAL',      'CONVERSION', 0.180), (2, 'SEASONAL',      'PRICE_FIT',  0.070),
+  (2, 'SEASONAL',      'TREND', 0.180), (2, 'SEASONAL',      'MARGIN',     0.220),
+  (2, 'SEASONAL',      'CVR', 0.180), (2, 'SEASONAL',      'PRICE_FIT',  0.070),
   (2, 'SEASONAL',      'FESTIVAL',   0.050), (2, 'SEASONAL',      'CLIMATE',    0.300);
 
 -- v3（DRAFT，FR-15 校準產出）：原本的故事是「把熱度斜率的一部分讓給
 -- 熱度絕對量級」，v3.0 把 HEAT_VOLUME 降級後這個故事不成立了。
 -- 改為「價格帶適配度的預測力被低估，建議調高，由熱度斜率讓出」——
--- 每組 HEAT_SLOPE −0.03、PRICE_FIT +0.03，加總維持 1.000。
+-- 每組 TREND −0.03、PRICE_FIT +0.03，加總維持 1.000。
 -- 第 10 段會把 V903 的校準報告內文一併改成同一套說法。
 INSERT INTO weight_profile (version_id, scene_type, factor_code, weight) VALUES
-  (3, 'VIRAL',         'HEAT_SLOPE', 0.470), (3, 'VIRAL',         'MARGIN',     0.100),
-  (3, 'VIRAL',         'CONVERSION', 0.080), (3, 'VIRAL',         'PRICE_FIT',  0.100),
+  (3, 'VIRAL',         'TREND', 0.470), (3, 'VIRAL',         'MARGIN',     0.100),
+  (3, 'VIRAL',         'CVR', 0.080), (3, 'VIRAL',         'PRICE_FIT',  0.100),
   (3, 'VIRAL',         'FESTIVAL',   0.150), (3, 'VIRAL',         'CLIMATE',    0.100),
 
-  (3, 'FESTIVAL',      'HEAT_SLOPE', 0.150), (3, 'FESTIVAL',      'MARGIN',     0.180),
-  (3, 'FESTIVAL',      'CONVERSION', 0.170), (3, 'FESTIVAL',      'PRICE_FIT',  0.100),
+  (3, 'FESTIVAL',      'TREND', 0.150), (3, 'FESTIVAL',      'MARGIN',     0.180),
+  (3, 'FESTIVAL',      'CVR', 0.170), (3, 'FESTIVAL',      'PRICE_FIT',  0.100),
   (3, 'FESTIVAL',      'FESTIVAL',   0.300), (3, 'FESTIVAL',      'CLIMATE',    0.100),
 
-  (3, 'REPLENISHMENT', 'HEAT_SLOPE', 0.100), (3, 'REPLENISHMENT', 'MARGIN',     0.300),
-  (3, 'REPLENISHMENT', 'CONVERSION', 0.300), (3, 'REPLENISHMENT', 'PRICE_FIT',  0.150),
+  (3, 'REPLENISHMENT', 'TREND', 0.100), (3, 'REPLENISHMENT', 'MARGIN',     0.300),
+  (3, 'REPLENISHMENT', 'CVR', 0.300), (3, 'REPLENISHMENT', 'PRICE_FIT',  0.150),
   (3, 'REPLENISHMENT', 'FESTIVAL',   0.050), (3, 'REPLENISHMENT', 'CLIMATE',    0.100),
 
-  (3, 'SEASONAL',      'HEAT_SLOPE', 0.150), (3, 'SEASONAL',      'MARGIN',     0.220),
-  (3, 'SEASONAL',      'CONVERSION', 0.180), (3, 'SEASONAL',      'PRICE_FIT',  0.100),
+  (3, 'SEASONAL',      'TREND', 0.150), (3, 'SEASONAL',      'MARGIN',     0.220),
+  (3, 'SEASONAL',      'CVR', 0.180), (3, 'SEASONAL',      'PRICE_FIT',  0.100),
   (3, 'SEASONAL',      'FESTIVAL',   0.050), (3, 'SEASONAL',      'CLIMATE',    0.300);
 
 
@@ -423,16 +424,16 @@ DROP TABLE v905_price_band;
 -- 加分小計 = Σ(w'_i × normalized_i)，直接落在 [0, 100]，不做二次換算。
 -- 這是本檔存在的主要理由：V904 在這裡多做了一次同品類百分位。
 --
--- base_score／risk_penalty 是 v1.0 的欄位名，語意分別同 bonus_subtotal
--- 與 penalty_subtotal。扣分不動（v3.0 沒有改 §5.2.2），
--- 因此這裡只同步 base_score。
+-- base_score／risk_penalty 兩個 v1.0 欄位已於 V17 移除（與 bonus_subtotal／
+-- penalty_subtotal 語意重複），所以這裡只更新後兩者。
+-- 扣分本身不動：v3.0 沒有改 §5.2.2。
 
 WITH agg AS (
     SELECT f.score_id,
            ROUND(COALESCE(SUM(f.normalized_value * f.weight), 0), 2) AS bonus
     FROM score_factor f
              -- 同上：不限定的話，任何帶因子明細又有門檻可 JOIN 的評分
-             -- 都會被重算 base_score／bonus_subtotal／final_score／grade
+             -- 都會被重算 bonus_subtotal／final_score／grade
              JOIN v905_cur cur ON cur.score_id = f.score_id
     WHERE NOT f.is_penalty
       AND f.data_available
@@ -452,8 +453,7 @@ calc AS (
                                     AND gt.scene_type = s.scene_type
 )
 UPDATE product_score s
-SET base_score     = c.bonus,
-    bonus_subtotal = c.bonus,
+SET bonus_subtotal = c.bonus,
     final_score    = GREATEST(0, c.bonus - c.penalty),
     grade = CASE
                 -- §5.6 硬規則：扣分達 20 以上者分級最高只給 B
@@ -514,8 +514,7 @@ hist AS (
                                     AND gt.scene_type = h.scene_type
 )
 UPDATE product_score s
-SET base_score     = hist.bonus,
-    bonus_subtotal = hist.bonus,
+SET bonus_subtotal = hist.bonus,
     final_score    = GREATEST(0, hist.bonus - hist.penalty),
     grade = CASE
                 WHEN GREATEST(0, hist.bonus - hist.penalty) >= hist.grade_a_min
@@ -590,34 +589,15 @@ WHERE h.id IN (SELECT score_id FROM v905_seed WHERE NOT is_current)
 
 
 -- ===================================================================
--- 9. 同步開團快照
+-- 9. 開團快照：只驗筆數，不再同步分數
 -- ===================================================================
--- campaign_snapshot 是決策當下的凍結副本（AC-11-6），但它凍結的是照
--- v2.0 算出來的值。這裡把它對回來源評分列——與 V904 同樣，是修正錯誤
--- 的初始資料，不是「快照可以被改」的先例。
+-- v3.0 §7.2.8 把 campaign_snapshot 精簡為六欄（V17 已套用），
+-- 分數、分級、加減分小計都不再重複保存，改由 decision_record.score_id
+-- join 回 product_score 取得。第 6、7 段重算完，快照上顯示的值自動就是對的。
+--
+-- 筆數檢查保留：假資料快照應為 10 筆，與 V903 的十筆決策一對一。
+-- 少於 10 代表假資料被刪改過，本檔的重算範圍就不可信。
 
-UPDATE campaign_snapshot cs
-SET score            = s.final_score,
-    grade            = s.grade,
-    bonus_subtotal   = s.bonus_subtotal,
-    penalty_subtotal = s.penalty_subtotal
-FROM decision_record d
-         JOIN product_score s ON s.id = d.score_id
-WHERE cs.decision_id = d.id
-  -- campaign_snapshot 是「決策當下的凍結副本」，本檔改寫它是為了修正
-  -- V904 留下的錯誤初始值，不是「快照可以被改」的先例。範圍必須釘死。
-  --
-  -- 條件下在 decision_record 的 id 而不是 d.score_id：後者只能確認
-  -- 「這個決策指向的評分是假資料」，不能確認「這個決策與快照本身是假資料」。
-  -- 組員完全可能針對 seed 評分（如 score_id = 1）建立新決策與新快照，
-  -- 那筆快照指向的仍是假資料評分，卻是別人剛凍結的正式資料。
-  --
-  -- V903 的決策是寫死的 id 1–10，序列停在 11，之後任何人建立的決策
-  -- 一律從 11 起跳，序列只增不減，因此這個區間永遠只命中假資料。
-  AND d.id BETWEEN 1 AND 10;
-
--- 假資料快照應為 10 筆，與 V903 的十筆決策一對一。
--- 少於 10 代表假資料被刪改過，重算範圍不可信。
 DO $$
 DECLARE
     n_seed_snapshot INT;
@@ -645,7 +625,7 @@ END $$;
 -- AC-15-1 的效度警示與 AC-15-3 的核准流程要靠這些值才演示得出來。
 
 UPDATE calibration_report
-SET regression_result = '{"method":"pearson","factors":[{"code":"HEAT_SLOPE","correlation":0.71,"currentWeight":0.50,"suggestedWeight":0.47,"pValue":0.11},{"code":"MARGIN","correlation":0.22,"currentWeight":0.10,"suggestedWeight":0.10,"pValue":0.67},{"code":"CONVERSION","correlation":0.58,"currentWeight":0.08,"suggestedWeight":0.08,"pValue":0.23},{"code":"PRICE_FIT","correlation":0.64,"currentWeight":0.07,"suggestedWeight":0.10,"pValue":0.14},{"code":"FESTIVAL","correlation":0.34,"currentWeight":0.15,"suggestedWeight":0.15,"pValue":0.51},{"code":"CLIMATE","correlation":0.19,"currentWeight":0.10,"suggestedWeight":0.10,"pValue":0.72}],"note":"sample_size=6，所有 p 值均未達 0.05，本結果不具統計顯著性"}'::jsonb,
+SET regression_result = '{"method":"pearson","factors":[{"code":"TREND","correlation":0.71,"currentWeight":0.50,"suggestedWeight":0.47,"pValue":0.11},{"code":"MARGIN","correlation":0.22,"currentWeight":0.10,"suggestedWeight":0.10,"pValue":0.67},{"code":"CVR","correlation":0.58,"currentWeight":0.08,"suggestedWeight":0.08,"pValue":0.23},{"code":"PRICE_FIT","correlation":0.64,"currentWeight":0.07,"suggestedWeight":0.10,"pValue":0.14},{"code":"FESTIVAL","correlation":0.34,"currentWeight":0.15,"suggestedWeight":0.15,"pValue":0.51},{"code":"CLIMATE","correlation":0.19,"currentWeight":0.10,"suggestedWeight":0.10,"pValue":0.72}],"note":"sample_size=6，所有 p 值均未達 0.05，本結果不具統計顯著性"}'::jsonb,
     ai_interpretation =
         '樣本數僅 6 筆，任何一筆的變動都會顯著改變相關係數，因此以下觀察僅供方向參考，不足以支持權重調整。'
         || E'\n\n'

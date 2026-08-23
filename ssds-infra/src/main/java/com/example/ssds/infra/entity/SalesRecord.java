@@ -49,8 +49,9 @@ public class SalesRecord {
     /** 曝光數，來源未提供時為 null。 */
     private Integer impression;
 
-    @Column(name = "audience_tag", length = 100)
-    private String audienceTag;
+    /** 對應 audience_segment.audience_code（§7.2.11）。供 PRICE_FIT 因子計算。 */
+    @Column(name = "audience_code", length = 24)
+    private String audienceCode;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "import_batch_id")

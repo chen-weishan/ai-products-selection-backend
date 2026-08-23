@@ -82,35 +82,19 @@ public class ProductScore {
     private boolean active = true;
 
     /**
-     * 加權和 Σ(w_i × normalized_i)，尚未做同品類百分位換算。
-     * 等於 {@link #factors} 中各加分列 {@code normalized_value × weight} 的總和，
-     * 因此 FR-05「分數組成」畫面上長條的加總對應的是這一欄，不是 {@link #bonusSubtotal}。
-     */
-    @Column(name = "base_score", nullable = false, precision = 5, scale = 2)
-    private BigDecimal baseScore;
-
-    /**
-     * 加分小計：{@link #baseScore} 經 §5.3.1 同品類百分位換算後的值（0–100）。
+     * 加分小計 Σ(w_i × normalized_i)，值域 0–100（§5.5）。
      *
-     * <p>§5.5 的計算範例即為此步驟：加權和 76.3 換算後得 91，再減扣分 4 得 87。
-     * 換算函式為 {@code percentile_rank(x, same_category_values) × 100}；
-     * 同品類樣本數 < 10 時退回全品類百分位，並依 §5.9 扣 20 點信心度。
+     * <p>等於 {@link #factors} 中各加分列 {@code normalized_value × weight} 的總和，
+     * FR-05「分數組成」畫面上長條的加總對應的就是這一欄，**不做二次換算**。
      *
-     * <p>也就是百分位正規化在本系統套用兩次：一次在單一因子層級
-     * （{@link ScoreFactor#getNormalizedValue()}），一次在加權後的總分層級。
+     * <p>v1.0 的 base_score 已於 V17 移除：那一欄與本欄語意重複，
+     * §5.5 的公式只用 bonusSubtotal 與 penaltySubtotal。
+     * 百分位正規化只套用在單一因子層級（{@link ScoreFactor#getNormalizedValue()}）。
      */
     @Column(name = "bonus_subtotal", nullable = false, precision = 5, scale = 2)
     private BigDecimal bonusSubtotal;
 
-    /**
-     * v1.0 欄位名，與 {@link #penaltySubtotal} 為同一個值，一律同步寫入。
-     * 扣分不做百分位換算（§5.2.2：扣分因子固定生效）。
-     */
-    @Column(name = "risk_penalty", nullable = false, precision = 5, scale = 2)
-    @Builder.Default
-    private BigDecimal riskPenalty = BigDecimal.ZERO;
-
-    /** 扣分小計，上限 40（§5.5）。 */
+    /** 扣分小計，上限 40（§5.5）。扣分不做百分位換算（§5.2.2：扣分因子固定生效）。 */
     @Column(name = "penalty_subtotal", nullable = false, precision = 5, scale = 2)
     @Builder.Default
     private BigDecimal penaltySubtotal = BigDecimal.ZERO;
