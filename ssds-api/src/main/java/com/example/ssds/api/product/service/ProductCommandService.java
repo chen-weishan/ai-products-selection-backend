@@ -3,6 +3,8 @@ package com.example.ssds.api.product.service;
 import com.example.ssds.api.common.error.ApiErrorCode;
 import com.example.ssds.api.common.error.ApiException;
 import com.example.ssds.api.common.response.ApiErrorResponse.FieldError;
+import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
+import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -165,6 +167,43 @@ public class ProductCommandService {
         return new ProductUpdateResponse(
                 toResponse(savedProduct),
                 warnings
+        );
+    }
+
+    /**
+     * 批次指定品項類別。
+     *
+     * <p>先確認類別與所有品項都存在，再開始修改；搭配類別層級的
+     * {@link Transactional}，任何一步失敗都不會留下部分更新。
+     */
+    public ProductBatchCategoryResponse assignCategory(
+            ProductBatchCategoryRequest request
+    ) {
+        Category category = findCategory(request.categoryId());
+        Set<Long> requestedIds = new LinkedHashSet<>(request.productIds());
+        List<Product> products = productRepository.findAllById(requestedIds);
+
+        Set<Long> missingIds = new LinkedHashSet<>(requestedIds);
+        products.forEach(product -> missingIds.remove(product.getId()));
+
+        if (!missingIds.isEmpty()) {
+            throw new ApiException(
+                    ApiErrorCode.RESOURCE_NOT_FOUND,
+                    "找不到指定的品項：" + missingIds
+            );
+        }
+
+        products.forEach(product -> {
+            product.setCategory(category);
+            product.setStatus(ProductStatus.EVALUATING);
+        });
+        productRepository.saveAllAndFlush(products);
+
+        return new ProductBatchCategoryResponse(
+                category.getId(),
+                category.getName(),
+                products.size(),
+                requestedIds
         );
     }
 

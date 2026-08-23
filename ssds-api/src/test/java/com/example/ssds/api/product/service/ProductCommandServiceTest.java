@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,8 @@ import static org.mockito.Mockito.when;
 
 import com.example.ssds.api.common.error.ApiErrorCode;
 import com.example.ssds.api.common.error.ApiException;
+import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
+import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
@@ -27,6 +30,7 @@ import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -269,6 +273,80 @@ class ProductCommandServiceTest {
 
         assertEquals(ProductStatus.EVALUATING, created.product().status());
         assertEquals(ProductStatus.EVALUATING, updated.product().status());
+    }
+
+    @Test
+    void assignCategoryUpdatesAllProductsAndMarksThemForEvaluation() {
+        Category targetCategory = Category.builder()
+                .id(2L)
+                .name("飲品")
+                .build();
+        Product first = existingProduct(TrackType.A, null);
+        first.setId(50L);
+        first.setStatus(ProductStatus.LISTED);
+        Product second = existingProduct(TrackType.B, SourcingStatus.PENDING);
+        second.setId(51L);
+        second.setStatus(ProductStatus.WATCHING);
+
+        when(categoryRepository.findById(2L)).thenReturn(Optional.of(targetCategory));
+        when(productRepository.findAllById(Set.of(50L, 51L)))
+                .thenReturn(List.of(first, second));
+        when(productRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProductBatchCategoryResponse response = service.assignCategory(
+                new ProductBatchCategoryRequest(Set.of(50L, 51L), 2L)
+        );
+
+        assertEquals(2L, response.categoryId());
+        assertEquals("飲品", response.categoryName());
+        assertEquals(2, response.updatedCount());
+        assertEquals(Set.of(50L, 51L), response.productIds());
+        assertEquals(targetCategory, first.getCategory());
+        assertEquals(targetCategory, second.getCategory());
+        assertEquals(ProductStatus.EVALUATING, first.getStatus());
+        assertEquals(ProductStatus.EVALUATING, second.getStatus());
+        verify(productRepository).saveAllAndFlush(List.of(first, second));
+    }
+
+    @Test
+    void assignCategoryWhenAnyProductIsMissingDoesNotUpdateAnyProduct() {
+        Category targetCategory = Category.builder()
+                .id(2L)
+                .name("飲品")
+                .build();
+        Product found = existingProduct(TrackType.A, null);
+        found.setId(50L);
+        Category originalCategory = found.getCategory();
+
+        when(categoryRepository.findById(2L)).thenReturn(Optional.of(targetCategory));
+        when(productRepository.findAllById(Set.of(50L, 999L)))
+                .thenReturn(List.of(found));
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                service.assignCategory(
+                        new ProductBatchCategoryRequest(Set.of(50L, 999L), 2L)
+                ));
+
+        assertEquals(ApiErrorCode.RESOURCE_NOT_FOUND, exception.getCode());
+        assertTrue(exception.getMessage().contains("999"));
+        assertEquals(originalCategory, found.getCategory());
+        verify(productRepository, never()).saveAllAndFlush(anyList());
+    }
+
+    @Test
+    void assignCategoryWhenCategoryDoesNotExistDoesNotLoadOrUpdateProducts() {
+        when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                service.assignCategory(
+                        new ProductBatchCategoryRequest(Set.of(50L), 999L)
+                ));
+
+        assertEquals(ApiErrorCode.RESOURCE_NOT_FOUND, exception.getCode());
+        assertEquals("找不到指定的類別：999", exception.getMessage());
+        verify(productRepository, never()).findAllById(any());
+        verify(productRepository, never()).saveAllAndFlush(anyList());
     }
 
     private ProductCreateRequest createRequest(

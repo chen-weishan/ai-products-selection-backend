@@ -2,6 +2,8 @@ package com.example.ssds.api.product.controller;
 
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
+import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
+import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
@@ -20,6 +22,7 @@ import java.math.BigDecimal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -129,6 +132,17 @@ public class ProductController {
     ) {
         return ApiResponse.success(
                 productCommandService.update(id, request)
+        );
+    }
+
+    /** FR-03-1 批次指定類別；任一品項不存在時整批不更新。 */
+    @PatchMapping("/batch/category")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<ProductBatchCategoryResponse> assignCategory(
+            @Valid @RequestBody ProductBatchCategoryRequest request
+    ) {
+        return ApiResponse.success(
+                productCommandService.assignCategory(request)
         );
     }
 }
