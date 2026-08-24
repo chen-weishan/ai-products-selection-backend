@@ -1,6 +1,7 @@
 package com.example.ssds.infra.dao;
 
 import com.example.ssds.infra.dao.projection.TrendPointRow;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -10,8 +11,12 @@ import org.springframework.stereotype.Repository;
 /**
  * 趨勢與熱度查詢（FR-06、§5.3）。
  *
- * <p>§7.3：trend_daily 的主鍵 (keyword_id, stat_date) 就是查詢鍵，
+ * <p>§7.3：heat_composite_daily 的主鍵 (keyword_id, stat_date) 就是查詢鍵，
  * 90 日區間查詢為索引範圍掃描。
+ *
+ * <p>v1.0 的 trend_daily（單來源 0–100 熱度）已於 v3.0 廢除，職責拆給
+ * heat_reading（各來源原始值）與 heat_composite_daily（合成值）。
+ * 曲線、斜率與階段判定一律只認後者（§7.2.3）。
  */
 @Repository
 public class TrendQueryDao {
@@ -29,8 +34,8 @@ public class TrendQueryDao {
         }
         return jdbcClient
                 .sql("""
-                     SELECT d.keyword_id, k.keyword, d.stat_date, d.heat_value
-                     FROM trend_daily d
+                     SELECT d.keyword_id, k.keyword, d.stat_date, d.composite_value
+                     FROM heat_composite_daily d
                               JOIN trend_keyword k ON k.id = d.keyword_id
                      WHERE d.keyword_id IN (:keywordIds)
                        AND d.stat_date BETWEEN :from AND :to
@@ -43,7 +48,7 @@ public class TrendQueryDao {
                         rs.getLong("keyword_id"),
                         rs.getString("keyword"),
                         rs.getDate("stat_date").toLocalDate(),
-                        rs.getInt("heat_value")))
+                        rs.getBigDecimal("composite_value")))
                 .list();
     }
 
@@ -59,9 +64,13 @@ public class TrendQueryDao {
      * 可能見頂」的判斷屬於評分規則，該由 ssds-core 的計分引擎決定，
      * 散在 SQL 裡日後沒人找得到。
      *
+     * <p>註：{@code heat_composite_daily} 本身也有 slope_7d／slope_30d 兩欄，
+     * 那是批次寫入時算好的結果值。本方法給的是「現在重算一次」用的觀測點，
+     * 兩者用途不同——要顯示既有結果就直接讀那兩欄，不必呼叫這裡。
+     *
      * @return key 為 {@code "t"} / {@code "t7"} / {@code "t30"}，缺該日資料時不含該 key
      */
-    public Map<String, Integer> findSlopeAnchors(Long keywordId, LocalDate asOf) {
+    public Map<String, BigDecimal> findSlopeAnchors(Long keywordId, LocalDate asOf) {
         return jdbcClient
                 .sql("""
                      SELECT CASE stat_date
@@ -69,8 +78,8 @@ public class TrendQueryDao {
                                 WHEN :t7  THEN 't7'
                                 ELSE 't30'
                             END AS anchor,
-                            heat_value
-                     FROM trend_daily
+                            composite_value
+                     FROM heat_composite_daily
                      WHERE keyword_id = :keywordId
                        AND stat_date IN (:t, :t7, :t30)
                      """)
@@ -83,7 +92,7 @@ public class TrendQueryDao {
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(
                         row -> (String) row.get("anchor"),
-                        row -> ((Number) row.get("heat_value")).intValue()));
+                        row -> (BigDecimal) row.get("composite_value")));
     }
 
     /**

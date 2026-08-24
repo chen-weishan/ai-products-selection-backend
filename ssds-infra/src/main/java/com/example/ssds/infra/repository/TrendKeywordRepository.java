@@ -1,6 +1,5 @@
 package com.example.ssds.infra.repository;
 
-import com.example.ssds.core.domain.KeywordLifecycle;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.core.dto.TrendChartProjection;
 import com.example.ssds.core.dto.TrendSignalProjection;
@@ -20,6 +19,7 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
 
     /** 每日 06:00 熱度採集的取件範圍（§5.10）。 */
     List<TrendKeyword> findByEnabledTrue();
+<<<<<<< HEAD
 
     List<TrendKeyword> findByLifecycle(KeywordLifecycle lifecycle);
 
@@ -92,6 +92,8 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
         ORDER BY reading_date ASC
     """, nativeQuery = true)
     List<TrendChartProjection> findTrendChartByKeywordId(@Param("keywordId") Long keywordId);
+=======
+>>>>>>> origin/dev
 }
 
 
