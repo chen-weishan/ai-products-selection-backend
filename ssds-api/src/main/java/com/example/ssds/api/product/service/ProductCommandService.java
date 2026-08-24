@@ -8,6 +8,8 @@ import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
+import com.example.ssds.api.product.dto.ProductStatusUpdateRequest;
+import com.example.ssds.api.product.dto.ProductStatusUpdateResponse;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
 import com.example.ssds.api.product.dto.ProductUpdateResponse;
 import com.example.ssds.core.domain.ProductStatus;
@@ -15,14 +17,20 @@ import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Category;
+import com.example.ssds.infra.entity.AppUser;
+import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.CategoryRepository;
+import com.example.ssds.infra.repository.AppUserRepository;
+import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -39,19 +47,35 @@ public class ProductCommandService {
 
     private static final String DUPLICATE_NAME_WARNING =
             "同類別已有相同名稱的品項，資料仍已儲存";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Taipei");
+    private static final Set<String> EDIT_ROLES = Set.of(
+            "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_DATA_ADMIN", "ROLE_SYS_ADMIN"
+    );
+    private static final Set<String> DECISION_ROLES = Set.of(
+            "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
+    );
+    private static final Set<String> REVIEW_ROLES = Set.of(
+            "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
+    );
 
     private final ProductRepository productRepository;
+    private final AppUserRepository appUserRepository;
+    private final AuditLogRepository auditLogRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
 
     public ProductCommandService(
             ProductRepository productRepository,
+            AppUserRepository appUserRepository,
+            AuditLogRepository auditLogRepository,
             CategoryRepository categoryRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository
     ) {
         this.productRepository = productRepository;
+        this.appUserRepository = appUserRepository;
+        this.auditLogRepository = auditLogRepository;
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
@@ -71,10 +95,16 @@ public class ProductCommandService {
                 trackType,
                 request.sourcingStatus()
         );
-        validatePricing(
+        validateSubmission(
                 trackType,
                 request.cost(),
-                request.suggestedPrice()
+                request.suggestedPrice(),
+                keywords,
+                request.resolvedSaveAsDraft()
+        );
+        validateTemperatureRange(
+                request.idealTempMin(),
+                request.idealTempMax()
         );
 
         Product product = Product.builder()
@@ -85,10 +115,14 @@ public class ProductCommandService {
                 .suggestedPrice(request.suggestedPrice())
                 .moq(request.moq())
                 .season(request.season() == null ? Season.ALL : request.season())
-                .status(ProductStatus.EVALUATING)
+                .status(request.resolvedSaveAsDraft()
+                        ? ProductStatus.DRAFT
+                        : ProductStatus.EVALUATING)
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
                 .logisticsCondition(normalizeNullable(request.logisticsCondition()))
+                .idealTempMin(request.idealTempMin())
+                .idealTempMax(request.idealTempMax())
                 .shelfLifeDays(request.shelfLifeDays())
                 .keywords(keywords)
                 .build();
@@ -111,8 +145,7 @@ public class ProductCommandService {
     /**
      * 完整修改品項基本資料。
      *
-     * <p>成功修改後重新標記為 EVALUATING，供下一次 A 軌批次評分取件；
-     * createdBy 與建立時間仍保留原值。
+     * <p>草稿可繼續暫存或在資料完整後送出；非草稿修改不會改變既有狀態。
      */
     public ProductUpdateResponse update(
             Long productId,
@@ -131,10 +164,18 @@ public class ProductCommandService {
                 trackType,
                 request.sourcingStatus()
         );
-        validatePricing(
+        boolean saveAsDraft = request.resolvedSaveAsDraft();
+        validateDraftOperation(product, saveAsDraft);
+        validateSubmission(
                 trackType,
                 request.cost(),
-                request.suggestedPrice()
+                request.suggestedPrice(),
+                keywords,
+                saveAsDraft
+        );
+        validateTemperatureRange(
+                request.idealTempMin(),
+                request.idealTempMax()
         );
 
         product.setName(name);
@@ -144,10 +185,15 @@ public class ProductCommandService {
         product.setSuggestedPrice(request.suggestedPrice());
         product.setMoq(request.moq());
         product.setSeason(request.season() == null ? Season.ALL : request.season());
-        product.setStatus(ProductStatus.EVALUATING);
+        if (product.getStatus() == ProductStatus.DRAFT && !saveAsDraft) {
+            product.setStatus(ProductStatus.EVALUATING);
+        }
+        validateTrackStatus(product.getStatus(), trackType);
         product.setTrackType(trackType);
         product.setSourcingStatus(sourcingStatus);
         product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
+        product.setIdealTempMin(request.idealTempMin());
+        product.setIdealTempMax(request.idealTempMax());
         product.setShelfLifeDays(request.shelfLifeDays());
         product.getKeywords().clear();
         product.getKeywords().addAll(keywords);
@@ -191,10 +237,7 @@ public class ProductCommandService {
             );
         }
 
-        products.forEach(product -> {
-            product.setCategory(category);
-            product.setStatus(ProductStatus.EVALUATING);
-        });
+        products.forEach(product -> product.setCategory(category));
         productRepository.saveAllAndFlush(products);
 
         return new ProductBatchCategoryResponse(
@@ -205,11 +248,92 @@ public class ProductCommandService {
         );
     }
 
+    /** FR-03-2 軟刪除品項，保留其評分、決策及稽核關聯。 */
+    public void delete(Long productId, String actorEmail, String sourceIp) {
+        Product product = findProduct(productId);
+        AppUser actor = findActor(actorEmail);
+
+        product.softDelete(actor);
+        productRepository.saveAndFlush(product);
+        auditLogRepository.save(AuditLog.builder()
+                .user(actor)
+                .action("DELETE")
+                .entityType("Product")
+                .entityId(productId)
+                .ip(sourceIp)
+                .build());
+    }
+
+    /** 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。 */
+    public ProductStatusUpdateResponse changeStatus(
+            Long productId,
+            ProductStatusUpdateRequest request,
+            String actorEmail,
+            Set<String> authorities,
+            String sourceIp
+    ) {
+        Product product = findProduct(productId);
+        AppUser actor = findActor(actorEmail);
+        ProductStatus previousStatus = product.getStatus();
+        ProductStatus targetStatus = request.targetStatus();
+
+        validateStatusTransition(product, targetStatus, authorities);
+
+        if (targetStatus == ProductStatus.REJECTED) {
+            String reason = normalizeNullable(request.rejectReason());
+            if (reason == null || reason.length() < 10) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_FAILED,
+                        "商品資料驗證失敗",
+                        List.of(new FieldError(
+                                "rejectReason",
+                                "淘汰原因至少需要 10 個字"
+                        ))
+                );
+            }
+            product.setRejectReason(reason);
+        } else {
+            product.setRejectReason(null);
+        }
+
+        if (targetStatus == ProductStatus.LISTED) {
+            product.setListedAt(LocalDate.now(BUSINESS_ZONE));
+        }
+        product.setStatus(targetStatus);
+        productRepository.saveAndFlush(product);
+
+        auditLogRepository.save(AuditLog.builder()
+                .user(actor)
+                .action("UPDATE")
+                .entityType("Product")
+                .entityId(productId)
+                .beforeJson(statusJson(previousStatus))
+                .afterJson(statusJson(targetStatus))
+                .ip(sourceIp)
+                .build());
+
+        return new ProductStatusUpdateResponse(
+                productId,
+                previousStatus,
+                targetStatus,
+                product.getRejectReason(),
+                product.getListedAt()
+        );
+    }
+
     private Product findProduct(Long productId) {
         return productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
+                ));
+    }
+
+    private AppUser findActor(String actorEmail) {
+        return appUserRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.UNAUTHORIZED,
+                        "登入使用者不存在或已失效"
                 ));
     }
 
@@ -270,14 +394,16 @@ public class ProductCommandService {
      *
      * <p>Create 與 Update 共用此入口，避免兩條寫入流程產生不同規則。
      */
-    private void validatePricing(
+    private void validateSubmission(
             TrackType trackType,
             BigDecimal cost,
-            BigDecimal suggestedPrice
+            BigDecimal suggestedPrice,
+            Set<TrendKeyword> keywords,
+            boolean saveAsDraft
     ) {
         List<FieldError> fieldErrors = new ArrayList<>();
 
-        if (trackType == TrackType.A) {
+        if (!saveAsDraft && trackType == TrackType.A) {
             if (cost == null) {
                 fieldErrors.add(new FieldError(
                         "cost",
@@ -301,6 +427,13 @@ public class ProductCommandService {
                 ));
         }
 
+        if (!saveAsDraft && trackType == TrackType.B && keywords.isEmpty()) {
+            fieldErrors.add(new FieldError(
+                    "keywordIds",
+                    "B 軌品項至少需要 1 個關鍵字"
+            ));
+        }
+
         if (!fieldErrors.isEmpty()) {
             throw new BusinessException(
                     ErrorCode.VALIDATION_FAILED,
@@ -308,6 +441,25 @@ public class ProductCommandService {
                     fieldErrors
             );
         }
+    }
+
+    private void validateTemperatureRange(
+            BigDecimal idealTempMin,
+            BigDecimal idealTempMax
+    ) {
+        if (idealTempMin != null
+                && idealTempMax != null
+                && idealTempMin.compareTo(idealTempMax) > 0) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "商品資料驗證失敗",
+                    List.of(new FieldError(
+                            "idealTempMin",
+                            "適溫區間下限不可大於上限"
+                    ))
+            );
+        }
+
     }
 
     private ProductResponse toResponse(Product product) {
@@ -329,9 +481,13 @@ public class ProductCommandService {
                 product.getMoq(),
                 product.getSeason(),
                 product.getStatus(),
+                product.getRejectReason(),
+                product.getListedAt(),
                 product.getTrackType(),
                 product.getSourcingStatus(),
                 product.getLogisticsCondition(),
+                product.getIdealTempMin(),
+                product.getIdealTempMax(),
                 product.getShelfLifeDays(),
                 Collections.unmodifiableSet(keywordIds),
                 product.getCreatedAt(),
@@ -344,5 +500,104 @@ public class ProductCommandService {
             return null;
         }
         return value.trim();
+    }
+
+    private void validateDraftOperation(Product product, boolean saveAsDraft) {
+        if (saveAsDraft && product.getStatus() != ProductStatus.DRAFT) {
+            throw invalidTransition(product.getStatus(), ProductStatus.DRAFT);
+        }
+    }
+
+    private void validateTrackStatus(ProductStatus status, TrackType trackType) {
+        if (trackType == TrackType.B
+                && status != ProductStatus.DRAFT
+                && status != ProductStatus.EVALUATING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "B 軌品項狀態固定為 EVALUATING，實際進度請使用 sourcingStatus"
+            );
+        }
+    }
+
+    private void validateStatusTransition(
+            Product product,
+            ProductStatus targetStatus,
+            Set<String> authorities
+    ) {
+        ProductStatus sourceStatus = product.getStatus();
+        if (product.getTrackType() == TrackType.B
+                && !(sourceStatus == ProductStatus.DRAFT
+                        && targetStatus == ProductStatus.EVALUATING)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "B 軌品項狀態固定為 EVALUATING，實際進度請使用 sourcingStatus"
+            );
+        }
+
+        Set<String> requiredRoles;
+        boolean allowed;
+        switch (sourceStatus) {
+            case DRAFT -> {
+                allowed = targetStatus == ProductStatus.EVALUATING;
+                requiredRoles = EDIT_ROLES;
+                if (allowed) {
+                    validateSubmission(
+                            product.getTrackType(),
+                            product.getCost(),
+                            product.getSuggestedPrice(),
+                            product.getKeywords(),
+                            false
+                    );
+                }
+            }
+            case EVALUATING -> {
+                allowed = targetStatus == ProductStatus.WATCHING
+                        || targetStatus == ProductStatus.ADOPTED
+                        || targetStatus == ProductStatus.REJECTED;
+                requiredRoles = DECISION_ROLES;
+            }
+            case WATCHING -> {
+                allowed = targetStatus == ProductStatus.ADOPTED
+                        || targetStatus == ProductStatus.REJECTED;
+                requiredRoles = DECISION_ROLES;
+            }
+            case ADOPTED -> {
+                allowed = targetStatus == ProductStatus.LISTED;
+                requiredRoles = EDIT_ROLES;
+            }
+            case REJECTED -> {
+                allowed = targetStatus == ProductStatus.EVALUATING;
+                requiredRoles = REVIEW_ROLES;
+            }
+            default -> {
+                allowed = false;
+                requiredRoles = Set.of();
+            }
+        }
+
+        if (!allowed) {
+            throw invalidTransition(sourceStatus, targetStatus);
+        }
+        if (authorities == null
+                || Collections.disjoint(authorities, requiredRoles)) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "目前角色無權執行此狀態轉換"
+            );
+        }
+    }
+
+    private BusinessException invalidTransition(
+            ProductStatus sourceStatus,
+            ProductStatus targetStatus
+    ) {
+        return new BusinessException(
+                ErrorCode.INVALID_STATE_TRANSITION,
+                "不允許將品項狀態由 " + sourceStatus + " 變更為 " + targetStatus
+        );
+    }
+
+    private String statusJson(ProductStatus status) {
+        return "{\"status\":\"" + status.name() + "\"}";
     }
 }

@@ -17,6 +17,8 @@ import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
+import com.example.ssds.api.product.dto.ProductStatusUpdateRequest;
+import com.example.ssds.api.product.dto.ProductStatusUpdateResponse;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
 import com.example.ssds.api.product.dto.ProductUpdateResponse;
 import com.example.ssds.core.domain.ProductStatus;
@@ -24,8 +26,12 @@ import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Category;
+import com.example.ssds.infra.entity.AppUser;
+import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.CategoryRepository;
+import com.example.ssds.infra.repository.AppUserRepository;
+import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -40,19 +46,26 @@ import org.springframework.http.HttpStatus;
 class ProductCommandServiceTest {
 
     private ProductRepository productRepository;
+    private AppUserRepository appUserRepository;
+    private AuditLogRepository auditLogRepository;
     private CategoryRepository categoryRepository;
+    private TrendKeywordRepository keywordRepository;
     private ProductCommandService service;
     private Category category;
 
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
+        appUserRepository = mock(AppUserRepository.class);
+        auditLogRepository = mock(AuditLogRepository.class);
         categoryRepository = mock(CategoryRepository.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
-        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        keywordRepository = mock(TrendKeywordRepository.class);
 
         service = new ProductCommandService(
                 productRepository,
+                appUserRepository,
+                auditLogRepository,
                 categoryRepository,
                 supplierRepository,
                 keywordRepository
@@ -63,6 +76,9 @@ class ProductCommandServiceTest {
                 .name("食品")
                 .build();
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(keywordRepository.findAllById(Set.of(10L))).thenReturn(List.of(
+                com.example.ssds.infra.entity.TrendKeyword.builder().id(10L).build()
+        ));
         when(productRepository.saveAndFlush(any(Product.class)))
                 .thenAnswer(invocation -> {
                     Product product = invocation.getArgument(0);
@@ -86,6 +102,83 @@ class ProductCommandServiceTest {
         assertEquals(TrackType.A, response.product().trackType());
         assertEquals(new BigDecimal("0.3333"), response.product().marginRate());
         assertEquals(ProductStatus.EVALUATING, response.product().status());
+    }
+
+    @Test
+    void createDraftAllowsIncompleteTrackAPricing() {
+        ProductCreateRequest request = new ProductCreateRequest(
+                "未完成草稿",
+                1L,
+                null,
+                null,
+                null,
+                null,
+                Season.ALL,
+                TrackType.A,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Set.of(),
+                true
+        );
+
+        ProductCreateResponse response = service.create(request);
+
+        assertEquals(ProductStatus.DRAFT, response.product().status());
+        assertNull(response.product().cost());
+    }
+
+    @Test
+    void submitCompleteDraftMovesToEvaluating() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.DRAFT);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+
+        ProductUpdateResponse response = service.update(
+                product.getId(),
+                updateRequest(
+                        TrackType.A,
+                        null,
+                        new BigDecimal("80.00"),
+                        new BigDecimal("120.00")
+                )
+        );
+
+        assertEquals(ProductStatus.EVALUATING, response.product().status());
+    }
+
+    @Test
+    void nonDraftCannotBeSavedBackAsDraft() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.WATCHING);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        ProductUpdateRequest request = new ProductUpdateRequest(
+                "修改後商品",
+                1L,
+                null,
+                null,
+                null,
+                null,
+                Season.ALL,
+                TrackType.A,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Set.of(),
+                true
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.update(product.getId(), request)
+        );
+
+        assertEquals(ErrorCode.INVALID_STATE_TRANSITION, exception.getErrorCode());
+        verify(productRepository, never()).saveAndFlush(product);
     }
 
     @Test
@@ -174,6 +267,39 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void createWithInvalidTemperatureRangeReturnsValidationFailure() {
+        ProductCreateRequest request = new ProductCreateRequest(
+                "測試商品",
+                1L,
+                null,
+                new BigDecimal("80.00"),
+                new BigDecimal("120.00"),
+                10,
+                Season.ALL,
+                TrackType.A,
+                null,
+                "常溫",
+                new BigDecimal("30.0"),
+                new BigDecimal("20.0"),
+                180,
+                Set.of(),
+                false
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.create(request)
+        );
+
+        assertBadRequest(
+                exception,
+                "idealTempMin",
+                "適溫區間下限不可大於上限"
+        );
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
+    }
+
+    @Test
     void createTrackAIgnoresSourcingStatus() {
         ProductCreateResponse response = service.create(createRequest(
                 TrackType.A,
@@ -249,7 +375,7 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    void createAndUpdateEnterEvaluatingStatus() {
+    void createEntersEvaluatingWhileRegularUpdateKeepsExistingStatus() {
         ProductCreateResponse created = service.create(createRequest(
                 TrackType.A,
                 null,
@@ -272,11 +398,11 @@ class ProductCommandServiceTest {
         );
 
         assertEquals(ProductStatus.EVALUATING, created.product().status());
-        assertEquals(ProductStatus.EVALUATING, updated.product().status());
+        assertEquals(ProductStatus.LISTED, updated.product().status());
     }
 
     @Test
-    void assignCategoryUpdatesAllProductsAndMarksThemForEvaluation() {
+    void assignCategoryUpdatesAllProductsWithoutChangingTheirStatus() {
         Category targetCategory = Category.builder()
                 .id(2L)
                 .name("飲品")
@@ -304,8 +430,8 @@ class ProductCommandServiceTest {
         assertEquals(Set.of(50L, 51L), response.productIds());
         assertEquals(targetCategory, first.getCategory());
         assertEquals(targetCategory, second.getCategory());
-        assertEquals(ProductStatus.EVALUATING, first.getStatus());
-        assertEquals(ProductStatus.EVALUATING, second.getStatus());
+        assertEquals(ProductStatus.LISTED, first.getStatus());
+        assertEquals(ProductStatus.WATCHING, second.getStatus());
         verify(productRepository).saveAllAndFlush(List.of(first, second));
     }
 
@@ -349,6 +475,107 @@ class ProductCommandServiceTest {
         verify(productRepository, never()).saveAllAndFlush(anyList());
     }
 
+    @Test
+    void deleteMarksProductWithTimestampAndActor() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = AppUser.builder()
+                .id(2L)
+                .email("lead@ssds.dev")
+                .build();
+
+        when(productRepository.findById(product.getId()))
+                .thenReturn(Optional.of(product));
+        when(appUserRepository.findByEmail("lead@ssds.dev"))
+                .thenReturn(Optional.of(actor));
+
+        service.delete(product.getId(), "lead@ssds.dev", "127.0.0.1");
+
+        assertEquals(actor, product.getDeletedBy());
+        assertTrue(product.getDeletedAt() != null);
+        verify(productRepository).saveAndFlush(product);
+        verify(auditLogRepository).save(any(AuditLog.class));
+    }
+
+    @Test
+    void decisionRoleCanRejectEvaluatingProductWithReason() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = mockActor(product);
+
+        ProductStatusUpdateResponse response = service.changeStatus(
+                product.getId(),
+                new ProductStatusUpdateRequest(
+                        ProductStatus.REJECTED,
+                        "市場需求不足，暫不導入"
+                ),
+                actor.getEmail(),
+                Set.of("ROLE_BUYER"),
+                "127.0.0.1"
+        );
+
+        assertEquals(ProductStatus.EVALUATING, response.previousStatus());
+        assertEquals(ProductStatus.REJECTED, response.currentStatus());
+        assertEquals("市場需求不足，暫不導入", product.getRejectReason());
+        verify(auditLogRepository).save(any(AuditLog.class));
+    }
+
+    @Test
+    void buyerCannotReevaluateRejectedProduct() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.REJECTED);
+        AppUser actor = mockActor(product);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.changeStatus(
+                        product.getId(),
+                        new ProductStatusUpdateRequest(ProductStatus.EVALUATING, null),
+                        actor.getEmail(),
+                        Set.of("ROLE_BUYER"),
+                        "127.0.0.1"
+                )
+        );
+
+        assertEquals(ErrorCode.FORBIDDEN, exception.getErrorCode());
+    }
+
+    @Test
+    void editRoleCanMarkAdoptedProductAsListed() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.ADOPTED);
+        AppUser actor = mockActor(product);
+
+        ProductStatusUpdateResponse response = service.changeStatus(
+                product.getId(),
+                new ProductStatusUpdateRequest(ProductStatus.LISTED, null),
+                actor.getEmail(),
+                Set.of("ROLE_DATA_ADMIN"),
+                "127.0.0.1"
+        );
+
+        assertEquals(ProductStatus.LISTED, response.currentStatus());
+        assertTrue(response.listedAt() != null);
+    }
+
+    @Test
+    void invalidStatusTransitionReturnsConflictCode() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.LISTED);
+        AppUser actor = mockActor(product);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.changeStatus(
+                        product.getId(),
+                        new ProductStatusUpdateRequest(ProductStatus.EVALUATING, null),
+                        actor.getEmail(),
+                        Set.of("ROLE_BUYER_LEAD"),
+                        "127.0.0.1"
+                )
+        );
+
+        assertEquals(ErrorCode.INVALID_STATE_TRANSITION, exception.getErrorCode());
+    }
+
     private ProductCreateRequest createRequest(
             TrackType trackType,
             SourcingStatus sourcingStatus,
@@ -366,8 +593,11 @@ class ProductCommandServiceTest {
                 trackType,
                 sourcingStatus,
                 "常溫",
+                null,
+                null,
                 180,
-                Set.of()
+                Set.of(10L),
+                false
         );
     }
 
@@ -388,8 +618,11 @@ class ProductCommandServiceTest {
                 trackType,
                 sourcingStatus,
                 "冷藏",
+                null,
+                null,
                 120,
-                Set.of()
+                Set.of(10L),
+                false
         );
     }
 
@@ -405,6 +638,16 @@ class ProductCommandServiceTest {
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
                 .build();
+    }
+
+    private AppUser mockActor(Product product) {
+        AppUser actor = AppUser.builder()
+                .id(2L)
+                .email("actor@ssds.dev")
+                .build();
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(appUserRepository.findByEmail(actor.getEmail())).thenReturn(Optional.of(actor));
+        return actor;
     }
 
     private void assertBadRequest(

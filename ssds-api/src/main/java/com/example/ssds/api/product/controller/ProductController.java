@@ -9,6 +9,8 @@ import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
+import com.example.ssds.api.product.dto.ProductStatusUpdateRequest;
+import com.example.ssds.api.product.dto.ProductStatusUpdateResponse;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
 import com.example.ssds.api.product.dto.ProductUpdateResponse;
 import com.example.ssds.api.product.service.ProductCommandService;
@@ -18,11 +20,16 @@ import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -111,7 +118,7 @@ public class ProductController {
 
     /** FR-03-2 新增品項。 */
     @PostMapping
-    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
     public ApiResponse<ProductCreateResponse> create(
             @Valid @RequestBody ProductCreateRequest request
     ) {
@@ -120,9 +127,9 @@ public class ProductController {
         );
     }
 
-    /** FR-03-2 修改品項基本資料；成功後由服務自動標記為待評分。 */
+    /** FR-03-2 修改品項基本資料；草稿送出時才轉為待評估。 */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'SYS_ADMIN')")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
     public ApiResponse<ProductUpdateResponse> update(
             @PathVariable(name = "id") Long id,
             @Valid @RequestBody ProductUpdateRequest request
@@ -130,6 +137,43 @@ public class ProductController {
         return ApiResponse.success(
                 productCommandService.update(id, request)
         );
+    }
+
+    /** FR-03 依狀態機變更品項狀態。 */
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<ProductStatusUpdateResponse> changeStatus(
+            @PathVariable(name = "id") Long id,
+            @Valid @RequestBody ProductStatusUpdateRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest
+    ) {
+        Set<String> authorities = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(Collectors.toSet());
+        return ApiResponse.success(productCommandService.changeStatus(
+                id,
+                request,
+                authentication.getName(),
+                authorities,
+                httpRequest.getRemoteAddr()
+        ));
+    }
+
+    /** FR-03-2 軟刪除品項；僅採購主管與系統管理員可執行。 */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('BUYER_LEAD', 'SYS_ADMIN')")
+    public ApiResponse<Void> delete(
+            @PathVariable(name = "id") Long id,
+            Authentication authentication,
+            HttpServletRequest httpRequest
+    ) {
+        productCommandService.delete(
+                id,
+                authentication.getName(),
+                httpRequest.getRemoteAddr()
+        );
+        return ApiResponse.success(null);
     }
 
     /** FR-03-1 批次指定類別；任一品項不存在時整批不更新。 */

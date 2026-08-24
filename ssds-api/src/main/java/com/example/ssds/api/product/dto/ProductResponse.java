@@ -6,6 +6,7 @@ import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Set;
 
 /** FR-03 品項詳情及新增／修改後的單筆回應。 */
@@ -22,9 +23,13 @@ public record ProductResponse(
         Integer moq,
         Season season,
         ProductStatus status,
+        String rejectReason,
+        LocalDate listedAt,
         TrackType trackType,
         SourcingStatus sourcingStatus,
         String logisticsCondition,
+        BigDecimal idealTempMin,
+        BigDecimal idealTempMax,
         Integer shelfLifeDays,
         Set<Long> keywordIds,
         Instant createdAt,

@@ -166,6 +166,7 @@ public class AccuracyAnalysisDao {
                                 PERCENT_RANK() OVER (ORDER BY margin_rate) * 100 AS pct
                          FROM product
                          WHERE category_id = :categoryId
+                           AND deleted_at IS NULL
                            AND margin_rate IS NOT NULL
                            AND track_type = 'A'
                      )
@@ -187,6 +188,7 @@ public class AccuracyAnalysisDao {
                 .sql("""
                      SELECT COUNT(*) FROM product
                      WHERE category_id = :categoryId
+                       AND deleted_at IS NULL
                        AND track_type = 'A'
                        AND status NOT IN ('DRAFT', 'REJECTED')
                      """)

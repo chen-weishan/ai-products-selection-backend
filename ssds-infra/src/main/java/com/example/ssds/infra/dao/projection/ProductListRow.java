@@ -24,6 +24,7 @@ public record ProductListRow(
         BigDecimal marginRate,
         BigDecimal latestScore,
         Grade grade,
+        Integer timeGapDays,
         TrackType trackType,
         SourcingStatus sourcingStatus,
         ProductStatus status,

@@ -1,17 +1,24 @@
 package com.example.ssds.api.product.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductResponse;
+import com.example.ssds.api.product.dto.ProductSearchRequest;
+import com.example.ssds.api.product.dto.ProductListItemResponse;
+import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
+import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.dao.ProductListDao;
+import com.example.ssds.infra.dao.projection.ProductListRow;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.Supplier;
@@ -20,19 +27,24 @@ import com.example.ssds.infra.repository.ProductRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 class ProductQueryServiceTest {
 
     private ProductRepository productRepository;
+    private ProductListDao productListDao;
     private ProductQueryService service;
 
     @BeforeEach
     void setUp() {
-        ProductListDao productListDao = mock(ProductListDao.class);
+        productListDao = mock(ProductListDao.class);
         productRepository = mock(ProductRepository.class);
         service = new ProductQueryService(productListDao, productRepository);
     }
@@ -97,5 +109,56 @@ class ProductQueryServiceTest {
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
         assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
         assertEquals("找不到指定的品項：999", exception.getMessage());
+    }
+
+    @Test
+    void searchTrackBHidesScoreAndReturnsTimeGap() {
+        ProductListRow row = new ProductListRow(
+                200L,
+                "B 軌品項",
+                1L,
+                "食品",
+                null,
+                null,
+                null,
+                null,
+                null,
+                new BigDecimal("88.0"),
+                Grade.A,
+                21,
+                TrackType.B,
+                SourcingStatus.SOURCING,
+                ProductStatus.EVALUATING,
+                false,
+                Instant.parse("2026-08-21T01:00:00Z")
+        );
+        when(productListDao.search(any()))
+                .thenReturn(new PageImpl<>(List.of(row)));
+
+        ProductSearchRequest request = new ProductSearchRequest(
+                null,
+                null,
+                null,
+                TrackType.B,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        ProductListItemResponse response = service.search(
+                request,
+                PageRequest.of(
+                        0,
+                        20,
+                        Sort.by(Sort.Direction.ASC, "timeGapDays")
+                )
+        ).content().getFirst();
+
+        assertNull(response.latestScore());
+        assertNull(response.grade());
+        assertEquals(21, response.timeGapDays());
     }
 }

@@ -7,10 +7,12 @@ import com.example.ssds.core.domain.TrackType;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
+import org.hibernate.annotations.SQLRestriction;
 
 /**
  * 品項主檔（規格書 §7.2 product）。
@@ -27,6 +29,7 @@ import lombok.*;
 @AllArgsConstructor
 @Entity
 @Table(name = "product")
+@SQLRestriction("deleted_at IS NULL")
 public class Product extends BaseAuditEntity {
 
     @Id
@@ -93,6 +96,13 @@ public class Product extends BaseAuditEntity {
     @Column(name = "logistics_condition", length = 100)
     private String logisticsCondition;
 
+    /** 品項適溫區間；未填時由評分引擎沿用品類預設（FR-17-2）。 */
+    @Column(name = "ideal_temp_min", precision = 4, scale = 1)
+    private BigDecimal idealTempMin;
+
+    @Column(name = "ideal_temp_max", precision = 4, scale = 1)
+    private BigDecimal idealTempMax;
+
     /** 效期天數，inventory_risk 扣分的判定輸入。 */
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
@@ -100,6 +110,14 @@ public class Product extends BaseAuditEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
+
+    /** FR-03-2 軟刪除；非 null 的品項由 SQLRestriction 自動排除。 */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
 
     /**
      * 關聯關鍵字。join table 只有兩個外鍵、無自身屬性，故用 {@code @ManyToMany}。
@@ -148,6 +166,11 @@ public class Product extends BaseAuditEntity {
             return true;
         }
         return suggestedPrice.compareTo(cost) > 0;
+    }
+
+    public void softDelete(AppUser actor) {
+        this.deletedAt = Instant.now();
+        this.deletedBy = actor;
     }
 
     @PrePersist

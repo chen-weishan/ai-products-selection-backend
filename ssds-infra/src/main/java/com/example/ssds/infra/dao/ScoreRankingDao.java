@@ -54,7 +54,7 @@ public class ScoreRankingDao {
      */
     public List<ScoreRankingRow> findRanking(String period, Grade grade, int limit, int offset) {
         String sql = RANKING_SELECT
-                + " WHERE s.period = :period "
+                + " WHERE p.deleted_at IS NULL AND s.period = :period "
                 + (grade == null ? "" : " AND s.grade = :grade ")
                 + " ORDER BY s.final_score DESC, p.name ASC LIMIT :limit OFFSET :offset";
 
@@ -72,7 +72,7 @@ public class ScoreRankingDao {
     public List<ScoreRankingRow> findRankingByScene(String period, SceneType sceneType, int limit) {
         return jdbcClient
                 .sql(RANKING_SELECT
-                        + " WHERE s.period = :period AND s.scene_type = :sceneType "
+                        + " WHERE p.deleted_at IS NULL AND s.period = :period AND s.scene_type = :sceneType "
                         + " ORDER BY s.final_score DESC LIMIT :limit")
                 .param("period", period)
                 .param("sceneType", sceneType.name())
@@ -88,7 +88,7 @@ public class ScoreRankingDao {
     public List<ScoreRankingRow> findHeavilyPenalized(String period) {
         return jdbcClient
                 .sql(RANKING_SELECT
-                        + " WHERE s.period = :period AND s.penalty_subtotal >= 20 "
+                        + " WHERE p.deleted_at IS NULL AND s.period = :period AND s.penalty_subtotal >= 20 "
                         + " ORDER BY s.penalty_subtotal DESC")
                 .param("period", period)
                 .query(ScoreRankingDao::mapRanking)

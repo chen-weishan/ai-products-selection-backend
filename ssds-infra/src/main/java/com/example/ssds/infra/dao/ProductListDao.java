@@ -35,6 +35,7 @@ public class ProductListDao {
             Map.entry("marginRate", "p.margin_rate"),
             Map.entry("latestScore", "latest_score.final_score"),
             Map.entry("grade", "latest_score.grade"),
+            Map.entry("timeGapDays", "sourcing.time_gap_days"),
             Map.entry("trackType", "p.track_type"),
             Map.entry("sourcingStatus", "p.sourcing_status"),
             Map.entry("status", "p.status"),
@@ -46,6 +47,8 @@ public class ProductListDao {
               ON c.id = p.category_id
             LEFT JOIN supplier supplier
               ON supplier.id = p.supplier_id
+            LEFT JOIN sourcing_candidate sourcing
+              ON sourcing.product_id = p.id
             LEFT JOIN LATERAL (
                 SELECT ps.final_score,
                        ps.grade,
@@ -87,6 +90,7 @@ public class ProductListDao {
                        p.margin_rate,
                        latest_score.final_score AS latest_score,
                        latest_score.grade,
+                       sourcing.time_gap_days,
                        p.track_type,
                        p.sourcing_status,
                        p.status,
@@ -141,7 +145,7 @@ public class ProductListDao {
     }
 
     private SqlFilter buildFilter(ProductListCriteria criteria) {
-        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        StringBuilder where = new StringBuilder(" WHERE p.deleted_at IS NULL ");
         Map<String, Object> parameters = new HashMap<>();
 
         if (criteria.keyword() != null
@@ -193,7 +197,9 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.grade() != null) {
+        boolean scoreFiltersApply = criteria.trackType() != TrackType.B;
+
+        if (scoreFiltersApply && criteria.grade() != null) {
             where.append(" AND latest_score.grade = :grade ");
             parameters.put(
                     "grade",
@@ -201,7 +207,7 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.minScore() != null) {
+        if (scoreFiltersApply && criteria.minScore() != null) {
             where.append(
                     " AND latest_score.final_score >= :minScore "
             );
@@ -211,7 +217,7 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.maxScore() != null) {
+        if (scoreFiltersApply && criteria.maxScore() != null) {
             where.append(
                     " AND latest_score.final_score <= :maxScore "
             );
@@ -274,6 +280,10 @@ public class ProductListDao {
                 gradeValue == null
                         ? null
                         : Grade.valueOf(gradeValue),
+                resultSet.getObject(
+                        "time_gap_days",
+                        Integer.class
+                ),
                 TrackType.valueOf(
                         resultSet.getString("track_type")
                 ),

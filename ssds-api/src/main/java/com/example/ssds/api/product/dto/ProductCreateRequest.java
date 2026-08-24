@@ -43,13 +43,27 @@ public record ProductCreateRequest(
         @Size(max = 100, message = "物流條件不可超過 100 字")
         String logisticsCondition,
 
+        @Digits(integer = 3, fraction = 1, message = "適溫下限最多 3 位整數及 1 位小數")
+        BigDecimal idealTempMin,
+
+        @Digits(integer = 3, fraction = 1, message = "適溫上限最多 3 位整數及 1 位小數")
+        BigDecimal idealTempMax,
+
         @Positive(message = "效期天數必須大於 0")
         Integer shelfLifeDays,
+        @Size(max = 5, message = "關鍵字最多選擇 5 個")
         Set<@NotNull(message = "關鍵字 ID 不可為空")
-                @Positive(message = "關鍵字 ID 必須大於 0") Long> keywordIds
+                @Positive(message = "關鍵字 ID 必須大於 0") Long> keywordIds,
+
+        Boolean saveAsDraft
 ) {
     /** 未傳關鍵字時視為空集合。 */
     public Set<Long> resolvedKeywordIds() {
         return keywordIds == null ? Set.of() : Set.copyOf(keywordIds);
+    }
+
+    /** 未指定時維持既有 API 行為：直接送出評估。 */
+    public boolean resolvedSaveAsDraft() {
+        return Boolean.TRUE.equals(saveAsDraft);
     }
 }
