@@ -21,7 +21,6 @@ public record ProductResponse(
         BigDecimal marginRate,
         Integer moq,
         Season season,
-        String targetAudience,
         ProductStatus status,
         TrackType trackType,
         SourcingStatus sourcingStatus,

@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.example.ssds.api.common.error.ApiErrorCode;
-import com.example.ssds.api.common.error.ApiException;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
@@ -57,7 +57,6 @@ class ProductQueryServiceTest {
                 .marginRate(new BigDecimal("0.3333"))
                 .moq(10)
                 .season(Season.ALL)
-                .targetAudience("測試客群")
                 .status(ProductStatus.EVALUATING)
                 .trackType(TrackType.A)
                 .logisticsCondition("常溫")
@@ -80,7 +79,6 @@ class ProductQueryServiceTest {
         assertEquals(2L, response.supplierId());
         assertEquals("測試供應商", response.supplierName());
         assertEquals(new BigDecimal("0.3333"), response.marginRate());
-        assertEquals("測試客群", response.targetAudience());
         assertEquals("常溫", response.logisticsCondition());
         assertEquals(180, response.shelfLifeDays());
         assertEquals(Set.of(10L, 11L), response.keywordIds());
@@ -91,13 +89,13 @@ class ProductQueryServiceTest {
         when(productRepository.findWithDetailsById(999L))
                 .thenReturn(Optional.empty());
 
-        ApiException exception = assertThrows(
-                ApiException.class,
+        BusinessException exception = assertThrows(
+                BusinessException.class,
                 () -> service.getById(999L)
         );
 
-        assertEquals(ApiErrorCode.RESOURCE_NOT_FOUND, exception.getCode());
-        assertEquals(HttpStatus.NOT_FOUND, exception.getCode().getHttpStatus());
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
         assertEquals("找不到指定的品項：999", exception.getMessage());
     }
 }

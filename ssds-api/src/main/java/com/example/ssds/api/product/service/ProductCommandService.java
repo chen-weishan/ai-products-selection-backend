@@ -1,8 +1,8 @@
 package com.example.ssds.api.product.service;
 
-import com.example.ssds.api.common.error.ApiErrorCode;
-import com.example.ssds.api.common.error.ApiException;
-import com.example.ssds.api.common.response.ApiErrorResponse.FieldError;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
@@ -85,7 +85,6 @@ public class ProductCommandService {
                 .suggestedPrice(request.suggestedPrice())
                 .moq(request.moq())
                 .season(request.season() == null ? Season.ALL : request.season())
-                .targetAudience(normalizeNullable(request.targetAudience()))
                 .status(ProductStatus.EVALUATING)
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
@@ -145,7 +144,6 @@ public class ProductCommandService {
         product.setSuggestedPrice(request.suggestedPrice());
         product.setMoq(request.moq());
         product.setSeason(request.season() == null ? Season.ALL : request.season());
-        product.setTargetAudience(normalizeNullable(request.targetAudience()));
         product.setStatus(ProductStatus.EVALUATING);
         product.setTrackType(trackType);
         product.setSourcingStatus(sourcingStatus);
@@ -187,8 +185,8 @@ public class ProductCommandService {
         products.forEach(product -> missingIds.remove(product.getId()));
 
         if (!missingIds.isEmpty()) {
-            throw new ApiException(
-                    ApiErrorCode.RESOURCE_NOT_FOUND,
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
                     "找不到指定的品項：" + missingIds
             );
         }
@@ -209,16 +207,16 @@ public class ProductCommandService {
 
     private Product findProduct(Long productId) {
         return productRepository.findById(productId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
                 ));
     }
 
     private Category findCategory(Long categoryId) {
         return categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的類別：" + categoryId
                 ));
     }
@@ -229,8 +227,8 @@ public class ProductCommandService {
         }
 
         return supplierRepository.findById(supplierId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的供應商：" + supplierId
                 ));
     }
@@ -245,8 +243,8 @@ public class ProductCommandService {
         foundKeywords.forEach(keyword -> missingIds.remove(keyword.getId()));
 
         if (!missingIds.isEmpty()) {
-            throw new ApiException(
-                    ApiErrorCode.RESOURCE_NOT_FOUND,
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
                     "找不到指定的關鍵字：" + missingIds
             );
         }
@@ -304,8 +302,8 @@ public class ProductCommandService {
         }
 
         if (!fieldErrors.isEmpty()) {
-            throw new ApiException(
-                    ApiErrorCode.VALIDATION_FAILED,
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED,
                     "商品資料驗證失敗",
                     fieldErrors
             );
@@ -330,7 +328,6 @@ public class ProductCommandService {
                 product.getMarginRate(),
                 product.getMoq(),
                 product.getSeason(),
-                product.getTargetAudience(),
                 product.getStatus(),
                 product.getTrackType(),
                 product.getSourcingStatus(),

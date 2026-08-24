@@ -11,8 +11,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.ssds.api.common.error.ApiErrorCode;
-import com.example.ssds.api.common.error.ApiException;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
@@ -103,7 +103,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAWithoutCostReturnsValidationFailure() {
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.create(createRequest(
                         TrackType.A,
                         null,
@@ -117,7 +117,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAWithoutSuggestedPriceReturnsValidationFailure() {
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.create(createRequest(
                         TrackType.A,
                         null,
@@ -135,7 +135,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAWithSuggestedPriceNotGreaterThanCostReturnsValidationFailure() {
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.create(createRequest(
                         TrackType.A,
                         null,
@@ -204,13 +204,13 @@ class ProductCommandServiceTest {
         Product product = existingProduct(TrackType.B, SourcingStatus.SOURCING);
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
 
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.update(
                         product.getId(),
                         updateRequest(TrackType.A, SourcingStatus.SOURCING, null, null)
                 ));
 
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getCode().getHttpStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getErrorCode().getHttpStatus());
         assertEquals(2, exception.getFieldErrors().size());
         verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
@@ -323,12 +323,12 @@ class ProductCommandServiceTest {
         when(productRepository.findAllById(Set.of(50L, 999L)))
                 .thenReturn(List.of(found));
 
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.assignCategory(
                         new ProductBatchCategoryRequest(Set.of(50L, 999L), 2L)
                 ));
 
-        assertEquals(ApiErrorCode.RESOURCE_NOT_FOUND, exception.getCode());
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
         assertTrue(exception.getMessage().contains("999"));
         assertEquals(originalCategory, found.getCategory());
         verify(productRepository, never()).saveAllAndFlush(anyList());
@@ -338,12 +338,12 @@ class ProductCommandServiceTest {
     void assignCategoryWhenCategoryDoesNotExistDoesNotLoadOrUpdateProducts() {
         when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
 
-        ApiException exception = assertThrows(ApiException.class, () ->
+        BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.assignCategory(
                         new ProductBatchCategoryRequest(Set.of(50L), 999L)
                 ));
 
-        assertEquals(ApiErrorCode.RESOURCE_NOT_FOUND, exception.getCode());
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
         assertEquals("找不到指定的類別：999", exception.getMessage());
         verify(productRepository, never()).findAllById(any());
         verify(productRepository, never()).saveAllAndFlush(anyList());
@@ -363,7 +363,6 @@ class ProductCommandServiceTest {
                 suggestedPrice,
                 10,
                 Season.ALL,
-                "測試客群",
                 trackType,
                 sourcingStatus,
                 "常溫",
@@ -386,7 +385,6 @@ class ProductCommandServiceTest {
                 suggestedPrice,
                 20,
                 Season.ALL,
-                "修改後客群",
                 trackType,
                 sourcingStatus,
                 "冷藏",
@@ -410,12 +408,12 @@ class ProductCommandServiceTest {
     }
 
     private void assertBadRequest(
-            ApiException exception,
+            BusinessException exception,
             String field,
             String message
     ) {
-        assertEquals(ApiErrorCode.VALIDATION_FAILED, exception.getCode());
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getCode().getHttpStatus());
+        assertEquals(ErrorCode.VALIDATION_FAILED, exception.getErrorCode());
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getErrorCode().getHttpStatus());
         assertTrue(exception.getFieldErrors().stream().anyMatch(error ->
                 error.field().equals(field) && error.message().equals(message)
         ));

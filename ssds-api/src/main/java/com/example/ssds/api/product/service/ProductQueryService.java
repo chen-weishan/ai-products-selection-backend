@@ -1,7 +1,7 @@
 package com.example.ssds.api.product.service;
-import com.example.ssds.api.common.error.ApiErrorCode;
-import com.example.ssds.api.common.error.ApiException;
-import com.example.ssds.api.common.response.ApiErrorResponse.FieldError;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,12 +67,13 @@ public class ProductQueryService {
     }
 
     public PageResponse<ProductListItemResponse> search(
-            ProductSearchRequest request
+            ProductSearchRequest request,
+            Pageable pageable
     ) {
-        validate(request);
+        validate(request, pageable);
 
         SortValue sortValue =
-                parseSort(request.resolvedSort());
+                parseSort(pageable.getSort());
 
         ProductListCriteria criteria =
                 new ProductListCriteria(
@@ -84,8 +87,8 @@ public class ProductQueryService {
                         request.minScore(),
                         request.maxScore(),
                         request.hasRisk(),
-                        request.resolvedPage(),
-                        request.resolvedSize(),
+                        pageable.getPageNumber(),
+                        pageable.getPageSize(),
                         sortValue.field(),
                         sortValue.ascending()
                 );
@@ -101,8 +104,8 @@ public class ProductQueryService {
     /** 取得品項完整資料；Repository 以 EntityGraph 一次載入關聯資料。 */
     public ProductResponse getById(Long productId) {
         Product product = productRepository.findWithDetailsById(productId)
-                .orElseThrow(() -> new ApiException(
-                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
                 ));
 
@@ -123,7 +126,6 @@ public class ProductQueryService {
                 product.getMarginRate(),
                 product.getMoq(),
                 product.getSeason(),
-                product.getTargetAudience(),
                 product.getStatus(),
                 product.getTrackType(),
                 product.getSourcingStatus(),
@@ -135,8 +137,8 @@ public class ProductQueryService {
         );
     }
 
-    private void validate(ProductSearchRequest request) {
-        if (request.resolvedPage() < 0) {
+    private void validate(ProductSearchRequest request, Pageable pageable) {
+        if (pageable.getPageNumber() < 0) {
             throw validationException(
                     "page",
                     "page 不可小於 0"
@@ -144,7 +146,7 @@ public class ProductQueryService {
         }
 
         if (!ALLOWED_PAGE_SIZES.contains(
-                request.resolvedSize()
+                pageable.getPageSize()
         )) {
             throw validationException(
                     "size",
@@ -190,10 +192,21 @@ public class ProductQueryService {
         }
     }
 
-    private SortValue parseSort(String sort) {
-        String[] values = sort.split(",", 2);
+    private SortValue parseSort(Sort sort) {
+        if (sort.isUnsorted()) {
+            return new SortValue("latestScore", false);
+        }
 
-        String field = values[0].trim();
+        List<Sort.Order> orders = sort.stream().toList();
+        if (orders.size() != 1) {
+            throw validationException(
+                    "sort",
+                    "一次只允許一個排序欄位"
+            );
+        }
+
+        Sort.Order order = orders.getFirst();
+        String field = order.getProperty();
 
         if (!ALLOWED_SORT_FIELDS.contains(field)) {
             throw validationException(
@@ -202,21 +215,9 @@ public class ProductQueryService {
             );
         }
 
-        String direction = values.length == 2
-                ? values[1].trim()
-                : "asc";
-
-        if (!direction.equalsIgnoreCase("asc")
-                && !direction.equalsIgnoreCase("desc")) {
-            throw validationException(
-                    "sort",
-                    "排序方向只允許 asc 或 desc"
-            );
-        }
-
         return new SortValue(
                 field,
-                direction.equalsIgnoreCase("asc")
+                order.isAscending()
         );
     }
 
@@ -257,12 +258,12 @@ public class ProductQueryService {
         return keyword.trim();
     }
 
-    private ApiException validationException(
+    private BusinessException validationException(
             String field,
             String message
     ) {
-        return new ApiException(
-                ApiErrorCode.VALIDATION_FAILED,
+        return new BusinessException(
+                ErrorCode.VALIDATION_FAILED,
                 "查詢參數驗證失敗",
                 List.of(
                     new FieldError(field, message)

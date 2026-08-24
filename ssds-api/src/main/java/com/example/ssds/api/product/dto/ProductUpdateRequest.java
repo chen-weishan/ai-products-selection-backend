@@ -37,9 +37,6 @@ public record ProductUpdateRequest(
         Integer moq,
         Season season,
 
-        @Size(max = 200, message = "目標客群不可超過 200 字")
-        String targetAudience,
-
         TrackType trackType,
         SourcingStatus sourcingStatus,
 
