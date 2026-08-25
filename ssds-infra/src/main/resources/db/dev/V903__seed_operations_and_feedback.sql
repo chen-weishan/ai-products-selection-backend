@@ -43,6 +43,7 @@ INSERT INTO item_festival_affinity (product_id, festival_code, affinity, set_by,
 -- FR-09 明訂「部分成功時仍寫入正確列」，PARTIAL 這個狀態沒有資料就測不到。
 
 -- data_type 值域自 V17 起對齊規格書 §7.2.11：SALES／REVIEW／AUDIENCE／PRODUCT。
+-- status 值 SUCCESS 自 V18 起改為規格書 §7.2.7 的 SUCCEEDED。
 -- file_size／is_async／finished_at 亦為 V17 新增：FR-09 的大檔非同步匯入
 -- 需要「檔案多大、是不是背景跑、什麼時候跑完」三項資訊。
 -- 超過 1 MB 的兩批設為 is_async，其中失敗那批的 finished_at 也有值——
@@ -50,11 +51,11 @@ INSERT INTO item_festival_affinity (product_id, festival_code, affinity, set_by,
 
 INSERT INTO import_batch (id, data_type, file_name, file_size, total_rows, success_rows, fail_rows,
                           status, is_async, created_by, created_at, finished_at) VALUES
-  (1, 'SALES',    '2026H1_團購銷售明細.xlsx', 2148352, 4820, 4820,   0, 'SUCCESS', TRUE,  3, now() - interval '30 days', now() - interval '30 days' + interval '4 minutes'),
-  (2, 'REVIEW',   '蝦皮評論匯出_20260701.csv',  486210, 1260, 1244,  16, 'PARTIAL', FALSE, 3, now() - interval '18 days', now() - interval '18 days' + interval '92 seconds'),
-  (3, 'AUDIENCE', '會員輪廓_2026Q2.csv',        158944,  890,  890,   0, 'SUCCESS', FALSE, 3, now() - interval '12 days', now() - interval '12 days' + interval '38 seconds'),
-  (4, 'PRODUCT',  '新品清單_0805.xlsx',          18620,   42,    0,  42, 'FAILED',  FALSE, 3, now() - interval '6 days',  now() - interval '6 days' + interval '5 seconds'),
-  (5, 'SALES',    '2026Q3_團購銷售明細.xlsx',   612480, 1150, 1150,   0, 'SUCCESS', TRUE,  3, now() - interval '2 days',  now() - interval '2 days' + interval '71 seconds');
+  (1, 'SALES',    '2026H1_團購銷售明細.xlsx', 2148352, 4820, 4820,   0, 'SUCCEEDED', TRUE,  3, now() - interval '30 days', now() - interval '30 days' + interval '4 minutes'),
+  (2, 'REVIEW',   '蝦皮評論匯出_20260701.csv',  486210, 1260, 1244,  16, 'PARTIAL',   FALSE, 3, now() - interval '18 days', now() - interval '18 days' + interval '92 seconds'),
+  (3, 'AUDIENCE', '會員輪廓_2026Q2.csv',        158944,  890,  890,   0, 'SUCCEEDED', FALSE, 3, now() - interval '12 days', now() - interval '12 days' + interval '38 seconds'),
+  (4, 'PRODUCT',  '新品清單_0805.xlsx',          18620,   42,    0,  42, 'FAILED',    FALSE, 3, now() - interval '6 days',  now() - interval '6 days' + interval '5 seconds'),
+  (5, 'SALES',    '2026Q3_團購銷售明細.xlsx',   612480, 1150, 1150,   0, 'SUCCEEDED', TRUE,  3, now() - interval '2 days',  now() - interval '2 days' + interval '71 seconds');
 
 INSERT INTO import_error (batch_id, row_number, column_name, error_message, raw_row) VALUES
   (2, 118,  'rating',      '星等須介於 0 與 5 之間，取得值：6',                    '蝦皮,這個超好吃,6,2026-06-11'),
