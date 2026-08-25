@@ -14,6 +14,7 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -58,13 +59,16 @@ public class ProductQueryService {
 
     private final ProductListDao productListDao;
     private final ProductRepository productRepository;
+    private final SourcingCandidateRepository sourcingCandidateRepository;
 
     public ProductQueryService(
             ProductListDao productListDao,
-            ProductRepository productRepository
+            ProductRepository productRepository,
+            SourcingCandidateRepository sourcingCandidateRepository
     ) {
         this.productListDao = productListDao;
         this.productRepository = productRepository;
+        this.sourcingCandidateRepository = sourcingCandidateRepository;
     }
 
     public PageResponse<ProductListItemResponse> search(
@@ -73,8 +77,11 @@ public class ProductQueryService {
     ) {
         validate(request, pageable);
 
-        SortValue sortValue =
-                parseSort(pageable.getSort());
+        SortValue sortValue = parseSort(pageable.getSort());
+        if (request.trackType() == TrackType.B
+                && "latestScore".equals(sortValue.field())) {
+            sortValue = new SortValue("timeGapDays", true);
+        }
 
         ProductListCriteria criteria =
                 new ProductListCriteria(
@@ -111,6 +118,12 @@ public class ProductQueryService {
                 ));
 
         Supplier supplier = product.getSupplier();
+        boolean trackB = product.getTrackType() == TrackType.B;
+        Integer timeGapDays = trackB
+                ? sourcingCandidateRepository.findByProductId(productId)
+                        .map(candidate -> candidate.getTimeGapDays())
+                        .orElse(null)
+                : null;
         Set<Long> keywordIds = product.getKeywords().stream()
                 .map(TrendKeyword::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -122,9 +135,9 @@ public class ProductQueryService {
                 product.getCategory().getName(),
                 supplier == null ? null : supplier.getId(),
                 supplier == null ? null : supplier.getName(),
-                product.getCost(),
-                product.getSuggestedPrice(),
-                product.getMarginRate(),
+                trackB ? null : product.getCost(),
+                trackB ? null : product.getSuggestedPrice(),
+                trackB ? null : product.getMarginRate(),
                 product.getMoq(),
                 product.getSeason(),
                 product.getStatus(),
@@ -132,10 +145,11 @@ public class ProductQueryService {
                 product.getListedAt(),
                 product.getTrackType(),
                 product.getSourcingStatus(),
-                product.getLogisticsCondition(),
+                ProductLogisticsConditionMapper.decode(product.getLogisticsCondition()),
                 product.getIdealTempMin(),
                 product.getIdealTempMax(),
                 product.getShelfLifeDays(),
+                timeGapDays,
                 Collections.unmodifiableSet(keywordIds),
                 product.getCreatedAt(),
                 product.getUpdatedAt()

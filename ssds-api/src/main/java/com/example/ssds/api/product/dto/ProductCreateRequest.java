@@ -1,6 +1,7 @@
 package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.Season;
+import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import jakarta.validation.constraints.Digits;
@@ -40,8 +41,8 @@ public record ProductCreateRequest(
         TrackType trackType,
         SourcingStatus sourcingStatus,
 
-        @Size(max = 100, message = "物流條件不可超過 100 字")
-        String logisticsCondition,
+        @Size(max = 6, message = "物流條件最多 6 項")
+        Set<@NotNull(message = "物流條件不可為空") LogisticsCondition> logisticsConditions,
 
         @Digits(integer = 3, fraction = 1, message = "適溫下限最多 3 位整數及 1 位小數")
         BigDecimal idealTempMin,

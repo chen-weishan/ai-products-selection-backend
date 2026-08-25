@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
@@ -13,6 +14,7 @@ import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -22,8 +24,10 @@ import com.example.ssds.infra.dao.projection.ProductListRow;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.entity.SourcingCandidate;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -31,6 +35,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -40,13 +45,19 @@ class ProductQueryServiceTest {
 
     private ProductRepository productRepository;
     private ProductListDao productListDao;
+    private SourcingCandidateRepository sourcingCandidateRepository;
     private ProductQueryService service;
 
     @BeforeEach
     void setUp() {
         productListDao = mock(ProductListDao.class);
         productRepository = mock(ProductRepository.class);
-        service = new ProductQueryService(productListDao, productRepository);
+        sourcingCandidateRepository = mock(SourcingCandidateRepository.class);
+        service = new ProductQueryService(
+                productListDao,
+                productRepository,
+                sourcingCandidateRepository
+        );
     }
 
     @Test
@@ -91,7 +102,7 @@ class ProductQueryServiceTest {
         assertEquals(2L, response.supplierId());
         assertEquals("測試供應商", response.supplierName());
         assertEquals(new BigDecimal("0.3333"), response.marginRate());
-        assertEquals("常溫", response.logisticsCondition());
+        assertEquals(Set.of(LogisticsCondition.NORMAL), response.logisticsConditions());
         assertEquals(180, response.shelfLifeDays());
         assertEquals(Set.of(10L, 11L), response.keywordIds());
     }
@@ -160,5 +171,58 @@ class ProductQueryServiceTest {
         assertNull(response.latestScore());
         assertNull(response.grade());
         assertEquals(21, response.timeGapDays());
+    }
+
+    @Test
+    void getByIdTrackBHidesPricingAndReturnsTimeGap() {
+        Product product = Product.builder()
+                .id(201L)
+                .name("B 軌詳情")
+                .category(Category.builder().id(1L).name("食品").build())
+                .cost(new BigDecimal("80.00"))
+                .suggestedPrice(new BigDecimal("120.00"))
+                .marginRate(new BigDecimal("0.3333"))
+                .status(ProductStatus.EVALUATING)
+                .trackType(TrackType.B)
+                .sourcingStatus(SourcingStatus.SOURCING)
+                .build();
+        SourcingCandidate candidate = SourcingCandidate.builder()
+                .product(product)
+                .leadTimeDays(20)
+                .timeGapDays(12)
+                .build();
+        when(productRepository.findWithDetailsById(201L))
+                .thenReturn(Optional.of(product));
+        when(sourcingCandidateRepository.findByProductId(201L))
+                .thenReturn(Optional.of(candidate));
+
+        ProductResponse response = service.getById(201L);
+
+        assertNull(response.cost());
+        assertNull(response.suggestedPrice());
+        assertNull(response.marginRate());
+        assertEquals(12, response.timeGapDays());
+    }
+
+    @Test
+    void searchTrackBWithDefaultScoreSortUsesTimeGapAscending() {
+        when(productListDao.search(any()))
+                .thenReturn(new PageImpl<>(List.of()));
+        ProductSearchRequest request = new ProductSearchRequest(
+                null, null, null, TrackType.B, null,
+                null, null, null, null, null
+        );
+
+        service.search(
+                request,
+                PageRequest.of(0, 20, Sort.Direction.DESC, "latestScore")
+        );
+
+        ArgumentCaptor<com.example.ssds.infra.dao.query.ProductListCriteria> captor =
+                ArgumentCaptor.forClass(
+                        com.example.ssds.infra.dao.query.ProductListCriteria.class);
+        verify(productListDao).search(captor.capture());
+        assertEquals("timeGapDays", captor.getValue().sortField());
+        assertEquals(true, captor.getValue().ascending());
     }
 }

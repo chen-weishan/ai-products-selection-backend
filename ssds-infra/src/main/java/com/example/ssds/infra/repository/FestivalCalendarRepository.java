@@ -4,6 +4,7 @@ import com.example.ssds.infra.entity.FestivalCalendar;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +15,8 @@ public interface FestivalCalendarRepository extends JpaRepository<FestivalCalend
     Optional<FestivalCalendar> findByFestivalCodeAndYear(String festivalCode, int year);
 
     List<FestivalCalendar> findByYearOrderByFestivalDateAsc(int year);
+
+    List<FestivalCalendar> findByFestivalCodeIn(Set<String> festivalCodes);
 
     /** 時間窗計算只需要「今天之後、備貨期之內」的節慶，不必整年掃。 */
     List<FestivalCalendar> findByFestivalDateBetweenOrderByFestivalDateAsc(

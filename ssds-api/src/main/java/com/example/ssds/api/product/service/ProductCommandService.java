@@ -5,6 +5,8 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
+import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
+import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -27,6 +29,7 @@ import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
+import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -59,6 +62,7 @@ public class ProductCommandService {
     );
 
     private final ProductRepository productRepository;
+    private final SourcingCandidateRepository sourcingCandidateRepository;
     private final AppUserRepository appUserRepository;
     private final AuditLogRepository auditLogRepository;
     private final CategoryRepository categoryRepository;
@@ -67,6 +71,7 @@ public class ProductCommandService {
 
     public ProductCommandService(
             ProductRepository productRepository,
+            SourcingCandidateRepository sourcingCandidateRepository,
             AppUserRepository appUserRepository,
             AuditLogRepository auditLogRepository,
             CategoryRepository categoryRepository,
@@ -74,6 +79,7 @@ public class ProductCommandService {
             TrendKeywordRepository trendKeywordRepository
     ) {
         this.productRepository = productRepository;
+        this.sourcingCandidateRepository = sourcingCandidateRepository;
         this.appUserRepository = appUserRepository;
         this.auditLogRepository = auditLogRepository;
         this.categoryRepository = categoryRepository;
@@ -82,7 +88,11 @@ public class ProductCommandService {
     }
 
     /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
-    public ProductCreateResponse create(ProductCreateRequest request) {
+    public ProductCreateResponse create(
+            ProductCreateRequest request,
+            String actorEmail
+    ) {
+        AppUser actor = findActor(actorEmail);
         String name = request.name().trim();
         Category category = findCategory(request.categoryId());
         Supplier supplier = findSupplier(request.supplierId());
@@ -120,10 +130,12 @@ public class ProductCommandService {
                         : ProductStatus.EVALUATING)
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
-                .logisticsCondition(normalizeNullable(request.logisticsCondition()))
+                .logisticsCondition(ProductLogisticsConditionMapper.encode(
+                        request.logisticsConditions()))
                 .idealTempMin(request.idealTempMin())
                 .idealTempMax(request.idealTempMax())
                 .shelfLifeDays(request.shelfLifeDays())
+                .createdBy(actor)
                 .keywords(keywords)
                 .build();
 
@@ -191,7 +203,8 @@ public class ProductCommandService {
         validateTrackStatus(product.getStatus(), trackType);
         product.setTrackType(trackType);
         product.setSourcingStatus(sourcingStatus);
-        product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
+        product.setLogisticsCondition(ProductLogisticsConditionMapper.encode(
+                request.logisticsConditions()));
         product.setIdealTempMin(request.idealTempMin());
         product.setIdealTempMax(request.idealTempMax());
         product.setShelfLifeDays(request.shelfLifeDays());
@@ -262,6 +275,45 @@ public class ProductCommandService {
                 .entityId(productId)
                 .ip(sourceIp)
                 .build());
+    }
+
+    /** FR-03-1 批次停用；任一品項不存在時整批不修改。 */
+    public ProductBatchDisableResponse disableBatch(
+            ProductBatchDisableRequest request,
+            String actorEmail,
+            String sourceIp
+    ) {
+        Set<Long> requestedIds = new LinkedHashSet<>(request.productIds());
+        List<Product> products = productRepository.findAllById(requestedIds);
+        Set<Long> missingIds = new LinkedHashSet<>(requestedIds);
+        products.forEach(product -> missingIds.remove(product.getId()));
+
+        if (!missingIds.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "找不到指定的品項：" + missingIds
+            );
+        }
+
+        AppUser actor = findActor(actorEmail);
+        products.forEach(product -> product.softDelete(actor));
+        productRepository.saveAllAndFlush(products);
+        auditLogRepository.saveAll(products.stream()
+                .map(product -> AuditLog.builder()
+                        .user(actor)
+                        .action("DELETE")
+                        .entityType("Product")
+                        .entityId(product.getId())
+                        .beforeJson("{\"deleted\":false}")
+                        .afterJson("{\"deleted\":true}")
+                        .ip(sourceIp)
+                        .build())
+                .toList());
+
+        return new ProductBatchDisableResponse(
+                products.size(),
+                requestedIds
+        );
     }
 
     /** 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。 */
@@ -464,6 +516,12 @@ public class ProductCommandService {
 
     private ProductResponse toResponse(Product product) {
         Supplier supplier = product.getSupplier();
+        boolean trackB = product.getTrackType() == TrackType.B;
+        Integer timeGapDays = trackB
+                ? sourcingCandidateRepository.findByProductId(product.getId())
+                        .map(candidate -> candidate.getTimeGapDays())
+                        .orElse(null)
+                : null;
         Set<Long> keywordIds = product.getKeywords().stream()
                 .map(TrendKeyword::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -475,9 +533,9 @@ public class ProductCommandService {
                 product.getCategory().getName(),
                 supplier == null ? null : supplier.getId(),
                 supplier == null ? null : supplier.getName(),
-                product.getCost(),
-                product.getSuggestedPrice(),
-                product.getMarginRate(),
+                trackB ? null : product.getCost(),
+                trackB ? null : product.getSuggestedPrice(),
+                trackB ? null : product.getMarginRate(),
                 product.getMoq(),
                 product.getSeason(),
                 product.getStatus(),
@@ -485,10 +543,11 @@ public class ProductCommandService {
                 product.getListedAt(),
                 product.getTrackType(),
                 product.getSourcingStatus(),
-                product.getLogisticsCondition(),
+                ProductLogisticsConditionMapper.decode(product.getLogisticsCondition()),
                 product.getIdealTempMin(),
                 product.getIdealTempMax(),
                 product.getShelfLifeDays(),
+                timeGapDays,
                 Collections.unmodifiableSet(keywordIds),
                 product.getCreatedAt(),
                 product.getUpdatedAt()

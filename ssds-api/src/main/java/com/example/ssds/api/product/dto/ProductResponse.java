@@ -1,6 +1,7 @@
 package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -27,10 +28,11 @@ public record ProductResponse(
         LocalDate listedAt,
         TrackType trackType,
         SourcingStatus sourcingStatus,
-        String logisticsCondition,
+        Set<LogisticsCondition> logisticsConditions,
         BigDecimal idealTempMin,
         BigDecimal idealTempMax,
         Integer shelfLifeDays,
+        Integer timeGapDays,
         Set<Long> keywordIds,
         Instant createdAt,
         Instant updatedAt

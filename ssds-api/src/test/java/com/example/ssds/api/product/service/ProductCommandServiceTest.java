@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +16,8 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
+import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
+import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductStatusUpdateRequest;
@@ -22,6 +25,7 @@ import com.example.ssds.api.product.dto.ProductStatusUpdateResponse;
 import com.example.ssds.api.product.dto.ProductUpdateRequest;
 import com.example.ssds.api.product.dto.ProductUpdateResponse;
 import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -34,6 +38,7 @@ import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
+import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -52,10 +57,13 @@ class ProductCommandServiceTest {
     private TrendKeywordRepository keywordRepository;
     private ProductCommandService service;
     private Category category;
+    private AppUser createActor;
 
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
+        SourcingCandidateRepository sourcingCandidateRepository =
+                mock(SourcingCandidateRepository.class);
         appUserRepository = mock(AppUserRepository.class);
         auditLogRepository = mock(AuditLogRepository.class);
         categoryRepository = mock(CategoryRepository.class);
@@ -64,6 +72,7 @@ class ProductCommandServiceTest {
 
         service = new ProductCommandService(
                 productRepository,
+                sourcingCandidateRepository,
                 appUserRepository,
                 auditLogRepository,
                 categoryRepository,
@@ -75,6 +84,12 @@ class ProductCommandServiceTest {
                 .id(1L)
                 .name("食品")
                 .build();
+        createActor = AppUser.builder()
+                .id(9L)
+                .email("buyer@ssds.dev")
+                .build();
+        when(appUserRepository.findByEmail(createActor.getEmail()))
+                .thenReturn(Optional.of(createActor));
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(keywordRepository.findAllById(Set.of(10L))).thenReturn(List.of(
                 com.example.ssds.infra.entity.TrendKeyword.builder().id(10L).build()
@@ -92,7 +107,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAWithValidPricingSucceeds() {
-        ProductCreateResponse response = service.create(createRequest(
+        ProductCreateResponse response = createProduct(createRequest(
                 TrackType.A,
                 null,
                 new BigDecimal("80.00"),
@@ -102,6 +117,9 @@ class ProductCommandServiceTest {
         assertEquals(TrackType.A, response.product().trackType());
         assertEquals(new BigDecimal("0.3333"), response.product().marginRate());
         assertEquals(ProductStatus.EVALUATING, response.product().status());
+        verify(productRepository).saveAndFlush(argThat(product ->
+                product.getCreatedBy() == createActor
+        ));
     }
 
     @Test
@@ -124,7 +142,7 @@ class ProductCommandServiceTest {
                 true
         );
 
-        ProductCreateResponse response = service.create(request);
+        ProductCreateResponse response = createProduct(request);
 
         assertEquals(ProductStatus.DRAFT, response.product().status());
         assertNull(response.product().cost());
@@ -183,7 +201,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createWithoutTrackTypeDefaultsToTrackA() {
-        ProductCreateResponse response = service.create(createRequest(
+        ProductCreateResponse response = createProduct(createRequest(
                 null,
                 null,
                 new BigDecimal("80.00"),
@@ -197,7 +215,7 @@ class ProductCommandServiceTest {
     @Test
     void createTrackAWithoutCostReturnsValidationFailure() {
         BusinessException exception = assertThrows(BusinessException.class, () ->
-                service.create(createRequest(
+                createProduct(createRequest(
                         TrackType.A,
                         null,
                         null,
@@ -211,7 +229,7 @@ class ProductCommandServiceTest {
     @Test
     void createTrackAWithoutSuggestedPriceReturnsValidationFailure() {
         BusinessException exception = assertThrows(BusinessException.class, () ->
-                service.create(createRequest(
+                createProduct(createRequest(
                         TrackType.A,
                         null,
                         new BigDecimal("80.00"),
@@ -229,7 +247,7 @@ class ProductCommandServiceTest {
     @Test
     void createTrackAWithSuggestedPriceNotGreaterThanCostReturnsValidationFailure() {
         BusinessException exception = assertThrows(BusinessException.class, () ->
-                service.create(createRequest(
+                createProduct(createRequest(
                         TrackType.A,
                         null,
                         new BigDecimal("120.00"),
@@ -242,7 +260,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackBWithoutPricingSucceeds() {
-        ProductCreateResponse response = service.create(createRequest(
+        ProductCreateResponse response = createProduct(createRequest(
                 TrackType.B,
                 SourcingStatus.SOURCING,
                 null,
@@ -256,7 +274,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackBWithoutSourcingStatusDefaultsToPending() {
-        ProductCreateResponse response = service.create(createRequest(
+        ProductCreateResponse response = createProduct(createRequest(
                 TrackType.B,
                 null,
                 null,
@@ -278,7 +296,7 @@ class ProductCommandServiceTest {
                 Season.ALL,
                 TrackType.A,
                 null,
-                "常溫",
+                Set.of(LogisticsCondition.NORMAL),
                 new BigDecimal("30.0"),
                 new BigDecimal("20.0"),
                 180,
@@ -288,7 +306,7 @@ class ProductCommandServiceTest {
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> service.create(request)
+                () -> createProduct(request)
         );
 
         assertBadRequest(
@@ -301,7 +319,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAIgnoresSourcingStatus() {
-        ProductCreateResponse response = service.create(createRequest(
+        ProductCreateResponse response = createProduct(createRequest(
                 TrackType.A,
                 SourcingStatus.SOURCING,
                 new BigDecimal("80.00"),
@@ -376,7 +394,7 @@ class ProductCommandServiceTest {
 
     @Test
     void createEntersEvaluatingWhileRegularUpdateKeepsExistingStatus() {
-        ProductCreateResponse created = service.create(createRequest(
+        ProductCreateResponse created = createProduct(createRequest(
                 TrackType.A,
                 null,
                 new BigDecimal("80.00"),
@@ -497,6 +515,63 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void disableBatchSoftDeletesAllProductsAndWritesAudits() {
+        Product first = existingProduct(TrackType.A, null);
+        first.setId(50L);
+        Product second = existingProduct(TrackType.B, SourcingStatus.PENDING);
+        second.setId(51L);
+        AppUser actor = AppUser.builder()
+                .id(2L)
+                .email("lead@ssds.dev")
+                .build();
+        when(productRepository.findAllById(Set.of(50L, 51L)))
+                .thenReturn(List.of(first, second));
+        when(appUserRepository.findByEmail(actor.getEmail()))
+                .thenReturn(Optional.of(actor));
+
+        ProductBatchDisableResponse response = service.disableBatch(
+                new ProductBatchDisableRequest(Set.of(50L, 51L)),
+                actor.getEmail(),
+                "127.0.0.1"
+        );
+
+        assertEquals(2, response.disabledCount());
+        assertEquals(Set.of(50L, 51L), response.productIds());
+        assertEquals(actor, first.getDeletedBy());
+        assertEquals(actor, second.getDeletedBy());
+        assertTrue(first.getDeletedAt() != null);
+        assertTrue(second.getDeletedAt() != null);
+        verify(productRepository).saveAllAndFlush(List.of(first, second));
+        verify(auditLogRepository).saveAll(argThat(audits ->
+                ((List<?>) audits).size() == 2
+        ));
+    }
+
+    @Test
+    void disableBatchWhenAnyProductIsMissingDoesNotModifyAnyProduct() {
+        Product found = existingProduct(TrackType.A, null);
+        found.setId(50L);
+        when(productRepository.findAllById(Set.of(50L, 999L)))
+                .thenReturn(List.of(found));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.disableBatch(
+                        new ProductBatchDisableRequest(Set.of(50L, 999L)),
+                        "lead@ssds.dev",
+                        "127.0.0.1"
+                )
+        );
+
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
+        assertTrue(exception.getMessage().contains("999"));
+        assertNull(found.getDeletedAt());
+        assertNull(found.getDeletedBy());
+        verify(productRepository, never()).saveAllAndFlush(anyList());
+        verify(auditLogRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void decisionRoleCanRejectEvaluatingProductWithReason() {
         Product product = existingProduct(TrackType.A, null);
         AppUser actor = mockActor(product);
@@ -592,13 +667,17 @@ class ProductCommandServiceTest {
                 Season.ALL,
                 trackType,
                 sourcingStatus,
-                "常溫",
+                Set.of(LogisticsCondition.NORMAL),
                 null,
                 null,
                 180,
                 Set.of(10L),
                 false
         );
+    }
+
+    private ProductCreateResponse createProduct(ProductCreateRequest request) {
+        return service.create(request, createActor.getEmail());
     }
 
     private ProductUpdateRequest updateRequest(
@@ -617,7 +696,7 @@ class ProductCommandServiceTest {
                 Season.ALL,
                 trackType,
                 sourcingStatus,
-                "冷藏",
+                Set.of(LogisticsCondition.CHILLED),
                 null,
                 null,
                 120,
