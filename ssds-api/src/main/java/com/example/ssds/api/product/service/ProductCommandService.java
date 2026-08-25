@@ -74,7 +74,7 @@ public class ProductCommandService {
                                 .suggestedPrice(request.suggestedPrice())
                                 .moq(request.moq())
                                 .season(request.season() == null ? Season.ALL : request.season())
-                                .targetAudience(normalizeNullable(request.targetAudience()))
+                                // .targetAudience(normalizeNullable(request.targetAudience()))
                                 .status(ProductStatus.DRAFT)
                                 .trackType(trackType)
                                 .sourcingStatus(sourcingStatus)
@@ -127,7 +127,7 @@ public class ProductCommandService {
                 product.setSuggestedPrice(request.suggestedPrice());
                 product.setMoq(request.moq());
                 product.setSeason(request.season() == null ? Season.ALL : request.season());
-                product.setTargetAudience(normalizeNullable(request.targetAudience()));
+                // product.setTargetAudience(normalizeNullable(request.targetAudience()));
                 product.setTrackType(trackType);
                 product.setSourcingStatus(sourcingStatus);
                 product.setLogisticsCondition(normalizeNullable(request.logisticsCondition()));
@@ -234,7 +234,8 @@ public class ProductCommandService {
                                 product.getMarginRate(),
                                 product.getMoq(),
                                 product.getSeason(),
-                                product.getTargetAudience(),
+                                null,
+                                // product.getTargetAudience(),
                                 product.getStatus(),
                                 product.getTrackType(),
                                 product.getSourcingStatus(),

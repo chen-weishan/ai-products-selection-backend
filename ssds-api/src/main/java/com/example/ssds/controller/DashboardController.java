@@ -1,5 +1,6 @@
 package com.example.ssds.controller;
 
+import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.dto.DashboardSummaryDto;
 import com.example.ssds.api.service.DashboardService;
 import lombok.RequiredArgsConstructor;
@@ -16,14 +17,17 @@ import java.util.Locale;
 @RequestMapping("api/v1/dashboard")
 @RequiredArgsConstructor
 public class DashboardController {
+
     private final DashboardService dashboardService;
 
     @GetMapping("/summary")
-    public DashboardSummaryDto getSummary(@RequestParam(required = false) String period) {
+    public ApiResponse<DashboardSummaryDto> getSummary(
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false, defaultValue = "A") String track) {
         if (period == null) {
             period = getCurrentWeek();
         }
-        return dashboardService.getSummary(period);
+        return ApiResponse.success(dashboardService.getSummary(period, track));
     }
 
     private String getCurrentWeek() {

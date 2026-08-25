@@ -5,12 +5,13 @@ import java.util.List;
 /**
  * FR-02 儀表板完整回應（組合全部區塊）。
  *
- * @param kpi             KPI 四項數字
- * @param viralRanking    話題爆款榜 Top 5
- * @param festivalRanking 節慶檔期榜 Top 5
- * @param restockRanking  常態補貨榜 Top 5
- * @param seasonalRanking 季節導向榜 Top 5
- * @param heatSources     熱度來源狀態列
+ * @param kpi              KPI 四項數字
+ * @param viralRanking     話題爆款榜 Top 5
+ * @param festivalRanking  節慶檔期榜 Top 5
+ * @param restockRanking   常態補貨榜 Top 5
+ * @param seasonalRanking  季節導向榜 Top 5
+ * @param heatSources      熱度來源狀態列
+ * @param overdueCampaigns 待回填結案清單
  */
 public record DashboardSummaryDto(
                 KpiDto kpi,
@@ -18,5 +19,7 @@ public record DashboardSummaryDto(
                 List<RankingItemDto> festivalRanking,
                 List<RankingItemDto> restockRanking,
                 List<RankingItemDto> seasonalRanking,
-                List<HeatSourceDto> heatSources) {
+                List<HeatSourceDto> heatSources,
+                List<OverdueCampaignDto> overdueCampaigns,
+                List<BtrackSummaryDto> bTrackSummary) {
 }
