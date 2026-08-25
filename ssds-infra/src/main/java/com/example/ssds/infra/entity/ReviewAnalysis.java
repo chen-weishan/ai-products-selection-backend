@@ -36,10 +36,6 @@ public class ReviewAnalysis {
     @Column(nullable = false, length = 16)
     private Sentiment sentiment;
 
-    /** v2.0：風險主題分類（品質／食安／物流破損…），逗號分隔。 */
-    @Column(length = 200)
-    private String aspects;
-
     @Column(name = "key_phrase", length = 50)
     private String keyPhrase;
 

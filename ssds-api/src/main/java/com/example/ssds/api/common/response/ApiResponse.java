@@ -2,24 +2,31 @@ package com.example.ssds.api.common.response;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
-/**
- * 規格書 §8.1 統一成功回應格式。
- *
- * @param success 請求是否成功
- * @param data 回應資料
- * @param timestamp 回應產生時間
- * @param <T> 回應資料型別
- */
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonPropertyOrder({ "success", "data", "error", "timestamp" })
 public record ApiResponse<T>(
         boolean success,
         T data,
+        ApiError error,
         OffsetDateTime timestamp) {
 
     private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
 
-    /** 建立成功回應。 */
+    /** 規格書 §8.1 的時間範例為秒級，截去小數秒以對齊。 */
+    private static OffsetDateTime now() {
+        return OffsetDateTime.now(API_ZONE).truncatedTo(ChronoUnit.SECONDS);
+    }
+
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(true, data, OffsetDateTime.now(API_ZONE));
+        return new ApiResponse<>(true, data, null, now());
+    }
+
+    public static ApiResponse<Void> failure(ApiError error) {
+        return new ApiResponse<>(false, null, error, now());
     }
 }

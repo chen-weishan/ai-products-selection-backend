@@ -14,12 +14,10 @@ import org.hibernate.type.SqlTypes;
 /**
  * 選品分數（規格書 §7.2 product_score、§5.5）。
  *
- * <p>
- * §5.10：每次評分產生一筆新紀錄，保留歷史、不覆寫。決策綁定的是某一筆
+ * <p>§5.10：每次評分產生一筆新紀錄，保留歷史、不覆寫。決策綁定的是某一筆
  * 歷史列，所以權重改版之後回頭看，當時的分數依然是當時的分數（AC-11-6）。
  *
- * <p>
- * B 軌品項不評分（AC-16-2），本表只有 A 軌資料。
+ * <p>B 軌品項不評分（AC-16-2），本表只有 A 軌資料。
  */
 @Getter
 @Setter
@@ -43,7 +41,17 @@ public class ProductScore {
     @JoinColumn(name = "weight_version_id", nullable = false)
     private WeightVersion weightVersion;
 
-    /** ISO 週，如 2026W30。 */
+    /**
+     * ISO 週，如 2026W30，以 Asia/Taipei 判定（§7.2.6）。
+     *
+     * <p>欄位型別為 CHAR(7) 而非 VARCHAR。Hibernate 對 String 預設推導出
+     * VARCHAR，與 bpchar 不符會讓 {@code ddl-auto=validate} 在啟動時失敗，
+     * 因此必須以 {@code @JdbcTypeCode} 明確指定 CHAR。
+     *
+     * <p>資料庫端另有格式約束 {@code ck_score_period_format}
+     * （四位年 + W + 兩位週次，週次 01–53），寫入前應先自行驗證，
+     * 否則會在 flush 當下才收到約束違反。
+     */
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(nullable = false, length = 7, columnDefinition = "char(7)")
     private String period;
@@ -55,8 +63,7 @@ public class ProductScore {
     /**
      * 主情境那筆為 true，次要情境為 false（§FR-04 多情境評分）。
      *
-     * <p>
-     * SceneClassifierAgent 的 {@code sceneType} 為主情境、
+     * <p>SceneClassifierAgent 的 {@code sceneType} 為主情境、
      * {@code alternativeScene} 為次要情境，兩者各產生一筆本實體。
      * FR-05 品項詳情預設顯示主情境；FR-11 決策綁定的也是主情境那筆。
      */
@@ -67,8 +74,7 @@ public class ProductScore {
     /**
      * 同 (product, period, sceneType) 重複評分時僅最新一筆為 true（§5.10）。
      *
-     * <p>
-     * 舊紀錄保留不刪除，因此排行查詢必須自行過濾 {@code is_active = true}，
+     * <p>舊紀錄保留不刪除，因此排行查詢必須自行過濾 {@code is_active = true}，
      * 否則同一品項會出現多列歷史分數。
      */
     @Column(name = "is_active", nullable = false)
@@ -76,37 +82,19 @@ public class ProductScore {
     private boolean active = true;
 
     /**
-     * 加權和 Σ(w_i × normalized_i)，尚未做同品類百分位換算。
-     * 等於 {@link #factors} 中各加分列 {@code normalized_value × weight} 的總和，
-     * 因此 FR-05「分數組成」畫面上長條的加總對應的是這一欄，不是 {@link #bonusSubtotal}。
-     */
-    @Column(name = "base_score", nullable = false, precision = 5, scale = 2)
-    private BigDecimal baseScore;
-
-    /**
-     * 加分小計：{@link #baseScore} 經 §5.3.1 同品類百分位換算後的值（0–100）。
+     * 加分小計 Σ(w_i × normalized_i)，值域 0–100（§5.5）。
      *
-     * <p>
-     * §5.5 的計算範例即為此步驟：加權和 76.3 換算後得 91，再減扣分 4 得 87。
-     * 換算函式為 {@code percentile_rank(x, same_category_values) × 100}；
-     * 同品類樣本數 < 10 時退回全品類百分位，並依 §5.9 扣 20 點信心度。
+     * <p>等於 {@link #factors} 中各加分列 {@code normalized_value × weight} 的總和，
+     * FR-05「分數組成」畫面上長條的加總對應的就是這一欄，**不做二次換算**。
      *
-     * <p>
-     * 也就是百分位正規化在本系統套用兩次：一次在單一因子層級
-     * （{@link ScoreFactor#getNormalizedValue()}），一次在加權後的總分層級。
+     * <p>v1.0 的 base_score 已於 V17 移除：那一欄與本欄語意重複，
+     * §5.5 的公式只用 bonusSubtotal 與 penaltySubtotal。
+     * 百分位正規化只套用在單一因子層級（{@link ScoreFactor#getNormalizedValue()}）。
      */
     @Column(name = "bonus_subtotal", nullable = false, precision = 5, scale = 2)
     private BigDecimal bonusSubtotal;
 
-    /**
-     * v1.0 欄位名，與 {@link #penaltySubtotal} 為同一個值，一律同步寫入。
-     * 扣分不做百分位換算（§5.2.2：扣分因子固定生效）。
-     */
-    @Column(name = "risk_penalty", nullable = false, precision = 5, scale = 2)
-    @Builder.Default
-    private BigDecimal riskPenalty = BigDecimal.ZERO;
-
-    /** 扣分小計，上限 40（§5.5）。 */
+    /** 扣分小計，上限 40（§5.5）。扣分不做百分位換算（§5.2.2：扣分因子固定生效）。 */
     @Column(name = "penalty_subtotal", nullable = false, precision = 5, scale = 2)
     @Builder.Default
     private BigDecimal penaltySubtotal = BigDecimal.ZERO;
