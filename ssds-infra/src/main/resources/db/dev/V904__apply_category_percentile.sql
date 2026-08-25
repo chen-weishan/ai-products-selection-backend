@@ -38,14 +38,14 @@
 -- 它們的用途是把「零食」的已評分樣本墊到 10 筆，不是拿來當展示品項。
 
 INSERT INTO product (id, name, category_id, supplier_id, cost, suggested_price, margin_rate, moq,
-                     season, target_audience, status, track_type, logistics_condition,
+                     season, status, track_type, logistics_condition,
                      shelf_life_days, created_by) VALUES
-  (130, '韓國蜂蜜奶油杏仁果', 10, 1,  78.00, 165.00, 0.5273, 200, 'ALL',    'F25_34,M25_34', 'EVALUATING', 'A', '常溫',        300, 1),
-  (131, '泰式椰香脆片',       10, 2,  42.00,  89.00, 0.5281, 400, 'SUMMER', 'F18_24',        'EVALUATING', 'A', '常溫',        240, 1),
-  (132, '日本柚子軟糖',       10, 1,  55.00, 119.00, 0.5378, 300, 'WINTER', 'F18_24,F25_34', 'WATCHING',   'A', '常溫',        365, 6),
-  (133, '義式松露洋芋片',     10, 1,  88.00, 189.00, 0.5344, 150, 'ALL',    'M25_34,M35_44', 'EVALUATING', 'A', '常溫｜易碎',  180, 6),
-  (134, '港式蛋捲禮盒',       10, 1, 135.00, 289.00, 0.5329, 100, 'FESTIVAL','F35_44',       'EVALUATING', 'A', '常溫｜易碎',   90, 1),
-  (135, '韓式辣味海苔酥',     10, 2,  38.00,  85.00, 0.5529, 500, 'ALL',    'F18_24,M18_24', 'WATCHING',   'A', '常溫',        210, 1);
+  (130, '韓國蜂蜜奶油杏仁果', 10, 1,  78.00, 165.00, 0.5273, 200, 'ALL',      'EVALUATING', 'A', '常溫',        300, 1),
+  (131, '泰式椰香脆片',       10, 2,  42.00,  89.00, 0.5281, 400, 'SUMMER',   'EVALUATING', 'A', '常溫',        240, 1),
+  (132, '日本柚子軟糖',       10, 1,  55.00, 119.00, 0.5378, 300, 'WINTER',   'WATCHING',   'A', '常溫',        365, 6),
+  (133, '義式松露洋芋片',     10, 1,  88.00, 189.00, 0.5344, 150, 'ALL',      'EVALUATING', 'A', '常溫｜易碎',  180, 6),
+  (134, '港式蛋捲禮盒',       10, 1, 135.00, 289.00, 0.5329, 100, 'FESTIVAL', 'EVALUATING', 'A', '常溫｜易碎',   90, 1),
+  (135, '韓式辣味海苔酥',     10, 2,  38.00,  85.00, 0.5529, 500, 'ALL',      'WATCHING',   'A', '常溫',        210, 1);
 
 
 -- ===================================================================
@@ -66,28 +66,28 @@ CREATE TEMP TABLE seed904_bonus (
     raw_value NUMERIC(12,4), normalized_value NUMERIC(5,2)
 );
 INSERT INTO seed904_bonus VALUES
-  (130, 'HEAT_SLOPE', 0.3100, 64.00), (130, 'MARGIN', 0.5273, 80.00),
-  (130, 'CONVERSION', 0.0388, 74.00), (130, 'FESTIVAL', 0.2500, 25.00),
+  (130, 'TREND', 0.3100, 64.00), (130, 'MARGIN', 0.5273, 80.00),
+  (130, 'CVR', 0.0388, 74.00), (130, 'FESTIVAL', 0.2500, 25.00),
   (130, 'CLIMATE', 0.6000, 60.00),
 
-  (131, 'HEAT_SLOPE', 1.9500, 89.00), (131, 'MARGIN', 0.5281, 81.00),
-  (131, 'CONVERSION', 0.0300, 62.00), (131, 'FESTIVAL', 0.2000, 20.00),
+  (131, 'TREND', 1.9500, 89.00), (131, 'MARGIN', 0.5281, 81.00),
+  (131, 'CVR', 0.0300, 62.00), (131, 'FESTIVAL', 0.2000, 20.00),
   (131, 'CLIMATE', 0.8800, 88.00),
 
-  (132, 'HEAT_SLOPE', 0.5600, 71.00), (132, 'MARGIN', 0.5378, 84.00),
-  (132, 'CONVERSION', 0.0266, 56.00), (132, 'FESTIVAL', 0.3000, 30.00),
+  (132, 'TREND', 0.5600, 71.00), (132, 'MARGIN', 0.5378, 84.00),
+  (132, 'CVR', 0.0266, 56.00), (132, 'FESTIVAL', 0.3000, 30.00),
   (132, 'CLIMATE', 0.7400, 74.00),
 
-  (133, 'HEAT_SLOPE', 0.0900, 50.00), (133, 'MARGIN', 0.5344, 83.00),
-  (133, 'CONVERSION', 0.0350, 68.00), (133, 'FESTIVAL', 0.1800, 18.00),
+  (133, 'TREND', 0.0900, 50.00), (133, 'MARGIN', 0.5344, 83.00),
+  (133, 'CVR', 0.0350, 68.00), (133, 'FESTIVAL', 0.1800, 18.00),
   (133, 'CLIMATE', 0.5200, 52.00),
 
-  (134, 'HEAT_SLOPE', 0.7200, 76.00), (134, 'MARGIN', 0.5329, 82.00),
-  (134, 'CONVERSION', 0.0410, 78.00), (134, 'FESTIVAL', 0.9200, 92.00),
+  (134, 'TREND', 0.7200, 76.00), (134, 'MARGIN', 0.5329, 82.00),
+  (134, 'CVR', 0.0410, 78.00), (134, 'FESTIVAL', 0.9200, 92.00),
   (134, 'CLIMATE', 0.5800, 58.00),
 
-  (135, 'HEAT_SLOPE', -0.0400, 36.00), (135, 'MARGIN', 0.5529, 88.00),
-  (135, 'CONVERSION', 0.0222, 47.00), (135, 'FESTIVAL', 0.1500, 15.00),
+  (135, 'TREND', -0.0400, 36.00), (135, 'MARGIN', 0.5529, 88.00),
+  (135, 'CVR', 0.0222, 47.00), (135, 'FESTIVAL', 0.1500, 15.00),
   (135, 'CLIMATE', 0.5000, 50.00);
 
 CREATE TEMP TABLE seed904_penalty (product_id BIGINT, factor_code VARCHAR(32), penalty_value NUMERIC(5,2));
@@ -98,10 +98,10 @@ INSERT INTO seed904_penalty VALUES
 
 -- 先寫入「加權和」，百分位換算留到第 3 段統一處理
 INSERT INTO product_score (id, product_id, weight_version_id, period, scene_type,
-                           base_score, bonus_subtotal, risk_penalty, penalty_subtotal,
+                           bonus_subtotal, penalty_subtotal,
                            final_score, grade, confidence, calculated_at)
 SELECT m.score_id, m.product_id, 2, to_char(CURRENT_DATE, 'IYYY"W"IW'), m.scene_type,
-       agg.raw_sum, agg.raw_sum, agg.penalty, agg.penalty,
+       agg.raw_sum, agg.penalty,
        GREATEST(0, agg.raw_sum - agg.penalty),
        'C',            -- 分級與信心度都在第 3、4 段依 §5.3.1／§5.9 重算
        100,
@@ -140,8 +140,12 @@ DROP TABLE seed904_meta;
 -- ===================================================================
 -- 3. 依 §5.3.1 換算加分小計，並重算分數與分級
 -- ===================================================================
--- base_score 目前存的是加權和（V902 與上一段寫入時都是這個值），
--- 換算後 bonus_subtotal 才是真正參與 §5.5 減法的加分小計。
+-- bonus_subtotal 此刻存的是加權和（V902 與上一段寫入時都是這個值），
+-- 換算後才是真正參與 §5.5 減法的加分小計。
+--
+-- 原本這裡排序用的是 base_score，該欄已於 V17 移除（與 bonus_subtotal 語意
+-- 重複，§7.2.6 的欄位表已無此欄）。兩欄的值本來就一直相同，改用
+-- bonus_subtotal 排序不影響結果。
 
 WITH sample_size AS (
     -- 每個期別、每個品類的已評分樣本數，決定走哪一條分支
@@ -153,9 +157,9 @@ ranked AS (
     SELECT s.id,
            ss.n,
            -- 同品類百分位（樣本 >= 10 時採用）
-           CUME_DIST() OVER (PARTITION BY s.period, p.category_id ORDER BY s.base_score) * 100 AS pct_category,
+           CUME_DIST() OVER (PARTITION BY s.period, p.category_id ORDER BY s.bonus_subtotal) * 100 AS pct_category,
            -- 全品類百分位（§5.3.1 的退回分支）
-           CUME_DIST() OVER (PARTITION BY s.period ORDER BY s.base_score) * 100 AS pct_overall
+           CUME_DIST() OVER (PARTITION BY s.period ORDER BY s.bonus_subtotal) * 100 AS pct_overall
     FROM product_score s
              JOIN product p     ON p.id = s.product_id
              JOIN sample_size ss ON ss.period = s.period AND ss.category_id = p.category_id
@@ -170,14 +174,12 @@ SET bonus_subtotal = c.bonus,
     final_score    = GREATEST(0, c.bonus - s.penalty_subtotal),
     grade = CASE
                 -- §5.6 硬規則：扣分達 20 以上者分級最高只給 B
-                WHEN GREATEST(0, c.bonus - s.penalty_subtotal) >= wv.grade_a_threshold
-                     AND s.penalty_subtotal < 20                                   THEN 'A'
-                WHEN GREATEST(0, c.bonus - s.penalty_subtotal) >= wv.grade_b_threshold THEN 'B'
+                WHEN GREATEST(0, c.bonus - s.penalty_subtotal) >= 85
+                     AND s.penalty_subtotal < 20                       THEN 'A'
+                WHEN GREATEST(0, c.bonus - s.penalty_subtotal) >= 70   THEN 'B'
                 ELSE 'C'
             END
 FROM converted c
-         JOIN product_score s2 ON s2.id = c.id
-         JOIN weight_version wv ON wv.id = s2.weight_version_id
 WHERE s.id = c.id;
 
 
@@ -235,20 +237,12 @@ WHERE c.period = to_char(CURRENT_DATE, 'IYYY"W"IW')
 
 
 -- ===================================================================
--- 5. 同步開團快照
+-- 5. 開團快照：本檔不再需要同步
 -- ===================================================================
--- campaign_snapshot 是決策當下的凍結副本（AC-11-6），但它當初凍結的是
--- 尚未換算的值。這裡把它對回來源評分列 —— 這是修正錯誤的初始資料，
--- 不是「快照可以被改」的先例。
-
-UPDATE campaign_snapshot cs
-SET score            = s.final_score,
-    grade            = s.grade,
-    bonus_subtotal   = s.bonus_subtotal,
-    penalty_subtotal = s.penalty_subtotal
-FROM decision_record d
-         JOIN product_score s ON s.id = d.score_id
-WHERE cs.decision_id = d.id;
+-- v3.0 §7.2.8 把 campaign_snapshot 精簡為六欄，分數、分級、加減分小計
+-- 全部不再重複保存，改由 decision_record.score_id join 回 product_score。
+-- 也就是說第 3 段重算完分數，快照上顯示的值自動就是對的，
+-- 沒有第二份資料需要跟著改——這正是那次精簡想解決的問題。
 
 
 -- ===================================================================
@@ -271,6 +265,12 @@ BEGIN
         WHERE n.nspname = current_schema()
           AND c.relkind = 'r'
           AND a.attidentity IN ('a', 'd')
+          -- 已 DROP 的欄位仍留在 pg_attribute 且保有 attidentity，
+          -- 名稱會是 '........pg.dropped.N........'。V17 砍掉了
+          -- campaign_snapshot.id 與 campaign_result.id，不濾掉的話
+          -- 這個迴圈會對著一個不存在的欄名下 SELECT MAX(...) 而失敗。
+          AND NOT a.attisdropped
+          AND a.attnum > 0
     LOOP
         seq := pg_get_serial_sequence(quote_ident(rec.table_name), rec.column_name);
         CONTINUE WHEN seq IS NULL;

@@ -7,6 +7,7 @@ import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import com.example.ssds.core.domain.AiTaskType;
+import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
@@ -33,8 +34,8 @@ class AiTaskWorkerTest {
         worker.run(new AiTaskCreatedEvent(700L, false));
 
         verify(sceneService).classify(101L, false);
-        assertEquals(TaskStatus.SUCCESS, item.getStatus());
-        assertEquals(TaskStatus.SUCCESS, task.getStatus());
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
         assertEquals(1, task.getSuccessCount());
         assertEquals(100, task.progressPercent());
     }
@@ -59,8 +60,8 @@ class AiTaskWorkerTest {
 
         worker.run(new AiTaskCreatedEvent(702L, true));
 
-        assertEquals(TaskStatus.SUCCESS, item.getStatus());
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals("評論分析未完成", item.getErrorMessage());
-        assertEquals(TaskStatus.SUCCESS, task.getStatus());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
     }
 }

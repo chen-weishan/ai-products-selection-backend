@@ -35,7 +35,7 @@ public class BulkImportDao {
             java.math.BigDecimal price,
             int qty,
             Integer impression,
-            String audienceTag,
+            String audienceCode,
             Long importBatchId) {}
 
     /**
@@ -48,7 +48,7 @@ public class BulkImportDao {
         String sql = """
                 INSERT INTO sales_record
                     (order_date, product_id, product_name_raw, category_id,
-                     price, qty, impression, audience_tag, import_batch_id)
+                     price, qty, impression, audience_code, import_batch_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
@@ -63,7 +63,7 @@ public class BulkImportDao {
                 ps.setBigDecimal(5, row.price());
                 ps.setInt(6, row.qty());
                 ps.setObject(7, row.impression());
-                ps.setString(8, row.audienceTag());
+                ps.setString(8, row.audienceCode());
                 ps.setObject(9, row.importBatchId());
             });
             for (int[] batch : counts) {
@@ -122,18 +122,37 @@ public class BulkImportDao {
     }
 
     /**
-     * 批次寫入每日熱度。同日重跑採集時以新值覆蓋（upsert），
-     * 避免採集任務重試就撞主鍵而整批失敗。
+     * 批次寫入每日合成熱度（{@code heat_composite_daily}，v3.0 §7.2.3）。
+     * 同日重跑合成時以新值覆蓋（upsert），避免任務重試就撞主鍵而整批失敗。
+     *
+     * <p>v1.0 的 trend_daily 已廢除，本方法原本寫的是那張表。
+     * 參數順序：keyword_id、stat_date、composite_value、slope_7d、slope_30d、
+     * stage、stage_weeks、estimated_lifespan_days、applied_weights、
+     * divergence_flag、volume_below_floor。
+     *
+     * <p>applied_weights 一併覆寫是刻意的：它記的是「這次合成實際採用的權重」，
+     * 重跑後的值就是新的那一組，留著舊的會讓事後追溯指向錯的設定。
      */
     @Transactional
-    public int batchUpsertTrendDaily(List<Object[]> keywordDateHeat) {
+    public int batchUpsertHeatComposite(List<Object[]> compositeRows) {
         String sql = """
-                INSERT INTO trend_daily (keyword_id, stat_date, heat_value)
-                VALUES (?, ?, ?)
+                INSERT INTO heat_composite_daily
+                    (keyword_id, stat_date, composite_value, slope_7d, slope_30d,
+                     stage, stage_weeks, estimated_lifespan_days, applied_weights,
+                     divergence_flag, volume_below_floor)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
                 ON CONFLICT (keyword_id, stat_date)
-                DO UPDATE SET heat_value = EXCLUDED.heat_value
+                DO UPDATE SET composite_value         = EXCLUDED.composite_value,
+                              slope_7d                = EXCLUDED.slope_7d,
+                              slope_30d               = EXCLUDED.slope_30d,
+                              stage                   = EXCLUDED.stage,
+                              stage_weeks             = EXCLUDED.stage_weeks,
+                              estimated_lifespan_days = EXCLUDED.estimated_lifespan_days,
+                              applied_weights         = EXCLUDED.applied_weights,
+                              divergence_flag         = EXCLUDED.divergence_flag,
+                              volume_below_floor      = EXCLUDED.volume_below_floor
                 """;
-        int[] counts = jdbcTemplate.batchUpdate(sql, keywordDateHeat);
+        int[] counts = jdbcTemplate.batchUpdate(sql, compositeRows);
         int affected = 0;
         for (int c : counts) {
             affected += (c >= 0 ? c : 1);

@@ -1,12 +1,12 @@
 package com.example.ssds.api.aitask.dto;
 
-import com.example.ssds.core.domain.TaskStatus;
+import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.infra.entity.AiTaskItem;
 
 public record AiTaskItemResponse(
         Long itemId,
         Long productId,
-        TaskStatus status,
+        TaskItemStatus status,
         String errorMessage,
         Integer durationMs
 ) {

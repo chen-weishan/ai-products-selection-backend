@@ -3,6 +3,7 @@ package com.example.ssds.api.aitask;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.core.domain.AiTaskType;
+import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
@@ -43,8 +44,6 @@ public class AiTaskWorker {
         int failures = 0;
         for (AiTaskItem item : itemRepository.findByTaskId(task.getId())) {
             Instant started = Instant.now();
-            item.setStatus(TaskStatus.RUNNING);
-            itemRepository.save(item);
             try {
                 switch (task.getTaskType()) {
                     case SCENE_CLASSIFY -> sceneClassificationService.classify(
@@ -58,14 +57,14 @@ public class AiTaskWorker {
                     }
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
-                item.setStatus(TaskStatus.SUCCESS);
+                item.setStatus(TaskItemStatus.SUCCEEDED);
                 if (task.getTaskType() != AiTaskType.REVIEW_RISK
                         || item.getErrorMessage() == null) {
                     item.setErrorMessage(null);
                 }
                 successes++;
             } catch (RuntimeException exception) {
-                item.setStatus(TaskStatus.FAILED);
+                item.setStatus(TaskItemStatus.FAILED);
                 item.setErrorMessage(safeMessage(exception));
                 failures++;
             }
@@ -77,7 +76,7 @@ public class AiTaskWorker {
             taskRepository.save(task);
         }
 
-        task.setStatus(failures == 0 ? TaskStatus.SUCCESS
+        task.setStatus(failures == 0 ? TaskStatus.SUCCEEDED
                 : successes == 0 ? TaskStatus.FAILED : TaskStatus.PARTIAL);
         task.setFinishedAt(Instant.now());
         taskRepository.save(task);
