@@ -199,8 +199,8 @@ INSERT INTO ai_task (id, task_type, budget_pool, status, total_count, success_co
   (3, 'SELLING_POINT',      'TRACK_A', 'PARTIAL',   17, 14,  3, 0, 20, 0, 3, now() - interval '2 days' - interval '18 minutes', now() - interval '2 days' - interval '4 minutes'),
   (4, 'RECOMMENDATION',     'TRACK_A', 'RUNNING',   17,  9,  0, 1, 10, 0, 1, now() - interval '12 minutes', NULL),
   (5, 'SOURCING_SCOUT',     'TRACK_B', 'SUCCEEDED',  4,  4,  0, 0,  4, 0, 1, now() - interval '4 days', now() - interval '4 days' + interval '6 minutes'),
-  (6, 'WEIGHT_CALIBRATION', 'TRACK_A', 'SUCCEEDED',  1,  1,  0, 0,  1, 0, 2, now() - interval '5 days', now() - interval '5 days' + interval '3 minutes'),
-  -- 整批失敗後的重試批次，計入 RETRY 池
+  (6, 'WEIGHT_CALIBRATION', 'RETRY',   'SUCCEEDED',  1,  1,  0, 0,  1, 0, 2, now() - interval '5 days', now() - interval '5 days' + interval '3 minutes'),
+  -- 校準與整批失敗後的重試同池：v3.0 合併為三池，校準併入「重試與臨時任務」（FR-07 L883）
   (7, 'TREND_INTERPRET',    'RETRY',   'FAILED',     6,  0,  6, 0, 12, 0, 3, now() - interval '1 days', now() - interval '1 days' + interval '2 minutes');
 
 -- raw_response 已於 V17 移除（§7.2.7 明訂）：LLM 原始回應可能含經模型改寫的
