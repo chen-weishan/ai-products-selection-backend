@@ -23,6 +23,8 @@ public class TrendDetailResponse {
         private Double percentile;    // 同源百分位 (各來源內部正規化後的分數)
         private Double actualWeight;  // 本次實際採用的合成比例 (降級重算後的真實權重)
         private String status;        // 可用性狀態 (AVAILABLE / DEGRADED / UNAVAILABLE)
+        private Double slope7d;
+        private Double slope30d;
 
         // --- SourceDetail 的 Getter & Setter ---
         public String getSourceName() { return sourceName; }
@@ -36,6 +38,12 @@ public class TrendDetailResponse {
 
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
+
+        public Double getSlope7d() { return slope7d; }
+        public void setSlope7d(Double slope7d) { this.slope7d = slope7d; }
+
+        public Double getSlope30d() { return slope30d; }
+        public void setSlope30d(Double slope30d) { this.slope30d = slope30d; }
     }
 
     // --- TrendDetailResponse 的 Getter & Setter ---

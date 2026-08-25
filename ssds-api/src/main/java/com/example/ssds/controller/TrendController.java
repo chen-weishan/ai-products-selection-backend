@@ -13,7 +13,7 @@ import java.util.List;
 
 // 趨勢分析 API 介面層
 @RestController
-@RequestMapping("/api/v1/trends")
+@RequestMapping("/trends")
 public class TrendController {
 
     private final TrendService trendService;
@@ -39,7 +39,6 @@ public class TrendController {
 // 取得單一關鍵字趨勢明細
     @GetMapping("/{keywordId}/detail")
     public TrendDetailResponse getTrendDetail(@PathVariable Long keywordId) {
-        // 接收前端傳來的 keywordId，呼叫 Service 的新方法，將豪華明細餐盒端出去
         return trendService.getTrendDetail(keywordId);
     }
 }

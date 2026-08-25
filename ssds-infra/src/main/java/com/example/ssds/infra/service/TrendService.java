@@ -5,10 +5,14 @@ import com.example.ssds.core.dto.TrendDetailResponse.SourceDetail;
 
 import com.example.ssds.core.dto.TrendChartProjection;
 import com.example.ssds.core.dto.TrendSignalProjection;
+import com.example.ssds.core.dto.TrendSourceDetailProjection;
+import com.example.ssds.core.dto.TrendCompositeProjection;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,8 +33,7 @@ public class TrendService {
 
     @Transactional(readOnly = true)
     public List<TrendSignalProjection> getAllTrendSignals() {
-        
-        return trendKeywordRepository.findTrendSignals();
+        return trendKeywordRepository.findTrendSignals(); 
     }
 
     // 取得單一關鍵字近 90 天的歷史熱度 (畫折線圖用)
@@ -45,58 +48,48 @@ public class TrendService {
     public TrendDetailResponse getTrendDetail(Long keywordId) {
         
         TrendDetailResponse response = new TrendDetailResponse();
-        // 實務上這一步會去資料庫撈出關鍵字名稱，這裡先做示範
-        response.setKeyword("測試關鍵字"); 
+         // 1. 查真實關鍵字名稱（沿用既有的 findById，繼承自 JpaRepository）
+        String keywordName = trendKeywordRepository.findById(keywordId)
+                .map(tk -> tk.getKeyword())
+                .orElseThrow(() -> new IllegalArgumentException("找不到關鍵字 id=" + keywordId));
+        response.setKeyword("keywordName"); 
+
+         // 2. 查各來源明細（含各自 slope7d/slope30d，AC-06-1）
+        List<TrendSourceDetailProjection> rawDetails =
+                trendKeywordRepository.findSourceDetailsByKeywordId(keywordId);
+
+        // 先算所有可用來源的原始權重總和，用來重新正規化（AC-06-2）
+        double totalRawWeight = rawDetails.stream()
+                .mapToDouble(TrendSourceDetailProjection::getRawActualWeight)
+                .sum();
 
         List<SourceDetail> details = new ArrayList<>();
-        
-        // --- 模擬從資料庫撈出的預設權重設定 ---
-        double threadsOriginalWeight = 0.6;
-        double googleOriginalWeight = 0.4;
-        
-        // 假設 Threads 今天 API 當機 (狀態變成 DEGRADED)
-        boolean isThreadsDegraded = true; 
-        
-        double threadsActualWeight = isThreadsDegraded ? 0.0 : threadsOriginalWeight;
-        double googleActualWeight = googleOriginalWeight;
-        
-        // 重新正規化權重 (若 Threads 掛了，Google Trends 權重會被放大補滿 100%)
-        double totalValidWeight = threadsActualWeight + googleActualWeight;
-        threadsActualWeight = (totalValidWeight > 0) ? (threadsActualWeight / totalValidWeight) : 0;
-        googleActualWeight = (totalValidWeight > 0) ? (googleActualWeight / totalValidWeight) : 0;
+        for (TrendSourceDetailProjection raw : rawDetails) {
+            SourceDetail detail = new SourceDetail();
+            detail.setSourceName(raw.getSourceName());
+            detail.setPercentile(raw.getPercentile());
+            detail.setStatus(raw.getStatus());
+            detail.setSlope7d(raw.getSlope7d());
+            detail.setSlope30d(raw.getSlope30d());
 
-        // 裝載 Threads 明細
-        SourceDetail threadsDetail = new SourceDetail();
-        threadsDetail.setSourceName("THREADS");
-        threadsDetail.setPercentile(85.0); // 假設原本拿到 85 分
-        threadsDetail.setActualWeight(threadsActualWeight);
-        threadsDetail.setStatus(isThreadsDegraded ? "DEGRADED" : "AVAILABLE");
-        details.add(threadsDetail);
+            double actualWeight = (totalRawWeight > 0)
+                    ? raw.getRawActualWeight() / totalRawWeight
+                    : 0;
+            detail.setActualWeight(Math.round(actualWeight * 10000.0) / 10000.0);
 
-        // 裝載 Google Trends 明細
-        SourceDetail googleDetail = new SourceDetail();
-        googleDetail.setSourceName("GOOGLE_TRENDS");
-        googleDetail.setPercentile(70.0);
-        googleDetail.setActualWeight(googleActualWeight);
-        googleDetail.setStatus("AVAILABLE");
-        details.add(googleDetail);
-
+            details.add(detail);
+        }
         response.setSourceDetails(details);
 
-        // 計算今日合成總分並四捨五入
-        double heatToday = (85.0 * threadsActualWeight) + (70.0 * googleActualWeight);
+        // 3. 合成後整體今日熱度與斜率
+        TrendCompositeProjection composite = trendKeywordRepository.findCompositeByKeywordId(keywordId);
+        double heatToday = composite.getHeatToday().doubleValue();
+        double slope7d = composite.getSlope7d().doubleValue();
+        double slope30d = composite.getSlope30d().doubleValue();
+
         response.setHeatToday(Math.round(heatToday * 100.0) / 100.0);
-
-        // 計算斜率與背離訊號
-        double heat7d = 50.0;  // 假設 7 天前總分是 50
-        double heat30d = 90.0; // 假設 30 天前總分是 90
-
-        // 斜率公式: (今天 - 過去) / max(過去, 0.01)
-        double slope7d = (heatToday - heat7d) / Math.max(heat7d, 0.01); 
-        double slope30d = (heatToday - heat30d) / Math.max(heat30d, 0.01);
-        
-        response.setSlope7d(Math.round(slope7d * 10000.0) / 100.0);
-        response.setSlope30d(Math.round(slope30d * 10000.0) / 100.0);
+        response.setSlope7d(slope7d);
+        response.setSlope30d(slope30d);
 
         // 判斷 AI 輔助標記
         if (slope7d < 0 && slope30d > 0) {
