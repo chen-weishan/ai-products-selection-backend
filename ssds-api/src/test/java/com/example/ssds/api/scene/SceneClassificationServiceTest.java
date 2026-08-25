@@ -86,7 +86,9 @@ class SceneClassificationServiceTest {
         assertFalse(response.fallbackApplied());
         verify(logRepository).save(argThat(log ->
                 log.getFinalSceneType().name().equals("FESTIVAL")
-                        && log.getSignals().size() == 1));
+                        && log.getSignals().size() == 1
+                        && log.getPeriod() != null
+                        && log.getPeriod().matches("\\d{4}W(0[1-9]|[1-4]\\d|5[0-3])")));
     }
 
     @Test

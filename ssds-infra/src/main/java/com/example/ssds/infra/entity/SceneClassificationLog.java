@@ -48,13 +48,12 @@ public class SceneClassificationLog {
     private String aiReasoning;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "alternative_scene_type", length = 24)
+    @Column(name = "ai_alternative_scene", length = 24)
     private SceneType alternativeSceneType;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "signals", nullable = false, columnDefinition = "jsonb")
-    @Builder.Default
-    private List<String> signals = List.of();
+    @Column(name = "ai_signals", columnDefinition = "jsonb")
+    private List<String> signals;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "final_scene_type", nullable = false, length = 24)
@@ -83,6 +82,10 @@ public class SceneClassificationLog {
 
     @Column(name = "heat_bucket", nullable = false, length = 16)
     private String heatBucket;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(nullable = false, length = 7)
+    private String period;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.WeekFields;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,9 +65,17 @@ public class SceneClassificationService {
                 .model(result.model())
                 .promptVersion(result.promptVersion())
                 .heatBucket(input.heatBucket().name())
+                .period(isoWeekPeriod(LocalDate.now(BUSINESS_ZONE)))
                 .build();
         SceneClassificationLog saved = logRepository.save(log);
         return SceneClassificationResponse.from(saved, result);
+    }
+
+    private static String isoWeekPeriod(LocalDate date) {
+        WeekFields iso = WeekFields.ISO;
+        return "%04dW%02d".formatted(
+                date.get(iso.weekBasedYear()),
+                date.get(iso.weekOfWeekBasedYear()));
     }
 
     @Transactional(readOnly = true)
