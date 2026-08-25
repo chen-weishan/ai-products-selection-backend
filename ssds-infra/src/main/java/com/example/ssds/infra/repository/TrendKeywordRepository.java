@@ -1,5 +1,6 @@
 package com.example.ssds.infra.repository;
 
+// import com.example.ssds.core.domain.KeywordLifecycle; // ⚠️ 暫時註解掉，避免找不到類別的編譯錯誤
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.core.dto.TrendChartProjection;
 import com.example.ssds.core.dto.TrendSignalProjection;
@@ -19,12 +20,13 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
 
     /** 每日 06:00 熱度採集的取件範圍（§5.10）。 */
     List<TrendKeyword> findByEnabledTrue();
-<<<<<<< HEAD
 
-    List<TrendKeyword> findByLifecycle(KeywordLifecycle lifecycle);
+    // List<TrendKeyword> findByLifecycle(KeywordLifecycle lifecycle); // ⚠️ 暫時註解掉
 
-    
-     @Query(value = """
+    // ==========================================
+    // 1. 取得所有趨勢訊號 (總覽用)
+    // ==========================================
+    @Query(value = """
         WITH DailyComposite AS (
             SELECT 
                 hr.keyword_id,
@@ -65,10 +67,9 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
     """, nativeQuery = true)
     List<TrendSignalProjection> findTrendSignals();
 
-
-
-    //取得單一關鍵字近 90 天的歷史合成熱度 (用於繪製折線圖)
-   
+    // ==========================================
+    // 2. FR-06 90 天歷史熱度折線圖查詢
+    // ==========================================
     @Query(value = """
         WITH DailyComposite AS (
             SELECT 
@@ -81,22 +82,13 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
               AND hs.availability = 'AVAILABLE'
             GROUP BY hr.keyword_id, hr.reading_date
         )
-
         SELECT 
             reading_date AS date,
-            ROUND(composite_heat,2) AS heatScore
+            ROUND(composite_heat, 2) AS heatScore
         FROM DailyComposite
-         WHERE  keyword_id = :keywordId
-         AND reading_date >= CURRENT_DATE - INTERVAL '90 days'
-        
+        WHERE keyword_id = :keywordId
+          AND reading_date >= CURRENT_DATE - INTERVAL '90 days'
         ORDER BY reading_date ASC
     """, nativeQuery = true)
     List<TrendChartProjection> findTrendChartByKeywordId(@Param("keywordId") Long keywordId);
-=======
->>>>>>> origin/dev
 }
-
-
-
-
-    
