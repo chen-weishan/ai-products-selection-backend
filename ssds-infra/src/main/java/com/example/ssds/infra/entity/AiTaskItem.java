@@ -1,6 +1,6 @@
 package com.example.ssds.infra.entity;
 
-import com.example.ssds.core.domain.TaskStatus;
+import com.example.ssds.core.domain.TaskItemStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -39,7 +39,7 @@ public class AiTaskItem {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
-    private TaskStatus status = TaskStatus.PENDING;
+    private TaskItemStatus status = TaskItemStatus.PENDING;
 
     @Column(name = "error_message", length = 500)
     private String errorMessage;
