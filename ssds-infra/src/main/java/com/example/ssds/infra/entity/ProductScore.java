@@ -43,18 +43,9 @@ public class ProductScore {
     @JoinColumn(name = "weight_version_id", nullable = false)
     private WeightVersion weightVersion;
 
-     *
-     * <p>欄位型別為 CHAR(7) 而非 VARCHAR。Hibernate 對 String 預設推導出
-     * VARCHAR，與 bpchar 不符會讓 {@code ddl-auto=validate} 在啟動時失敗，
-     * 因此必須以 {@code @JdbcTypeCode} 明確指定 CHAR。
-     *
-     * <p>資料庫端另有格式約束 {@code ck_score_period_format}
-     * （四位年 + W + 兩位週次，週次 01–53），寫入前應先自行驗證，
-     * 否則會在 flush 當下才收到約束違反。
-     */
+    /** ISO 週，如 2026W30。 */
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(nullable = false, length = 7, columnDefinition = "char(7)")
->>>>>>> origin/dev
     private String period;
 
     @Enumerated(EnumType.STRING)
@@ -64,7 +55,8 @@ public class ProductScore {
     /**
      * 主情境那筆為 true，次要情境為 false（§FR-04 多情境評分）。
      *
-     * <p>SceneClassifierAgent 的 {@code sceneType} 為主情境、
+     * <p>
+     * SceneClassifierAgent 的 {@code sceneType} 為主情境、
      * {@code alternativeScene} 為次要情境，兩者各產生一筆本實體。
      * FR-05 品項詳情預設顯示主情境；FR-11 決策綁定的也是主情境那筆。
      */
@@ -75,7 +67,8 @@ public class ProductScore {
     /**
      * 同 (product, period, sceneType) 重複評分時僅最新一筆為 true（§5.10）。
      *
-     * <p>舊紀錄保留不刪除，因此排行查詢必須自行過濾 {@code is_active = true}，
+     * <p>
+     * 舊紀錄保留不刪除，因此排行查詢必須自行過濾 {@code is_active = true}，
      * 否則同一品項會出現多列歷史分數。
      */
     @Column(name = "is_active", nullable = false)

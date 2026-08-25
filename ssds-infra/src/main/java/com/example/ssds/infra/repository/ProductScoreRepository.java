@@ -48,7 +48,7 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
                         SELECT s FROM ProductScore s
                         JOIN FETCH s.product p
                         WHERE s.period = :period
-                          AND CAST(s.sceneType AS string) = :sceneType
+                          AND s.sceneType = CAST(:sceneType AS string)
                         ORDER BY s.finalScore DESC
                         """)
         List<ProductScore> findTopByPeriodAndSceneType(
