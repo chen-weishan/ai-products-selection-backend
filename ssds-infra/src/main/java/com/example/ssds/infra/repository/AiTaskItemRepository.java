@@ -1,6 +1,7 @@
 package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.AiTaskType;
+import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.AiTaskItem;
 import java.util.List;
@@ -17,9 +18,9 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */
-    List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskStatus status);
+    List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
-    long countByTaskIdAndStatus(Long taskId, TaskStatus status);
+    long countByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
     @Query("""
             select distinct i.product.id
