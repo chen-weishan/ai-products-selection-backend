@@ -7,6 +7,7 @@ import com.example.ssds.api.product.dto.ProductBatchAnalyzeRequest;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeResponse;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.AiTask;
@@ -107,7 +108,7 @@ public class ProductAnalysisQueueService {
                 .map(product -> AiTaskItem.builder()
                         .task(task)
                         .product(product)
-                        .status(TaskStatus.PENDING)
+                        .status(TaskItemStatus.PENDING)
                         .build())
                 .toList());
 
