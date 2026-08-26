@@ -68,6 +68,7 @@ public class ProductCommandService {
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
+    private final ProductSourcingCandidateService sourcingCandidateService;
 
     public ProductCommandService(
             ProductRepository productRepository,
@@ -76,7 +77,8 @@ public class ProductCommandService {
             AuditLogRepository auditLogRepository,
             CategoryRepository categoryRepository,
             SupplierRepository supplierRepository,
-            TrendKeywordRepository trendKeywordRepository
+            TrendKeywordRepository trendKeywordRepository,
+            ProductSourcingCandidateService sourcingCandidateService
     ) {
         this.productRepository = productRepository;
         this.sourcingCandidateRepository = sourcingCandidateRepository;
@@ -85,6 +87,7 @@ public class ProductCommandService {
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
+        this.sourcingCandidateService = sourcingCandidateService;
     }
 
     /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
@@ -148,6 +151,7 @@ public class ProductCommandService {
         }
 
         Product savedProduct = productRepository.saveAndFlush(product);
+        sourcingCandidateService.synchronize(savedProduct);
         return new ProductCreateResponse(
                 toResponse(savedProduct),
                 warnings
@@ -172,7 +176,8 @@ public class ProductCommandService {
         TrackType trackType = request.trackType() == null
                 ? product.getTrackType()
                 : request.trackType();
-        SourcingStatus sourcingStatus = resolveSourcingStatus(
+        SourcingStatus sourcingStatus = resolveSourcingStatusForUpdate(
+                product,
                 trackType,
                 request.sourcingStatus()
         );
@@ -221,6 +226,7 @@ public class ProductCommandService {
         }
 
         Product savedProduct = productRepository.saveAndFlush(product);
+        sourcingCandidateService.synchronize(savedProduct);
         return new ProductUpdateResponse(
                 toResponse(savedProduct),
                 warnings
@@ -252,6 +258,9 @@ public class ProductCommandService {
 
         products.forEach(product -> product.setCategory(category));
         productRepository.saveAllAndFlush(products);
+        products.stream()
+                .filter(product -> product.getTrackType() == TrackType.B)
+                .forEach(sourcingCandidateService::synchronize);
 
         return new ProductBatchCategoryResponse(
                 category.getId(),
@@ -273,6 +282,8 @@ public class ProductCommandService {
                 .action("DELETE")
                 .entityType("Product")
                 .entityId(productId)
+                .beforeJson("{\"deleted\":false}")
+                .afterJson("{\"deleted\":true}")
                 .ip(sourceIp)
                 .build());
     }
@@ -439,6 +450,24 @@ public class ProductCommandService {
             return SourcingStatus.PENDING;
         }
         return sourcingStatus;
+    }
+
+    private SourcingStatus resolveSourcingStatusForUpdate(
+            Product product,
+            TrackType targetTrackType,
+            SourcingStatus requestedStatus
+    ) {
+        if (targetTrackType == TrackType.A) {
+            return null;
+        }
+        if (requestedStatus != null) {
+            return requestedStatus;
+        }
+        if (product.getTrackType() == TrackType.B
+                && product.getSourcingStatus() != null) {
+            return product.getSourcingStatus();
+        }
+        return SourcingStatus.PENDING;
     }
 
     /**

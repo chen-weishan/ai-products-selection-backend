@@ -6,11 +6,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
 /** 稽核紀錄（規格書 §7.2 audit_log）。 */
 @Repository
-public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
+        JpaSpecificationExecutor<AuditLog> {
+
+    @Override
+    @EntityGraph(attributePaths = {"user"})
+    Page<AuditLog> findAll(Specification<AuditLog> specification, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
     Page<AuditLog> findByEntityTypeAndEntityIdOrderByCreatedAtDesc(

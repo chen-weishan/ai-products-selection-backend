@@ -103,11 +103,19 @@ public class SourcingCandidate extends BaseAuditEntity {
         if (product == null) {
             return;
         }
+        SourcingStatus currentStatus = product.getSourcingStatus();
+        boolean automaticallyManaged = currentStatus == SourcingStatus.PENDING
+                || currentStatus == SourcingStatus.URGENT
+                || currentStatus == SourcingStatus.SOURCING;
+        if (!automaticallyManaged) {
+            return;
+        }
         if (timeGapDays < 0) {
             product.setSourcingStatus(SourcingStatus.REJECTED);
-        } else if (timeGapDays <= FEASIBLE_GAP_DAYS
-                && product.getSourcingStatus() == SourcingStatus.PENDING) {
+        } else if (timeGapDays <= FEASIBLE_GAP_DAYS) {
             product.setSourcingStatus(SourcingStatus.URGENT);
+        } else {
+            product.setSourcingStatus(SourcingStatus.SOURCING);
         }
     }
 

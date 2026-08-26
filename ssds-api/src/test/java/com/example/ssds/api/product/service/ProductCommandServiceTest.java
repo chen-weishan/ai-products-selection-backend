@@ -55,6 +55,7 @@ class ProductCommandServiceTest {
     private AuditLogRepository auditLogRepository;
     private CategoryRepository categoryRepository;
     private TrendKeywordRepository keywordRepository;
+    private ProductSourcingCandidateService sourcingCandidateService;
     private ProductCommandService service;
     private Category category;
     private AppUser createActor;
@@ -69,6 +70,7 @@ class ProductCommandServiceTest {
         categoryRepository = mock(CategoryRepository.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         keywordRepository = mock(TrendKeywordRepository.class);
+        sourcingCandidateService = mock(ProductSourcingCandidateService.class);
 
         service = new ProductCommandService(
                 productRepository,
@@ -77,7 +79,8 @@ class ProductCommandServiceTest {
                 auditLogRepository,
                 categoryRepository,
                 supplierRepository,
-                keywordRepository
+                keywordRepository,
+                sourcingCandidateService
         );
 
         category = Category.builder()
@@ -330,7 +333,7 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    void updateWithoutTrackTypeKeepsExistingTrackB() {
+    void updateWithoutSourcingStatusKeepsExistingTrackBStatus() {
         Product product = existingProduct(TrackType.B, SourcingStatus.SOURCING);
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
 
@@ -340,7 +343,7 @@ class ProductCommandServiceTest {
         );
 
         assertEquals(TrackType.B, response.product().trackType());
-        assertEquals(SourcingStatus.PENDING, response.product().sourcingStatus());
+        assertEquals(SourcingStatus.SOURCING, response.product().sourcingStatus());
     }
 
     @Test
@@ -447,6 +450,8 @@ class ProductCommandServiceTest {
         assertEquals(2, response.updatedCount());
         assertEquals(Set.of(50L, 51L), response.productIds());
         assertEquals(targetCategory, first.getCategory());
+        verify(sourcingCandidateService, never()).synchronize(first);
+        verify(sourcingCandidateService).synchronize(second);
         assertEquals(targetCategory, second.getCategory());
         assertEquals(ProductStatus.LISTED, first.getStatus());
         assertEquals(ProductStatus.WATCHING, second.getStatus());

@@ -41,7 +41,7 @@ public class ProductListDao {
             Map.entry("status", "p.status"),
             Map.entry("updatedAt", "p.updated_at"));
 
-    private static final String FROM_SQL = """
+    static final String FROM_SQL = """
             FROM product p
             JOIN category c
               ON c.id = p.category_id
@@ -55,6 +55,8 @@ public class ProductListDao {
                        ps.calculated_at
                 FROM product_score ps
                 WHERE ps.product_id = p.id
+                  AND ps.is_primary = TRUE
+                  AND ps.is_active = TRUE
                 ORDER BY ps.calculated_at DESC, ps.id DESC
                 LIMIT 1
             ) latest_score ON TRUE
