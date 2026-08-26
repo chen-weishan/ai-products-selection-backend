@@ -1,5 +1,6 @@
 package com.example.ssds.infra.entity;
 
+import com.example.ssds.core.domain.ReviewRiskTopic;
 import com.example.ssds.core.domain.Sentiment;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -36,9 +37,10 @@ public class ReviewAnalysis {
     @Column(nullable = false, length = 16)
     private Sentiment sentiment;
 
-    /** v2.0：風險主題分類（品質／食安／物流破損…），逗號分隔。 */
-    @Column(length = 200)
-    private String aspects;
+    /** v3.0：僅負評有值，且限定為 ReviewRiskAgent 的五種正式主題。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "risk_topic", length = 24)
+    private ReviewRiskTopic riskTopic;
 
     @Column(name = "key_phrase", length = 50)
     private String keyPhrase;
@@ -46,6 +48,9 @@ public class ReviewAnalysis {
     /** 產生此分析的模型 ID，換模型後可回溯比較品質。 */
     @Column(length = 80)
     private String model;
+
+    @Column(name = "prompt_version", nullable = false, length = 20)
+    private String promptVersion;
 
     @Column(name = "analyzed_at", nullable = false)
     @Builder.Default

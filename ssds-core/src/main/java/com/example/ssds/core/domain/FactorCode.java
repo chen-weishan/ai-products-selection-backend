@@ -8,17 +8,21 @@ package com.example.ssds.core.domain;
  * 但「負評集中在食安」這種狀況不能因為調低評論權重就被放行。
  *
  * <p>maxPenalty 只對扣分因子有意義，加分因子固定為 0。
+ *
+ * <p>值域為 v3.0 §7.2.5／§7.2.6 的六個加分因子加三個扣分因子。
+ * v2.0 的 {@code HEAT_SLOPE} 與 {@code CONVERSION} 於 v3.0 更名為
+ * {@code TREND} 與 {@code CVR}；{@code HEAT_VOLUME} 已由加權因子降級為
+ * 門檻條件（§5.2.1-a），該資訊改由 {@code heat_composite_daily.volume_below_floor}
+ * 承載，不再是因子。資料庫端的 CHECK 由 V17 一併收斂，舊值寫不進去。
  */
 public enum FactorCode {
 
     /** 社群熱度斜率，7 日與 30 日雙窗口 */
-    HEAT_SLOPE(false, 0),
-    /** 熱度絕對量級，防止「3 則變 9 則」被誤判為爆款 */
-    HEAT_VOLUME(false, 0),
+    TREND(false, 0),
     /** 毛利率＝（售價－成本）／售價，僅 A 軌 */
     MARGIN(false, 0),
     /** 歷史轉換率，同品類歷史開團表現，僅 A 軌 */
-    CONVERSION(false, 0),
+    CVR(false, 0),
     /** 價格帶適配度，對照主力客群價格敏感區間 */
     PRICE_FIT(false, 0),
     /** 節慶時間窗，時間窗函數而非常數（FR-17-1） */

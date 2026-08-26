@@ -93,15 +93,18 @@ INSERT INTO category (id, parent_id, name, sort_order) VALUES
 -- 生鮮冷凍多為國產），此處取該品類的代表值。
 -- AC-17-3：同一份資料同時供 FR-16 時效落差使用，不另外維護第二份。
 
-INSERT INTO category_lead_time (category_id, lead_time_days) VALUES
-  (10, 45),   -- 零食：以進口為主
-  (11, 45),   -- 飲品：以進口為主
-  (12, 21),   -- 生鮮冷凍：國產為主
-  (20, 30),   -- 清潔用品
-  (21, 30),   -- 紙製品
-  (30, 35),   -- 保養品
-  (31, 35),   -- 彩妝
-  (40, 30);   -- 小家電
+-- updated_by／updated_at 為 V17 新增的稽核欄位：這份前置期同時決定節慶
+-- 時間窗與時效落差，被誰改過必須留痕。統一掛在 DATA_ADMIN（黃詩涵，id=3）。
+
+INSERT INTO category_lead_time (category_id, lead_time_days, updated_by, updated_at) VALUES
+  (10, 45, 3, now() - interval '30 days'),   -- 零食：以進口為主
+  (11, 45, 3, now() - interval '30 days'),   -- 飲品：以進口為主
+  (12, 21, 3, now() - interval '30 days'),   -- 生鮮冷凍：國產為主
+  (20, 30, 3, now() - interval '30 days'),   -- 清潔用品
+  (21, 30, 3, now() - interval '30 days'),   -- 紙製品
+  (30, 35, 3, now() - interval '30 days'),   -- 保養品
+  (31, 35, 3, now() - interval '30 days'),   -- 彩妝
+  (40, 30, 3, now() - interval '30 days');   -- 小家電
 
 
 -- ===================================================================
@@ -129,12 +132,70 @@ INSERT INTO supplier (id, name, contact, phone, note) VALUES
 -- Facebook／TikTok／小紅書不建列：附錄 C 已判定無合法程式化管道，
 -- 改由 MANUAL 涵蓋。
 
+-- granularity（V17 新增）：§FR-06 明訂 Instagram「僅做品類級」，
+-- 合成時要套 0.5 粒度折扣（§5.3.2）。其餘三個來源都是關鍵字級。
+-- consecutive_probe_failures 給 INSTAGRAM 填 1：它已是 DEGRADED，
+-- 再失敗一次就會轉 UNAVAILABLE，這是「快要掉下去」的狀態，比 0 有測試價值。
+
 INSERT INTO heat_source
-    (id, source_code, adapter_type, composite_weight, availability, quota_used, quota_limit, last_fetched_at, enabled) VALUES
-  (1, 'THREADS',       'REST',   0.350, 'AVAILABLE',  1420, 5000, now() - interval '3 hours',  TRUE),
-  (2, 'GOOGLE_TRENDS', 'REST',   0.300, 'AVAILABLE',   680, 2000, now() - interval '5 hours',  TRUE),
-  (3, 'INSTAGRAM',     'REST',   0.150, 'DEGRADED',    195,  200, now() - interval '2 days',   TRUE),
-  (4, 'MANUAL',        'MANUAL', 0.200, 'AVAILABLE',     0, NULL, now() - interval '1 hours',  TRUE);
+    (id, source_code, adapter_type, granularity, composite_weight, availability,
+     consecutive_probe_failures, quota_used, quota_limit, last_probed_at, last_fetched_at, enabled) VALUES
+  (1, 'THREADS',       'REST',   'KEYWORD',  0.350, 'AVAILABLE', 0, 1420, 5000, now() - interval '10 minutes', now() - interval '3 hours',  TRUE),
+  (2, 'GOOGLE_TRENDS', 'REST',   'KEYWORD',  0.300, 'AVAILABLE', 0,  680, 2000, now() - interval '10 minutes', now() - interval '5 hours',  TRUE),
+  (3, 'INSTAGRAM',     'REST',   'CATEGORY', 0.150, 'DEGRADED',  1,  195,  200, now() - interval '10 minutes', now() - interval '2 days',   TRUE),
+  (4, 'MANUAL',        'MANUAL', 'KEYWORD',  0.200, 'AVAILABLE', 0,    0, NULL, NULL,                          now() - interval '1 hours',  TRUE);
+
+
+-- ===================================================================
+-- 客群分佈（規格書 §7.2.2 audience_segment／category_audience_mix）
+-- ===================================================================
+-- v3.0 新增的兩張表，是 PRICE_FIT 因子唯一的資料來源（§5.2.4）。
+-- 內容一律為去識別化的統計，不含任何個人資料。
+--
+-- 價格帶刻意讓三個客群互有重疊：現實中的客群不會在某個價位上一刀切開，
+-- 完全不重疊的話 PRICE_FIT 會退化成「落在哪一段」的查表，測不出加權行為。
+
+INSERT INTO audience_segment (id, audience_code, name, price_min, price_max, note) VALUES
+  (1, 'MAIN',            '主力客群',   150.00,  600.00, '30–45 歲家庭採購者，本店成交量最大宗'),
+  (2, 'PRICE_SENSITIVE', '價格敏感',    49.00,  280.00, '以促銷與團購價驅動，客單價低但回購頻繁'),
+  (3, 'PREMIUM',         '高價值客群', 500.00, 2500.00, '重視品質與品牌，對價格不敏感');
+
+-- 同一個 category 的 share 加總必須為 1.000（§7.2.2）。
+-- 這條由應用層驗證，單列 CHECK 看不到同組其他列，所以這裡的每一組
+-- 都刻意加總為 1.000，讓驗證邏輯有正確樣本可以比對。
+INSERT INTO category_audience_mix (category_id, audience_id, share) VALUES
+  (10, 1, 0.500), (10, 2, 0.400), (10, 3, 0.100),   -- 零食：低單價，價格敏感佔比高
+  (11, 1, 0.550), (11, 2, 0.350), (11, 3, 0.100),   -- 飲品
+  (12, 1, 0.600), (12, 2, 0.200), (12, 3, 0.200),   -- 生鮮冷凍：冷鏈成本高，價格敏感佔比低
+  (20, 1, 0.500), (20, 2, 0.450), (20, 3, 0.050),   -- 清潔用品：民生必需，比價明顯
+  (21, 1, 0.450), (21, 2, 0.500), (21, 3, 0.050),   -- 紙製品：整箱團購，最看價格
+  (30, 1, 0.400), (30, 2, 0.150), (30, 3, 0.450),   -- 保養品：高價值客群佔比最高
+  (31, 1, 0.450), (31, 2, 0.250), (31, 3, 0.300),   -- 彩妝
+  (40, 1, 0.450), (40, 2, 0.150), (40, 3, 0.400);   -- 小家電：單價高
+
+
+-- ===================================================================
+-- 扣分規則與示警門檻（規格書 §7.2.5 risk_rule、FR-10-1）
+-- ===================================================================
+-- v3.0 新增的表。三類扣分規則不可停用（應用層強制），此處全部 enabled。
+-- category_id 為 NULL 者是全域預設；非 NULL 者是該品類的覆寫值。
+--
+-- 門檻數值取自 §FR-10-1 與 §5.2.2 的內文，不是自己編的：
+--   負評率 0.15、7 日斜率 −0.40、扣分小計上限 40、信心 60。
+
+INSERT INTO risk_rule (id, rule_code, category_id, threshold_json, max_penalty, enabled, updated_by) VALUES
+  (1, 'REVIEW_RISK',    NULL, '{"negativeRateThreshold": 0.15, "minSampleSize": 5}'::jsonb,           15.0, TRUE, 4),
+  (2, 'LOGISTICS_RISK', NULL, '{"conditions": ["CHILLED", "FROZEN", "FRAGILE", "MELTABLE", "OVERSIZED"]}'::jsonb, 12.0, TRUE, 4),
+  (3, 'INVENTORY_RISK', NULL, '{"moqThreshold": 300, "shelfLifeDaysThreshold": 30}'::jsonb,           13.0, TRUE, 4),
+  -- 生鮮冷凍的品類覆寫：效期本來就短，用全域的 30 天門檻會讓整個品類都被扣滿分
+  (4, 'INVENTORY_RISK',  12,  '{"moqThreshold": 200, "shelfLifeDaysThreshold": 10}'::jsonb,           13.0, TRUE, 4),
+  -- 以下為示警門檻，不進扣分，故 max_penalty 為 NULL
+  (5, 'HEAT_CRASH',              NULL, '{"slope7dThreshold": -0.40}'::jsonb,          NULL, TRUE, 4),
+  (6, 'HEAT_SURGE',              NULL, '{"slope7dThreshold": 0.60}'::jsonb,           NULL, TRUE, 4),
+  (7, 'PENALTY_CAP',             NULL, '{"penaltySubtotalThreshold": 40}'::jsonb,     NULL, TRUE, 4),
+  (8, 'SEASON_MISMATCH',         NULL, '{"tempDeviationThreshold": 8.0}'::jsonb,      NULL, TRUE, 4),
+  (9, 'FESTIVAL_WINDOW_CLOSING', NULL, '{"daysBeforeLeadTimeCutoff": 7}'::jsonb,      NULL, TRUE, 4),
+  (10, 'LOW_CONFIDENCE',         NULL, '{"confidenceThreshold": 60}'::jsonb,          NULL, TRUE, 4);
 
 
 -- ===================================================================
