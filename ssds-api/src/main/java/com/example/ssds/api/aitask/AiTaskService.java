@@ -34,10 +34,12 @@ public class AiTaskService {
     @Transactional
     public AiTaskResponse create(CreateAiTaskRequest request) {
         if (request.taskType() != AiTaskType.SCENE_CLASSIFY
-                && request.taskType() != AiTaskType.REVIEW_RISK) {
+                && request.taskType() != AiTaskType.REVIEW_RISK
+                && request.taskType() != AiTaskType.SELLING_POINT
+                && request.taskType() != AiTaskType.RECOMMENDATION) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "目前 A 軌只開放 SCENE_CLASSIFY 與 REVIEW_RISK 任務");
+                    "目前 A 軌只開放 SCENE_CLASSIFY、REVIEW_RISK、SELLING_POINT 與 RECOMMENDATION 任務");
         }
         List<Long> distinctIds = request.productIds().stream().distinct().toList();
         List<Product> products = productRepository.findAllById(distinctIds);

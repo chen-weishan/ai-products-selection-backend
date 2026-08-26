@@ -1,8 +1,9 @@
 package com.example.ssds.api.aitask;
 
+import com.example.ssds.api.insight.ProductInsightService;
+import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.scene.SceneClassificationService;
-import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
@@ -20,16 +21,22 @@ public class AiTaskWorker {
     private final AiTaskItemRepository itemRepository;
     private final SceneClassificationService sceneClassificationService;
     private final ReviewRiskService reviewRiskService;
+    private final ProductInsightService productInsightService;
+    private final RecommendationService recommendationService;
 
     public AiTaskWorker(
             AiTaskRepository taskRepository,
             AiTaskItemRepository itemRepository,
             SceneClassificationService sceneClassificationService,
-            ReviewRiskService reviewRiskService) {
+            ReviewRiskService reviewRiskService,
+            ProductInsightService productInsightService,
+            RecommendationService recommendationService) {
         this.taskRepository = taskRepository;
         this.itemRepository = itemRepository;
         this.sceneClassificationService = sceneClassificationService;
         this.reviewRiskService = reviewRiskService;
+        this.productInsightService = productInsightService;
+        this.recommendationService = recommendationService;
     }
 
     @Async
@@ -45,6 +52,7 @@ public class AiTaskWorker {
         for (AiTaskItem item : itemRepository.findByTaskId(task.getId())) {
             Instant started = Instant.now();
             try {
+                String warning = null;
                 switch (task.getTaskType()) {
                     case SCENE_CLASSIFY -> sceneClassificationService.classify(
                             item.getProduct().getId(), event.forceRefresh());
@@ -52,16 +60,22 @@ public class AiTaskWorker {
                         var response = reviewRiskService.analyze(
                                 item.getProduct().getId(), event.forceRefresh());
                         if (response.fallbackApplied()) {
-                            item.setErrorMessage("評論分析未完成");
+                            warning = "評論分析未完成";
                         }
                     }
+                    case SELLING_POINT -> {
+                        var response = productInsightService.analyze(
+                                item.getProduct().getId(), event.forceRefresh());
+                        if (!response.analysisCompleted()) {
+                            warning = response.statusMessage();
+                        }
+                    }
+                    case RECOMMENDATION -> recommendationService.recommend(
+                            item.getProduct().getId(), event.forceRefresh());
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
                 item.setStatus(TaskItemStatus.SUCCEEDED);
-                if (task.getTaskType() != AiTaskType.REVIEW_RISK
-                        || item.getErrorMessage() == null) {
-                    item.setErrorMessage(null);
-                }
+                item.setErrorMessage(warning);
                 successes++;
             } catch (RuntimeException exception) {
                 item.setStatus(TaskItemStatus.FAILED);

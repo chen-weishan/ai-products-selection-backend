@@ -33,6 +33,11 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
     @EntityGraph(attributePaths = {"factors", "weightVersion"})
     Optional<ProductScore> findFirstByProductIdOrderByCalculatedAtDesc(Long productId);
 
+    /** Agent 輸入只採用最新的主情境現行分數，避免把次要情境扣分重複送出。 */
+    @EntityGraph(attributePaths = {"factors"})
+    Optional<ProductScore> findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(
+            Long productId);
+
     /** FR-05 分數走勢：同一品項的歷史分數。 */
     List<ProductScore> findByProductIdOrderByCalculatedAtDesc(Long productId);
 

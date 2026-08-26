@@ -84,4 +84,42 @@ class AiTaskServiceTest {
         assertEquals(AiTaskType.REVIEW_RISK, response.taskType());
         verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
     }
+
+    @Test
+    void acceptsCombinedProductInsightTaskForTrackAProduct() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(702L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.SELLING_POINT, List.of(101L), null));
+
+        assertEquals(AiTaskType.SELLING_POINT, response.taskType());
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void acceptsRecommendationTaskForTrackAProduct() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(703L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.RECOMMENDATION, List.of(101L), null));
+
+        assertEquals(AiTaskType.RECOMMENDATION, response.taskType());
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
 }

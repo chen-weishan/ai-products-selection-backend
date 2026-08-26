@@ -44,6 +44,9 @@ public class AiInsight {
     @Column(length = 80)
     private String model;
 
+    @Column(name = "model_alias", length = 32)
+    private String modelAlias;
+
     /** Prompt 模板版本，換模板後可比對輸出品質差異（§6.4）。 */
     @Column(name = "prompt_version", length = 20)
     private String promptVersion;
@@ -58,6 +61,15 @@ public class AiInsight {
 
     @Column(name = "completion_tokens")
     private Integer completionTokens;
+
+    /** 同一次合併輸出的請求只在主要 SELLING_POINT 列計數，避免雙算配額。 */
+    @Column(name = "request_count", nullable = false)
+    @Builder.Default
+    private short requestCount = 0;
+
+    @Column(name = "from_cache", nullable = false)
+    @Builder.Default
+    private boolean fromCache = false;
 
     /** §3.2 模型策略為一律使用免費模型，故正常為 0；保留欄位以便換模型後計費。 */
     @Column(name = "cost_usd", nullable = false, precision = 8, scale = 5)

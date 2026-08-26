@@ -3,6 +3,9 @@ package com.example.ssds.api.aitask;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
+import com.example.ssds.api.insight.ProductInsightService;
+import com.example.ssds.api.insight.dto.ProductInsightResponse;
+import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
@@ -22,6 +25,8 @@ class AiTaskWorkerTest {
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
         SceneClassificationService sceneService = mock(SceneClassificationService.class);
         ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
         Product product = Product.builder().id(101L).build();
         AiTask task = AiTask.builder()
                 .id(700L).taskType(AiTaskType.SCENE_CLASSIFY).totalCount(1).build();
@@ -29,7 +34,8 @@ class AiTaskWorkerTest {
         when(taskRepository.findById(700L)).thenReturn(Optional.of(task));
         when(itemRepository.findByTaskId(700L)).thenReturn(List.of(item));
         AiTaskWorker worker = new AiTaskWorker(
-                taskRepository, itemRepository, sceneService, reviewRiskService);
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService);
 
         worker.run(new AiTaskCreatedEvent(700L, false));
 
@@ -46,6 +52,8 @@ class AiTaskWorkerTest {
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
         SceneClassificationService sceneService = mock(SceneClassificationService.class);
         ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
         ReviewRiskResponse fallback = mock(ReviewRiskResponse.class);
         when(fallback.fallbackApplied()).thenReturn(true);
         when(reviewRiskService.analyze(101L, true)).thenReturn(fallback);
@@ -56,12 +64,67 @@ class AiTaskWorkerTest {
         when(taskRepository.findById(702L)).thenReturn(Optional.of(task));
         when(itemRepository.findByTaskId(702L)).thenReturn(List.of(item));
         AiTaskWorker worker = new AiTaskWorker(
-                taskRepository, itemRepository, sceneService, reviewRiskService);
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService);
 
         worker.run(new AiTaskCreatedEvent(702L, true));
 
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals("評論分析未完成", item.getErrorMessage());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void productInsightFallbackKeepsTaskSuccessfulAndAddsIncompleteMarker() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        ProductInsightResponse fallback = mock(ProductInsightResponse.class);
+        when(fallback.analysisCompleted()).thenReturn(false);
+        when(fallback.statusMessage()).thenReturn("賣點與風險分析未完成");
+        when(productInsightService.analyze(101L, true)).thenReturn(fallback);
+        Product product = Product.builder().id(101L).build();
+        AiTask task = AiTask.builder()
+                .id(704L).taskType(AiTaskType.SELLING_POINT).totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(705L).task(task).product(product).build();
+        when(taskRepository.findById(704L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(704L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(704L, true));
+
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals("賣點與風險分析未完成", item.getErrorMessage());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void recommendationTaskInvokesAgentFourAndCompletes() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        Product product = Product.builder().id(101L).build();
+        AiTask task = AiTask.builder()
+                .id(706L).taskType(AiTaskType.RECOMMENDATION).totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(707L).task(task).product(product).build();
+        when(taskRepository.findById(706L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(706L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(706L, true));
+
+        verify(recommendationService).recommend(101L, true);
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
     }
 }

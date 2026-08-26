@@ -2,6 +2,11 @@ package com.example.ssds.ai.prompt;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.example.ssds.ai.model.ProductInsightInput;
+import com.example.ssds.ai.model.RecommendationInput;
+import com.example.ssds.ai.schema.RecommendationResponseParserTest;
+import com.example.ssds.core.domain.Season;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class PromptSanitizerTest {
@@ -21,5 +26,31 @@ class PromptSanitizerTest {
         assertTrue(sanitized.contains("[PHONE]"));
         assertTrue(sanitized.contains("[ORDER]"));
         assertTrue(sanitized.contains("[ADDRESS]"));
+    }
+
+    @Test
+    void productInsightUsesWhitelistAndSanitizesEveryReview() {
+        ProductInsightInput input = new ProductInsightInput(
+                101L,
+                new ProductInsightInput.ProductBasic("商品", "零食", Season.ALL, "常溫"),
+                List.of(new ProductInsightInput.ReviewText(
+                        1L, "請聯絡 0912-345-678 或 buyer@example.com")),
+                List.of());
+
+        ProductInsightInput sanitized = sanitizer.sanitizeProductInsight(input);
+
+        assertFalse(sanitized.reviews().getFirst().content().contains("0912-345-678"));
+        assertFalse(sanitized.reviews().getFirst().content().contains("buyer@example.com"));
+        assertEquals("商品", sanitized.product().name());
+    }
+
+    @Test
+    void recommendationRetainsOnlyItsExplicitWhitelistedShape() {
+        RecommendationInput sanitized = sanitizer.sanitizeRecommendation(
+                RecommendationResponseParserTest.input());
+
+        assertEquals(6, sanitized.factors().size());
+        assertEquals(List.of(0, 200, 300), sanitized.allowedQuantities());
+        assertEquals("MID_AUTUMN", sanitized.festival().festivalCode());
     }
 }
