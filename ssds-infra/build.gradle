@@ -19,10 +19,4 @@ dependencies {
 	runtimeOnly libs.postgresql
 
 	testImplementation libs.test.data.jpa
-
-	// Testcontainers：MigrationVerificationTest 用它起一個乾淨的 PostgreSQL，
-	// 從 V1 一路建到最新，確認 migration 不必依賴共用資料庫就能驗證。
-	// 需要本機有執行中的 Docker Desktop。
-	testImplementation libs.test.testcontainers.postgresql
-	testImplementation libs.test.testcontainers.junit
 }
