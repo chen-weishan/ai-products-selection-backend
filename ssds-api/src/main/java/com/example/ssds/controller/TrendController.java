@@ -32,13 +32,13 @@ public class TrendController {
 
 // 取得單一關鍵字的 90 天歷史熱度折線圖
     @GetMapping("/{keywordId}/chart")
-    public List<TrendChartProjection> getTrendChart(@PathVariable Long keywordId) {
+    public List<TrendChartProjection> getTrendChart(@PathVariable("keyworldId") Long keywordId) {
         return trendService.getTrendChart(keywordId);
     }
 
 // 取得單一關鍵字趨勢明細
     @GetMapping("/{keywordId}/detail")
-    public TrendDetailResponse getTrendDetail(@PathVariable Long keywordId) {
+    public TrendDetailResponse getTrendDetail(@PathVariable("keyworldId") Long keywordId) {
         return trendService.getTrendDetail(keywordId);
     }
 }

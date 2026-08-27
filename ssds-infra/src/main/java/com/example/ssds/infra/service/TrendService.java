@@ -52,7 +52,7 @@ public class TrendService {
         String keywordName = trendKeywordRepository.findById(keywordId)
                 .map(tk -> tk.getKeyword())
                 .orElseThrow(() -> new IllegalArgumentException("找不到關鍵字 id=" + keywordId));
-        response.setKeyword("keywordName"); 
+        response.setKeyword(keywordName); 
 
          // 2. 查各來源明細（含各自 slope7d/slope30d，AC-06-1）
         List<TrendSourceDetailProjection> rawDetails =
