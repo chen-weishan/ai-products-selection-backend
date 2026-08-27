@@ -90,4 +90,11 @@ public class GlobalExceptionHandler {
         ApiError error = new ApiError(code.name(), message, fieldErrors);
         return ResponseEntity.status(code.getHttpStatus()).body(ApiResponse.failure(error));
     }
+
+    /** 業務層拋出的參數不合法（找不到資源、格式不符），對應規格書的 400/404。 */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("參數不合法: {}", e.getMessage());
+        return toResponse(ErrorCode.VALIDATION_FAILED, e.getMessage(), null);
+    }
 }

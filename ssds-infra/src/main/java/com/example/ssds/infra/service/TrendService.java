@@ -8,33 +8,31 @@ import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 // 趨勢分析商業邏輯層
-
 @Service
 public class TrendService {
 
     private final TrendKeywordRepository trendKeywordRepository;
     private final TrendQueryDao trendQueryDao;
-    private final ObjectMapper objectMapper;
+    
+    // 改為靜態常數，整個類別共用一個，效能好且不需要 Spring 注入
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public TrendService(TrendKeywordRepository trendKeywordRepository,
-                         TrendQueryDao trendQueryDao,
-                         ObjectMapper objectMapper) {
+                        TrendQueryDao trendQueryDao) {
         this.trendKeywordRepository = trendKeywordRepository;
         this.trendQueryDao = trendQueryDao;
-        this.objectMapper = objectMapper;
     }
-
     // 取得所有趨勢關鍵字的 7日/30日 斜率與 AI 輔助訊號
     @Transactional(readOnly = true)
     public List<TrendSignalProjection> getAllTrendSignals() {
@@ -56,7 +54,7 @@ public class TrendService {
                 .orElseThrow(() -> new IllegalArgumentException("關鍵字 id=" + keywordId + " 尚無熱度資料"));
 
         List<SourceBreakdownRow> sources = trendQueryDao.findSourceBreakdown(keywordId, to);
-        Map<String, BigDecimal> appliedWeights = parseAppliedWeights(snapshot.appliedWeightsJson());
+        Map<String, BigDecimal> appliedWeights = parseAppliedWeights(snapshot.appliedWeights());
 
         TrendKeywordDetailResponse response = new TrendKeywordDetailResponse();
         response.setKeywordId(keywordId);
@@ -93,10 +91,13 @@ public class TrendService {
         throw new IllegalArgumentException("不支援的 range 格式: " + range);
     }
 
-    @SuppressWarnings("unchecked")
+    // 修正 2：使用 TypeReference 確保正確轉型為 BigDecimal，並增加防呆處理
     private Map<String, BigDecimal> parseAppliedWeights(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
         try {
-            return objectMapper.readValue(json, Map.class);
+            return objectMapper.readValue(json, new TypeReference<Map<String, BigDecimal>>() {});
         } catch (Exception e) {
             throw new IllegalStateException("applied_weights JSON 解析失敗", e);
         }

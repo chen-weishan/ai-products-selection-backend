@@ -57,19 +57,25 @@ public class TrendQueryDao {
 
         /** 單一關鍵字最新一筆合成快照(今日熱度、斜率、階段、實際採用權重)。 */
     public Optional<TrendCompositeSnapshot> findLatestComposite(Long keywordId) {
-        return jdbcClient
-                .sql("""
-                    SELECT composite_value, slope_7d, slope_30d, stage, stage_weeks,
-                            estimated_lifespan_days, applied_weights, divergence_flag
-                    FROM heat_composite_daily
-                    WHERE keyword_id = :keywordId
-                    ORDER BY stat_date DESC
-                    LIMIT 1
-                    """)
-                .param("keywordId", keywordId)
-                .query(TrendCompositeSnapshot.class)
-                .optional();
-    }
+    return jdbcClient
+            .sql("""
+                SELECT composite_value        AS compositeValue,
+                       slope_7d                AS slope7d,
+                       slope_30d               AS slope30d,
+                       stage                   AS stage,
+                       stage_weeks             AS stageWeeks,
+                       estimated_lifespan_days AS estimatedLifespanDays,
+                       applied_weights::text   AS appliedWeights,
+                       divergence_flag         AS divergenceFlag
+                FROM heat_composite_daily
+                WHERE keyword_id = :keywordId
+                ORDER BY stat_date DESC
+                LIMIT 1
+                """)
+            .param("keywordId", keywordId)
+            .query(TrendCompositeSnapshot.class)
+            .optional();
+}
 
     /** 各來源明細：今日百分位、可用性、粒度，權重直接取自 applied_weights JSON。 */
     public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId, LocalDate asOf) {
@@ -90,12 +96,14 @@ public class TrendQueryDao {
                      FROM heat_reading hr
                      WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf - INTERVAL '30 days'
                  )
-                 SELECT hs.source_code, hs.granularity, hs.availability,
-                        t.today_pct AS percentile_within_source,
+                 SELECT hs.source_code                AS sourceCode,
+                        hs.granularity                 AS granularity,
+                        hs.availability                AS availability,
+                        t.today_pct                    AS percentileWithinSource,
                         (t.today_pct - COALESCE(d7.pct_7d, 0.01))
-                            / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01) AS slope_7d,
+                            / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01)  AS slope7d,
                         (t.today_pct - COALESCE(d30.pct_30d, 0.01))
-                            / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01) AS slope_30d
+                            / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01) AS slope30d
                  FROM Today t
                  JOIN heat_source hs ON hs.id = t.source_id
                  LEFT JOIN D7 d7 ON d7.source_id = t.source_id
