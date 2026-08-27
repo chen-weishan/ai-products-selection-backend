@@ -4,6 +4,8 @@ import com.example.ssds.core.dto.TrendChartProjection;
 import com.example.ssds.core.dto.TrendSignalProjection;
 import com.example.ssds.core.dto.TrendDetailResponse;
 import com.example.ssds.infra.service.TrendService;
+
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,7 +15,7 @@ import java.util.List;
 
 // 趨勢分析 API 介面層
 @RestController
-@RequestMapping("/trends")
+@RequestMapping(value="/trends", produces = MediaType.APPLICATION_JSON_VALUE)
 public class TrendController {
 
     private final TrendService trendService;
