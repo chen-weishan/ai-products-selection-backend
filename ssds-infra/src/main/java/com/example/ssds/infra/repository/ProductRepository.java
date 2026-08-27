@@ -14,7 +14,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import com.example.ssds.core.domain.TrackType;
 
 /**
  * 品項查詢（規格書 §7.2 product、FR-03）。

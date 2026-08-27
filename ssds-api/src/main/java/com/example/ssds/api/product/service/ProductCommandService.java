@@ -1,8 +1,8 @@
 package com.example.ssds.api.product.service;
 
-import com.example.ssds.api.common.error.ApiErrorCode;
-import com.example.ssds.api.common.error.ApiException;
-import com.example.ssds.api.common.response.ApiErrorResponse.FieldError;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -20,6 +20,9 @@ import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -35,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductCommandService {
 
         private static final String DUPLICATE_NAME_WARNING = "同類別已有相同名稱的品項，資料仍已儲存";
+
+        /** §8.1：回應一律以 +08:00 呈現。 */
+        private static final ZoneId DISPLAY_ZONE = ZoneId.of("Asia/Taipei");
 
         private final ProductRepository productRepository;
         private final CategoryRepository categoryRepository;
@@ -153,15 +159,15 @@ public class ProductCommandService {
 
         private Product findProduct(Long productId) {
                 return productRepository.findById(productId)
-                                .orElseThrow(() -> new ApiException(
-                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
                                                 "找不到指定的品項：" + productId));
         }
 
         private Category findCategory(Long categoryId) {
                 return categoryRepository.findById(categoryId)
-                                .orElseThrow(() -> new ApiException(
-                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
                                                 "找不到指定的類別：" + categoryId));
         }
 
@@ -171,8 +177,8 @@ public class ProductCommandService {
                 }
 
                 return supplierRepository.findById(supplierId)
-                                .orElseThrow(() -> new ApiException(
-                                                ApiErrorCode.RESOURCE_NOT_FOUND,
+                                .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
                                                 "找不到指定的供應商：" + supplierId));
         }
 
@@ -186,8 +192,8 @@ public class ProductCommandService {
                 foundKeywords.forEach(keyword -> missingIds.remove(keyword.getId()));
 
                 if (!missingIds.isEmpty()) {
-                        throw new ApiException(
-                                        ApiErrorCode.RESOURCE_NOT_FOUND,
+                        throw new BusinessException(
+                                        ErrorCode.RESOURCE_NOT_FOUND,
                                         "找不到指定的關鍵字：" + missingIds);
                 }
 
@@ -208,8 +214,8 @@ public class ProductCommandService {
                         return;
                 }
 
-                throw new ApiException(
-                                ApiErrorCode.VALIDATION_FAILED,
+                throw new BusinessException(
+                                ErrorCode.VALIDATION_FAILED,
                                 "商品資料驗證失敗",
                                 List.of(new FieldError(
                                                 "suggestedPrice",
@@ -242,8 +248,15 @@ public class ProductCommandService {
                                 product.getLogisticsCondition(),
                                 product.getShelfLifeDays(),
                                 Collections.unmodifiableSet(keywordIds),
-                                product.getCreatedAt(),
-                                product.getUpdatedAt());
+                                toDisplayTime(product.getCreatedAt()),
+                                toDisplayTime(product.getUpdatedAt()));
+        }
+
+        /** §8.1：回應一律以 +08:00 呈現。 */
+        private static OffsetDateTime toDisplayTime(Instant instant) {
+                return instant == null
+                                ? null
+                                : instant.atZone(DISPLAY_ZONE).toOffsetDateTime();
         }
 
         private String normalizeNullable(String value) {
@@ -267,7 +280,7 @@ public class ProductCommandService {
 
         public int batchAssignCategory(List<Long> ids, Long categoryId) {
                 Category category = categoryRepository.findById(categoryId)
-                                .orElseThrow(() -> new ApiException(ApiErrorCode.RESOURCE_NOT_FOUND,
+                                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                                                 "找不到指定的類別：" + categoryId));
                 int count = 0;
                 for (Long id : ids) {

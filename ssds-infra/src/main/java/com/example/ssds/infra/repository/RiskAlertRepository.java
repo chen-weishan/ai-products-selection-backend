@@ -4,10 +4,13 @@ import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.Severity;
 import com.example.ssds.infra.entity.RiskAlert;
 import java.util.List;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -37,4 +40,16 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
 
     /** FR-02 KPI：未處理風險數量（不限嚴重度） */
     long countByStatus(AlertStatus status);
+
+    /**
+     * FR-02 儀表板排行風險指示：取得多個品項的最高嚴重度風險。
+     * 回傳 Map<productId, severity>，僅包含 status = OPEN 的風險。
+     */
+    @Query("""
+            SELECT r.product.id, MAX(r.severity)
+            FROM RiskAlert r
+            WHERE r.product.id IN :productIds AND r.status = com.example.ssds.core.domain.AlertStatus.OPEN
+            GROUP BY r.product.id
+            """)
+    Map<Long, Severity> findMaxSeverityByProductIds(@Param("productIds") List<Long> productIds);
 }

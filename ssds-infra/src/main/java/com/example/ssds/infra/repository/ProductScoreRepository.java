@@ -39,16 +39,30 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
 
         boolean existsByProductIdAndPeriod(Long productId, String period);
 
-        /** FR-02 KPI：A級品項數量 */
-        @Query("SELECT COUNT(s) FROM ProductScore s WHERE s.period = :period AND s.grade = 'A'")
+        /**
+         * FR-02 KPI「A 級主推品項數」。AC-02-6：同一品項可同時上多榜，
+         * 必須以品項去重；且只計 {@code is_active = true} 的最新有效快照（§5.10），
+         * 否則歷史評分會被重複計入。
+         */
+        @Query("""
+                        SELECT COUNT(DISTINCT s.product.id) FROM ProductScore s
+                        WHERE s.period = :period AND s.grade = 'A' AND s.active = true
+                        """)
         long countAGradeByPeriod(@Param("period") String period);
 
-        /** FR-02 四榜排行：依情境取 Top 5 */
+        /** FR-02 空狀態判準：該週期是否已有任何有效評分快照。 */
+        boolean existsByPeriodAndActiveTrue(String period);
+
+        /**
+         * FR-02 四榜排行：依情境取 Top N。
+         * 必須過濾 {@code is_active = true}，否則同品項的歷史快照會重複上榜（§5.10）。
+         */
         @Query("""
                         SELECT s FROM ProductScore s
                         JOIN FETCH s.product p
                         WHERE s.period = :period
                           AND s.sceneType = CAST(:sceneType AS string)
+                          AND s.active = true
                         ORDER BY s.finalScore DESC
                         """)
         List<ProductScore> findTopByPeriodAndSceneType(

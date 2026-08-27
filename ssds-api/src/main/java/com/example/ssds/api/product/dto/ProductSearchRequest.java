@@ -7,7 +7,7 @@ import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 
 /**
- * GET /api/v1/products 的查詢條件。
+ * GET /products 的查詢條件。分頁與排序由 Pageable 提供。
  */
 public record ProductSearchRequest(
         String keyword,
@@ -19,23 +19,6 @@ public record ProductSearchRequest(
         Grade grade,
         BigDecimal minScore,
         BigDecimal maxScore,
-        Boolean hasRisk,
-        Integer page,
-        Integer size,
-        String sort
+        Boolean hasRisk
 ) {
-
-    public int resolvedPage() {
-        return page == null ? 0 : page;
-    }
-
-    public int resolvedSize() {
-        return size == null ? 20 : size;
-    }
-
-    public String resolvedSort() {
-        return sort == null || sort.isBlank()
-                ? "latestScore,desc"
-                : sort.trim();
-    }
 }
