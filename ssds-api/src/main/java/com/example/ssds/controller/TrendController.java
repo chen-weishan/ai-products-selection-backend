@@ -1,7 +1,7 @@
 package com.example.ssds.controller;
 
 import com.example.ssds.core.dto.TrendKeywordDetailResponse;
-import com.example.ssds.core.dto.TrendSignalProjection;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.service.TrendService;
 
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +20,7 @@ public class TrendController {
 
     // 取得所有趨勢訊號
     @GetMapping
-    public List<TrendSignalProjection> getTrends() {
+    public List<TrendSignalRow> getTrends() {
         return trendService.getAllTrendSignals();
     }
 

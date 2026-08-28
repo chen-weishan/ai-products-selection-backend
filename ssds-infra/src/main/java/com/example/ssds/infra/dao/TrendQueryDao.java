@@ -3,6 +3,7 @@ package com.example.ssds.infra.dao;
 import com.example.ssds.infra.dao.projection.SourceBreakdownRow;
 import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -78,40 +79,64 @@ public class TrendQueryDao {
 }
 
     /** 各來源明細：今日百分位、可用性、粒度，權重直接取自 applied_weights JSON。 */
-    public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId, LocalDate asOf) {
+    public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     return jdbcClient
             .sql("""
-                 WITH Today AS (
+                 WITH LatestDate AS (
+                     SELECT MAX(reading_date) AS asof
+                     FROM heat_reading
+                     WHERE keyword_id = :keywordId
+                 ),
+                 Today AS (
                      SELECT hr.source_id, hr.percentile_within_source AS today_pct
-                     FROM heat_reading hr
-                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf
+                     FROM heat_reading hr, LatestDate ld
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = ld.asof
                  ),
                  D7 AS (
                      SELECT hr.source_id, hr.percentile_within_source AS pct_7d
-                     FROM heat_reading hr
-                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf - INTERVAL '7 days'
+                     FROM heat_reading hr, LatestDate ld
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = ld.asof - INTERVAL '7 days'
                  ),
                  D30 AS (
                      SELECT hr.source_id, hr.percentile_within_source AS pct_30d
-                     FROM heat_reading hr
-                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf - INTERVAL '30 days'
+                     FROM heat_reading hr, LatestDate ld
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = ld.asof - INTERVAL '30 days'
                  )
                  SELECT hs.source_code                AS sourceCode,
                         hs.granularity                 AS granularity,
                         hs.availability                AS availability,
                         t.today_pct                    AS percentileWithinSource,
-                        (t.today_pct - COALESCE(d7.pct_7d, 0.01))
-                            / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01)  AS slope7d,
-                        (t.today_pct - COALESCE(d30.pct_30d, 0.01))
-                            / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01) AS slope30d
+                        ROUND((t.today_pct - COALESCE(d7.pct_7d, 0.01))
+                        / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01), 4) AS slope7d,
+                        ROUND((t.today_pct - COALESCE(d30.pct_30d, 0.01))
+                        / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01), 4) AS slope30d,
                  FROM Today t
                  JOIN heat_source hs ON hs.id = t.source_id
                  LEFT JOIN D7 d7 ON d7.source_id = t.source_id
                  LEFT JOIN D30 d30 ON d30.source_id = t.source_id
                  """)
             .param("keywordId", keywordId)
-            .param("asOf", asOf)
             .query(SourceBreakdownRow.class)
+            .list();
+}
+
+public List<TrendSignalRow> findAllLatestSignals() {
+    return jdbcClient
+            .sql("""
+                 SELECT DISTINCT ON (d.keyword_id)
+                        d.keyword_id       AS keywordId,
+                        k.keyword          AS keyword,
+                        d.composite_value  AS heatToday,
+                        d.slope_7d         AS slope7d,
+                        d.slope_30d        AS slope30d,
+                        d.stage            AS stage,
+                        d.divergence_flag  AS divergenceFlag
+                 FROM heat_composite_daily d
+                 JOIN trend_keyword k ON k.id = d.keyword_id
+                 WHERE k.enabled = TRUE
+                 ORDER BY d.keyword_id, d.stat_date DESC
+                 """)
+            .query(TrendSignalRow.class)
             .list();
 }
     /**

@@ -1,11 +1,12 @@
 package com.example.ssds.infra.service;
 
 import com.example.ssds.core.dto.TrendKeywordDetailResponse;
-import com.example.ssds.core.dto.TrendSignalProjection;
 import com.example.ssds.infra.dao.TrendQueryDao;
 import com.example.ssds.infra.dao.projection.SourceBreakdownRow;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -35,8 +36,8 @@ public class TrendService {
     }
     // 取得所有趨勢關鍵字的 7日/30日 斜率與 AI 輔助訊號
     @Transactional(readOnly = true)
-    public List<TrendSignalProjection> getAllTrendSignals() {
-        return trendKeywordRepository.findTrendSignals();
+    public List<TrendSignalRow> getAllTrendSignals() {
+        return trendQueryDao.findAllLatestSignals();
     }
 
     // 取得單一關鍵字：折線圖 + 各來源權重明細（點進去一筆後的頁面）
@@ -53,7 +54,7 @@ public class TrendService {
         TrendCompositeSnapshot snapshot = trendQueryDao.findLatestComposite(keywordId)
                 .orElseThrow(() -> new IllegalArgumentException("關鍵字 id=" + keywordId + " 尚無熱度資料"));
 
-        List<SourceBreakdownRow> sources = trendQueryDao.findSourceBreakdown(keywordId, to);
+        List<SourceBreakdownRow> sources = trendQueryDao.findSourceBreakdown(keywordId);
         Map<String, BigDecimal> appliedWeights = parseAppliedWeights(snapshot.appliedWeights());
 
         TrendKeywordDetailResponse response = new TrendKeywordDetailResponse();

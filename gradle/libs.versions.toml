@@ -15,6 +15,8 @@ shedlock = "7.8.0"
 commonsMath = "3.6.1"
 # Resilience4j 不在 Spring Boot BOM 管理範圍內
 resilience4j = "2.4.0"
+# Testcontainers 同樣不在這個專案的 BOM 管理範圍內，須自行指定版本
+testcontainers = "1.20.4"
 
 [libraries]
 # --- Spring Boot starters（版本由 BOM 決定，故不寫 version） ---
@@ -37,8 +39,8 @@ test-security      = { module = "org.springframework.boot:spring-boot-starter-se
 test-validation    = { module = "org.springframework.boot:spring-boot-starter-validation-test" }
 test-spring-boot   = { module = "org.springframework.boot:spring-boot-starter-test" }
 test-junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
-test-testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
-test-testcontainers-junit      = { module = "org.testcontainers:junit-jupiter" }
+test-testcontainers-postgresql = { module = "org.testcontainers:postgresql",     version.ref = "testcontainers" }
+test-testcontainers-junit      = { module = "org.testcontainers:junit-jupiter",  version.ref = "testcontainers" }
 
 # --- 資料層 ---
 # Spring Boot 4 把 Flyway 的自動組態拆到獨立的 spring-boot-flyway 模組，
