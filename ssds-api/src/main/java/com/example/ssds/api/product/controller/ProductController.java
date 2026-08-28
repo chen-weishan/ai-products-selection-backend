@@ -29,6 +29,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -97,6 +98,7 @@ public class ProductController {
                     sort = "latestScore",
                     direction = Sort.Direction.DESC
                 )
+                @ParameterObject
                 Pageable pageable
             ) {
         ProductSearchRequest request =
