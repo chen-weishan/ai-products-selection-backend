@@ -109,7 +109,7 @@ public class TrendQueryDao {
                         ROUND((t.today_pct - COALESCE(d7.pct_7d, 0.01))
                         / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01), 4) AS slope7d,
                         ROUND((t.today_pct - COALESCE(d30.pct_30d, 0.01))
-                        / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01), 4) AS slope30d,
+                        / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01), 4) AS slope30d
                  FROM Today t
                  JOIN heat_source hs ON hs.id = t.source_id
                  LEFT JOIN D7 d7 ON d7.source_id = t.source_id
@@ -195,24 +195,59 @@ public List<TrendSignalRow> findAllLatestSignals() {
     public Double findCompositeHeat(Long keywordId, LocalDate readingDate) {
         return jdbcClient
                 .sql("""
-                     SELECT CASE WHEN SUM(hs.composite_weight) = 0 THEN NULL
-                                 ELSE SUM(hr.percentile_within_source * hs.composite_weight)
-                                      / SUM(hs.composite_weight)
+                    SELECT CASE WHEN SUM(hs.composite_weight * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END) = 0 THEN NULL
+                                ELSE SUM(hr.percentile_within_source * hs.composite_weight * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
+                                    / SUM(hs.composite_weight * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
                             END AS composite
-                     FROM heat_reading hr
-                              JOIN heat_source hs ON hs.id = hr.source_id
-                     WHERE hr.keyword_id = :keywordId
-                       AND hr.reading_date = :readingDate
-                       AND hr.percentile_within_source IS NOT NULL
-                       AND hs.enabled = TRUE
-                       AND hs.availability <> 'UNAVAILABLE'
-                     """)
+                    FROM heat_reading hr
+                            JOIN heat_source hs ON hs.id = hr.source_id
+                    WHERE hr.keyword_id = :keywordId
+                    AND hr.reading_date = :readingDate
+                    AND hr.percentile_within_source IS NOT NULL
+                    AND hs.enabled = TRUE
+                    AND hs.availability <> 'UNAVAILABLE'
+                    """)
                 .param("keywordId", keywordId)
                 .param("readingDate", readingDate)
                 .query(Double.class)
                 .optional()
                 .orElse(null);
     }
+
+    public Map<String, BigDecimal> findAppliedWeights(Long keywordId, LocalDate readingDate) {
+    List<Map<String, Object>> rows = jdbcClient
+            .sql("""
+                 SELECT hs.source_code AS sourceCode,
+                        hs.composite_weight * granularity_factor(hs.granularity) AS effectiveWeight
+                 FROM heat_reading hr
+                          JOIN heat_source hs ON hs.id = hr.source_id
+                 WHERE hr.keyword_id = :keywordId
+                   AND hr.reading_date = :readingDate
+                   AND hr.percentile_within_source IS NOT NULL
+                   AND hs.enabled = TRUE
+                   AND hs.availability <> 'UNAVAILABLE'
+                 """)
+            .param("keywordId", keywordId)
+            .param("readingDate", readingDate)
+            .query()
+            .listOfRows();
+
+    BigDecimal total = rows.stream()
+            .map(r -> (BigDecimal) r.get("effectiveWeight"))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    if (total.compareTo(BigDecimal.ZERO) == 0) {
+        return Map.of();
+    }
+
+    Map<String, BigDecimal> result = new java.util.LinkedHashMap<>();
+    for (Map<String, Object> row : rows) {
+        String code = String.valueOf(row.get("sourceCode"));
+        BigDecimal weight = (BigDecimal) row.get("effectiveWeight");
+        result.put(code, weight.divide(total, 4, java.math.RoundingMode.HALF_UP));
+    }
+    return result;
+}
 
     /**
      * §5.3.2 的人工標記合成值：加權平均熱度等級，權重為時間衰減係數。

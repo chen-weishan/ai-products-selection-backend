@@ -6,7 +6,6 @@ import com.example.ssds.infra.dao.projection.SourceBreakdownRow;
 import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
-import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
