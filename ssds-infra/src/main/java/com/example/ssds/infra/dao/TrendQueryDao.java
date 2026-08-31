@@ -1,6 +1,9 @@
 package com.example.ssds.infra.dao;
 
+import com.example.ssds.infra.dao.projection.SourceBreakdownRow;
+import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -52,6 +55,65 @@ public class TrendQueryDao {
                 .list();
     }
 
+        /** 單一關鍵字最新一筆合成快照(今日熱度、斜率、階段、實際採用權重)。 */
+    public Optional<TrendCompositeSnapshot> findLatestComposite(Long keywordId) {
+    return jdbcClient
+            .sql("""
+                SELECT composite_value        AS compositeValue,
+                       slope_7d                AS slope7d,
+                       slope_30d               AS slope30d,
+                       stage                   AS stage,
+                       stage_weeks             AS stageWeeks,
+                       estimated_lifespan_days AS estimatedLifespanDays,
+                       applied_weights::text   AS appliedWeights,
+                       divergence_flag         AS divergenceFlag
+                FROM heat_composite_daily
+                WHERE keyword_id = :keywordId
+                ORDER BY stat_date DESC
+                LIMIT 1
+                """)
+            .param("keywordId", keywordId)
+            .query(TrendCompositeSnapshot.class)
+            .optional();
+}
+
+    /** 各來源明細：今日百分位、可用性、粒度，權重直接取自 applied_weights JSON。 */
+    public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId, LocalDate asOf) {
+    return jdbcClient
+            .sql("""
+                 WITH Today AS (
+                     SELECT hr.source_id, hr.percentile_within_source AS today_pct
+                     FROM heat_reading hr
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf
+                 ),
+                 D7 AS (
+                     SELECT hr.source_id, hr.percentile_within_source AS pct_7d
+                     FROM heat_reading hr
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf - INTERVAL '7 days'
+                 ),
+                 D30 AS (
+                     SELECT hr.source_id, hr.percentile_within_source AS pct_30d
+                     FROM heat_reading hr
+                     WHERE hr.keyword_id = :keywordId AND hr.reading_date = :asOf - INTERVAL '30 days'
+                 )
+                 SELECT hs.source_code                AS sourceCode,
+                        hs.granularity                 AS granularity,
+                        hs.availability                AS availability,
+                        t.today_pct                    AS percentileWithinSource,
+                        (t.today_pct - COALESCE(d7.pct_7d, 0.01))
+                            / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01)  AS slope7d,
+                        (t.today_pct - COALESCE(d30.pct_30d, 0.01))
+                            / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01) AS slope30d
+                 FROM Today t
+                 JOIN heat_source hs ON hs.id = t.source_id
+                 LEFT JOIN D7 d7 ON d7.source_id = t.source_id
+                 LEFT JOIN D30 d30 ON d30.source_id = t.source_id
+                 """)
+            .param("keywordId", keywordId)
+            .param("asOf", asOf)
+            .query(SourceBreakdownRow.class)
+            .list();
+}
     /**
      * §5.3.3 斜率計算所需的三個觀測點：t、t−7、t−30。
      *
