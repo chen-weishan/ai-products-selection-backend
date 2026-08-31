@@ -45,6 +45,10 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
 
+    @EntityGraph(attributePaths = {"product", "product.category", "keyword", "category", "trendInterpretation"})
+    @Query("select c from SourcingCandidate c where c.product.id = :productId")
+    Optional<SourcingCandidate> findDetailedByProductId(Long productId);
+
     /**
      * 依來源關鍵字查。keyword_id 是「當初從哪個關鍵字挖出來」的歷史紀錄，
      * 可為 null 也可能與 product_keyword 的現況不一致，不要拿來當即時關聯。

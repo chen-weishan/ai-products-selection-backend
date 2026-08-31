@@ -4,6 +4,9 @@ import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.scene.SceneClassificationService;
+import com.example.ssds.api.trend.TrendInterpretationService;
+import com.example.ssds.api.sourcing.SourcingScoutService;
+import com.example.ssds.ai.client.AiExecutionWarningContext;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
@@ -12,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -23,20 +27,50 @@ public class AiTaskWorker {
     private final ReviewRiskService reviewRiskService;
     private final ProductInsightService productInsightService;
     private final RecommendationService recommendationService;
+    private final TrendInterpretationService trendInterpretationService;
+    private final SourcingScoutService sourcingScoutService;
 
+    @Autowired
     public AiTaskWorker(
             AiTaskRepository taskRepository,
             AiTaskItemRepository itemRepository,
             SceneClassificationService sceneClassificationService,
             ReviewRiskService reviewRiskService,
             ProductInsightService productInsightService,
-            RecommendationService recommendationService) {
+            RecommendationService recommendationService,
+            TrendInterpretationService trendInterpretationService,
+            SourcingScoutService sourcingScoutService) {
         this.taskRepository = taskRepository;
         this.itemRepository = itemRepository;
         this.sceneClassificationService = sceneClassificationService;
         this.reviewRiskService = reviewRiskService;
         this.productInsightService = productInsightService;
         this.recommendationService = recommendationService;
+        this.trendInterpretationService = trendInterpretationService;
+        this.sourcingScoutService = sourcingScoutService;
+    }
+
+    AiTaskWorker(
+            AiTaskRepository taskRepository,
+            AiTaskItemRepository itemRepository,
+            SceneClassificationService sceneClassificationService,
+            ReviewRiskService reviewRiskService,
+            ProductInsightService productInsightService,
+            RecommendationService recommendationService) {
+        this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
+                productInsightService, recommendationService, null, null);
+    }
+
+    AiTaskWorker(
+            AiTaskRepository taskRepository,
+            AiTaskItemRepository itemRepository,
+            SceneClassificationService sceneClassificationService,
+            ReviewRiskService reviewRiskService,
+            ProductInsightService productInsightService,
+            RecommendationService recommendationService,
+            TrendInterpretationService trendInterpretationService) {
+        this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
+                productInsightService, recommendationService, trendInterpretationService, null);
     }
 
     @Async
@@ -51,6 +85,7 @@ public class AiTaskWorker {
         int failures = 0;
         for (AiTaskItem item : itemRepository.findByTaskId(task.getId())) {
             Instant started = Instant.now();
+            AiExecutionWarningContext.clear();
             try {
                 String warning = null;
                 switch (task.getTaskType()) {
@@ -72,15 +107,23 @@ public class AiTaskWorker {
                     }
                     case RECOMMENDATION -> recommendationService.recommend(
                             item.getProduct().getId(), event.forceRefresh());
+                    case TREND_INTERPRET -> trendInterpretationService.interpret(
+                            item.getKeyword().getId(), event.forceRefresh());
+                    case SOURCING_SCOUT -> sourcingScoutService.scout(
+                            item.getProduct().getId(), event.forceRefresh());
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
+                warning = mergeWarnings(warning, AiExecutionWarningContext.consumeMessage());
                 item.setStatus(TaskItemStatus.SUCCEEDED);
                 item.setErrorMessage(warning);
                 successes++;
             } catch (RuntimeException exception) {
                 item.setStatus(TaskItemStatus.FAILED);
-                item.setErrorMessage(safeMessage(exception));
+                item.setErrorMessage(mergeWarnings(
+                        safeMessage(exception), AiExecutionWarningContext.consumeMessage()));
                 failures++;
+            } finally {
+                AiExecutionWarningContext.clear();
             }
             item.setDurationMs((int) Math.min(
                     Integer.MAX_VALUE, Duration.between(started, Instant.now()).toMillis()));
@@ -100,5 +143,12 @@ public class AiTaskWorker {
         String message = exception.getMessage();
         if (message == null || message.isBlank()) return "AI 任務執行失敗";
         return message.length() <= 500 ? message : message.substring(0, 500);
+    }
+
+    private static String mergeWarnings(String current, String added) {
+        if (current == null || current.isBlank()) return added;
+        if (added == null || added.isBlank()) return current;
+        String merged = current + " " + added;
+        return merged.length() <= 500 ? merged : merged.substring(0, 500);
     }
 }

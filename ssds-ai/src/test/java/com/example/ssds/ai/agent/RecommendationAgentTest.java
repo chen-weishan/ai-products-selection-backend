@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 
 class RecommendationAgentTest {
     @Test
@@ -39,7 +40,7 @@ class RecommendationAgentTest {
 
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
-        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+        assertEquals(List.of("fake/primary", "fake/primary"), client.models);
     }
 
     @Test
@@ -54,6 +55,20 @@ class RecommendationAgentTest {
         assertEquals(0, result.output().qtyMin());
         assertEquals("暫不建議進貨", result.output().quantityText());
         assertEquals(2, result.requestCount());
+    }
+
+    @Test
+    void resourceAccessImmediatelySwitchesToFallback() {
+        FakeClient client = new FakeClient(
+                new ResourceAccessException("timeout"),
+                RecommendationResponseParserTest.validJson());
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(2, result.requestCount());
+        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
     }
 
     private static RecommendationAgent agent(TrackAAiClient client) {

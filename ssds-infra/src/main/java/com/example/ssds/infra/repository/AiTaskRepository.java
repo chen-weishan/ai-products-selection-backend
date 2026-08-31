@@ -23,6 +23,21 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
 
     List<AiTask> findByTaskTypeOrderByStartedAtDesc(AiTaskType taskType);
 
+    /** 同品項的尋源任務尚未結束時直接沿用，避免重複 Web Search 造成逾時與 429。 */
+    @Query("""
+            select t
+            from AiTaskItem i join i.task t
+            where i.product.id = :productId
+              and t.taskType = :taskType
+              and t.status in :statuses
+            order by t.id desc
+            """)
+    List<AiTask> findActiveProductTasks(
+            @Param("productId") Long productId,
+            @Param("taskType") AiTaskType taskType,
+            @Param("statuses") List<TaskStatus> statuses,
+            Pageable pageable);
+
     /**
      * 某段期間某組任務類型的累計花費，供 FR-07 的預算池計算。
      * 以 taskType 集合傳入而非 budgetPool，是因為池別是 Java 端列舉的屬性，

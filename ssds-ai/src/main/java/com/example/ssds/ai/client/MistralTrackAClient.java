@@ -1,5 +1,6 @@
 package com.example.ssds.ai.client;
 
+import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -29,18 +32,26 @@ public class MistralTrackAClient implements TrackAAiClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String apiKey;
+    private final ApplicationEventPublisher eventPublisher;
     private final Set<String> verifiedReasoningModels = ConcurrentHashMap.newKeySet();
 
+    @Autowired
     public MistralTrackAClient(
             ObjectMapper objectMapper,
             @Value("${mistral.base-url:https://api.mistral.ai/v1}") String baseUrl,
             @Value("${mistral.api-key:}") String apiKey,
-            @Value("${mistral.timeout-seconds:30}") int timeoutSeconds) {
+            @Value("${mistral.timeout-seconds:30}") int timeoutSeconds,
+            ApplicationEventPublisher eventPublisher) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
+        this.eventPublisher = eventPublisher;
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
         requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
         this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
+    }
+
+    MistralTrackAClient(ObjectMapper objectMapper, String baseUrl, String apiKey, int timeoutSeconds) {
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds, event -> {});
     }
 
     @Override
@@ -48,7 +59,7 @@ public class MistralTrackAClient implements TrackAAiClient {
         if (apiKey.isBlank()) {
             throw new IllegalStateException("MISTRAL_API_KEY 尚未設定");
         }
-        verifyReasoningCapability(request.model());
+        verifyReasoningCapability(request.taskType(), request.model());
 
         Map<String, Object> responseFormat = Map.of(
                 "type", "json_schema",
@@ -68,7 +79,8 @@ public class MistralTrackAClient implements TrackAAiClient {
         body.put("store", false);
         body.put("stream", false);
 
-        JsonNode response = parseResponse(postConversation(request.model(), body), request.model());
+        JsonNode response = parseResponse(
+                postConversation(request.taskType(), request.model(), body), request.model());
         JsonNode output = findMessageOutput(response);
         String content = output.path("content").asText(null);
         if (content == null || content.isBlank()) {
@@ -82,7 +94,7 @@ public class MistralTrackAClient implements TrackAAiClient {
                 nullableInt(usage, "completion_tokens"));
     }
 
-    private void verifyReasoningCapability(String model) {
+    private void verifyReasoningCapability(AiTaskType taskType, String model) {
         if (verifiedReasoningModels.contains(model)) return;
         String responseBody;
         try {
@@ -92,7 +104,7 @@ public class MistralTrackAClient implements TrackAAiClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException exception) {
-            throw translateHttpException("model capability", model, exception);
+            throw translateHttpException("model capability", taskType, model, exception);
         } catch (RestClientException exception) {
             log.warn(
                     "Mistral model capability request failed: model={}, errorType={}",
@@ -107,7 +119,10 @@ public class MistralTrackAClient implements TrackAAiClient {
         verifiedReasoningModels.add(model);
     }
 
-    private String postConversation(String model, Map<String, Object> body) {
+    private String postConversation(
+            AiTaskType taskType,
+            String model,
+            Map<String, Object> body) {
         try {
             return restClient.post()
                     .uri("/conversations")
@@ -118,7 +133,7 @@ public class MistralTrackAClient implements TrackAAiClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException exception) {
-            throw translateHttpException("conversation", model, exception);
+            throw translateHttpException("conversation", taskType, model, exception);
         } catch (RestClientException exception) {
             log.warn(
                     "Mistral conversation request failed: model={}, errorType={}",
@@ -129,7 +144,10 @@ public class MistralTrackAClient implements TrackAAiClient {
     }
 
     private RuntimeException translateHttpException(
-            String operation, String model, RestClientResponseException exception) {
+            String operation,
+            AiTaskType taskType,
+            String model,
+            RestClientResponseException exception) {
         log.warn(
                 "Mistral {} HTTP request failed: model={}, status={}",
                 operation,
@@ -138,7 +156,24 @@ public class MistralTrackAClient implements TrackAAiClient {
         if (exception.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
             return new AiRateLimitException("Mistral API rate limit exceeded", exception);
         }
+        if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
+            AiModelUnavailableEvent event = new AiModelUnavailableEvent(
+                    modelAlias(taskType), model, exception.getStatusCode().value());
+            AiExecutionWarningContext.record(event);
+            eventPublisher.publishEvent(event);
+            return new AiModelNotFoundException(model, exception);
+        }
         return exception;
+    }
+
+    private static String modelAlias(AiTaskType taskType) {
+        return switch (taskType) {
+            case SCENE_CLASSIFY -> "MODEL_CLASSIFY";
+            case REVIEW_RISK, SELLING_POINT -> "MODEL_LONG_TEXT";
+            case RECOMMENDATION -> "MODEL_SHORT_GEN";
+            case TREND_INTERPRET -> "MODEL_NUMERIC";
+            case SOURCING_SCOUT, WEIGHT_CALIBRATION -> "MODEL_REASONING";
+        };
     }
 
     private JsonNode parseResponse(String responseBody, String model) {

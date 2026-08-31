@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 
 @Component
 public class ProductInsightAgent {
@@ -37,8 +38,8 @@ public class ProductInsightAgent {
             ProductInsightPromptFactory promptFactory,
             ProductInsightResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-long-text-primary:mistral-medium-latest}") String primaryModel,
-            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest,magistral-medium-latest,magistral-small-latest}") String fallbackModels,
+            @Value("${mistral.model-long-text-primary:mistral-medium-3-5}") String primaryModel,
+            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -114,7 +115,6 @@ public class ProductInsightAgent {
         int modelIndex = 0;
         int rateLimitRetries = 0;
         int schemaRetries = 0;
-        int serviceRetries = 0;
         int requestCount = 0;
         while (true) {
             String model = models.get(modelIndex);
@@ -145,29 +145,52 @@ public class ProductInsightAgent {
                 log.warn(
                         "ProductInsight schema validation failed: productId={}, model={}, reason={}",
                         input.productId(), model, safeLogMessage(exception.getMessage()));
-                if (schemaRetries < 1 && hasNextModel(modelIndex)) {
+                if (schemaRetries == 0) {
+                    schemaRetries++;
+                    if (pause(2_000L, input.productId(), model)) continue;
+                }
+                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
                     schemaRetries++;
                     modelIndex++;
-                    if (pause(2_000L, input.productId(), model)) continue;
+                    continue;
                 }
                 return fallback(FallbackReason.SCHEMA_INVALID, model, requestCount);
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax && hasNextModel(modelIndex)) {
+                if (rateLimitRetries < retryMax) {
                     long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
                     rateLimitRetries++;
-                    modelIndex++;
                     log.warn(
-                            "ProductInsight rate limited; next model retry: productId={}, model={}, retry={}/{}, backoffMs={}",
+                            "ProductInsight rate limited; retrying same model: productId={}, model={}, retry={}/{}, backoffMs={}",
                             input.productId(), model, rateLimitRetries, retryMax, backoffMillis);
                     if (pause(backoffMillis, input.productId(), model)) continue;
+                }
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return fallback(FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (AiModelNotFoundException exception) {
+                log.warn("ProductInsight model unavailable; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return fallback(FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (ResourceAccessException exception) {
+                log.warn(
+                        "ProductInsight timed out; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
                 }
                 return fallback(FallbackReason.AI_UNAVAILABLE, model, requestCount);
             } catch (RuntimeException exception) {
                 log.warn(
                         "ProductInsight request failed: productId={}, model={}, errorType={}",
                         input.productId(), model, exception.getClass().getSimpleName());
-                if (serviceRetries < 1 && hasNextModel(modelIndex)) {
-                    serviceRetries++;
+                if (hasNextModel(modelIndex)) {
                     modelIndex++;
                     continue;
                 }
@@ -177,7 +200,7 @@ public class ProductInsightAgent {
     }
 
     private boolean hasNextModel(int modelIndex) {
-        return modelIndex + 1 < models.size();
+        return modelIndex == 0 && models.size() > 1;
     }
 
     private boolean pause(long millis, Long productId, String model) {

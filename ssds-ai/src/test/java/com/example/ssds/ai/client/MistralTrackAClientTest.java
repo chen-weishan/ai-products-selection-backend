@@ -22,6 +22,7 @@ class MistralTrackAClientTest {
     @AfterEach
     void stopServer() {
         if (server != null) server.stop(0);
+        AiExecutionWarningContext.clear();
     }
 
     @Test
@@ -95,6 +96,36 @@ class MistralTrackAClientTest {
         });
 
         assertThrows(AiRateLimitException.class, () -> client().complete(request()));
+    }
+
+    @Test
+    void translates404PublishesConfigurationWarningAndAuditEvent() throws Exception {
+        AtomicReference<Object> published = new AtomicReference<>();
+        startServer(exchange -> {
+            if (exchange.getRequestURI().getPath().startsWith("/v1/models/")) {
+                respond(exchange, 200, """
+                        {"id":"test-model","capabilities":{"reasoning":true}}
+                        """);
+                return;
+            }
+            respond(exchange, 404, "{\"message\":\"model not found\"}");
+        });
+        MistralTrackAClient client = new MistralTrackAClient(
+                objectMapper,
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
+                "test-key",
+                5,
+                published::set);
+
+        AiModelNotFoundException exception = assertThrows(
+                AiModelNotFoundException.class, () -> client.complete(request()));
+
+        assertEquals("test-model", exception.model());
+        AiModelUnavailableEvent event = assertInstanceOf(
+                AiModelUnavailableEvent.class, published.get());
+        assertEquals("MODEL_CLASSIFY", event.modelAlias());
+        assertEquals(404, event.httpStatus());
+        assertTrue(AiExecutionWarningContext.consumeMessage().contains("請更新模型設定"));
     }
 
     private MistralTrackAClient client() {

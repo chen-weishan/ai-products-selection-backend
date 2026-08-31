@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.AiClientResponse;
+import com.example.ssds.ai.client.AiModelNotFoundException;
 import com.example.ssds.ai.client.AiPromptRequest;
 import com.example.ssds.ai.client.AiRateLimitException;
 import com.example.ssds.ai.model.*;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 
 @Component
 public class SceneClassifierAgent {
@@ -42,8 +44,8 @@ public class SceneClassifierAgent {
             SceneClassifierPromptFactory promptFactory,
             SceneClassifierResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-classify-primary:mistral-medium-latest}") String primaryModel,
-            @Value("${mistral.model-classify-fallbacks:mistral-small-latest,magistral-medium-latest,magistral-small-latest}") String fallbackModels,
+            @Value("${mistral.model-classify-primary:mistral-medium-3-5}") String primaryModel,
+            @Value("${mistral.model-classify-fallbacks:mistral-small-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:7}") long cacheDays) {
         this(
@@ -79,7 +81,8 @@ public class SceneClassifierAgent {
     }
 
     public SceneClassificationResult classify(SceneClassifierInput input, boolean forceRefresh) {
-        CacheKey key = new CacheKey(input.productId(), input.heatBucket());
+        CacheKey key = new CacheKey(
+                input.productId(), input.heatStage(), input.heatBucket(), SceneClassifierPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
             SceneClassificationResult cached = cache.getIfPresent(key);
             if (cached != null) return cached.asCacheHit();
@@ -101,6 +104,9 @@ public class SceneClassifierAgent {
             String model = models.get(modelIndex);
             String raw = null;
             try {
+                log.info(
+                        "SceneClassifier request: productId={}, modelAlias=MODEL_CLASSIFY, model={}, promptVersion={}",
+                        input.productId(), model, SceneClassifierPromptFactory.PROMPT_VERSION);
                 AiPromptRequest request = new AiPromptRequest(
                         AiTaskType.SCENE_CLASSIFY,
                         model,
@@ -133,11 +139,15 @@ public class SceneClassifierAgent {
                         model,
                         exception.getClass().getSimpleName(),
                         safeLogMessage(exception.getMessage()));
-                if (schemaRetries < 1 && hasNextModel(modelIndex)) {
+                if (schemaRetries == 0) {
                     schemaRetries++;
-                    modelIndex++;
                     if (pauseBeforeRetry(2_000L, input.productId(), model)) continue;
                     return unavailableFallback(raw, model);
+                }
+                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
+                    schemaRetries++;
+                    modelIndex++;
+                    continue;
                 }
                 return fallback(
                         FallbackReason.SCHEMA_INVALID,
@@ -147,12 +157,11 @@ public class SceneClassifierAgent {
                         raw,
                         model);
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax && hasNextModel(modelIndex)) {
+                if (rateLimitRetries < retryMax) {
                     long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
                     rateLimitRetries++;
-                    modelIndex++;
                     log.warn(
-                            "SceneClassifier rate limited; retrying with next model: productId={}, model={}, retry={}/{}, backoffMs={}",
+                            "SceneClassifier rate limited; retrying same model: productId={}, model={}, retry={}/{}, backoffMs={}",
                             input.productId(),
                             model,
                             rateLimitRetries,
@@ -161,6 +170,27 @@ public class SceneClassifierAgent {
                     if (pauseBeforeRetry(backoffMillis, input.productId(), model)) continue;
                     return unavailableFallback(raw, model);
                 }
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return unavailableFallback(raw, model);
+            } catch (AiModelNotFoundException exception) {
+                log.warn("SceneClassifier model unavailable; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return unavailableFallback(raw, model);
+            } catch (ResourceAccessException exception) {
+                log.warn(
+                        "SceneClassifier timed out; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
                 return unavailableFallback(raw, model);
             } catch (RuntimeException exception) {
                 log.warn(
@@ -168,13 +198,17 @@ public class SceneClassifierAgent {
                         input.productId(),
                         model,
                         exception.getClass().getSimpleName());
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
                 return unavailableFallback(raw, model);
             }
         }
     }
 
     private boolean hasNextModel(int modelIndex) {
-        return modelIndex + 1 < models.size();
+        return modelIndex == 0 && models.size() > 1;
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {
@@ -237,7 +271,9 @@ public class SceneClassifierAgent {
         return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
     }
 
-    private record CacheKey(Long productId, HeatBucket heatBucket) {}
+    private record CacheKey(
+            Long productId, com.example.ssds.core.domain.HeatStage heatStage,
+            HeatBucket heatBucket, String promptVersion) {}
 
     @FunctionalInterface
     interface RetrySleeper {

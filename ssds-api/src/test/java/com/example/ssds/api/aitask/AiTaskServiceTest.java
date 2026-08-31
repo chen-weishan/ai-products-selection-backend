@@ -9,10 +9,10 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.AiTask;
-import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -121,5 +121,74 @@ class AiTaskServiceTest {
 
         assertEquals(AiTaskType.RECOMMENDATION, response.taskType());
         verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void createsTrendInterpretTaskWithKeywordTargets() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
+        when(keywordRepository.findAllById(List.of(31L))).thenReturn(List.of(keyword));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(704L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.TREND_INTERPRET,
+                List.of(),
+                List.of(31L),
+                new CreateAiTaskRequest.Options(true)));
+
+        assertEquals(AiTaskType.TREND_INTERPRET, response.taskType());
+        verify(itemRepository).saveAll(argThat(items -> {
+            AiTaskItem item = items.iterator().next();
+            return item.getProduct() == null && item.getKeyword().getId().equals(31L);
+        }));
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void reusesActiveSourcingTaskForSameProduct() {
+        Product product = Product.builder().id(136L).trackType(TrackType.B).build();
+        AiTask active = AiTask.builder()
+                .id(24L).taskType(AiTaskType.SOURCING_SCOUT)
+                .status(TaskStatus.RUNNING).totalCount(1).build();
+        when(taskRepository.findActiveProductTasks(
+                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+                .thenReturn(List.of(active));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createSourcingScout(product, true);
+
+        assertEquals(24L, response.taskId());
+        assertEquals(TaskStatus.RUNNING, response.status());
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(itemRepository, eventPublisher);
+    }
+
+    @Test
+    void createsSourcingTaskWhenNoActiveTaskExists() {
+        Product product = Product.builder().id(136L).trackType(TrackType.B).build();
+        when(taskRepository.findActiveProductTasks(
+                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(26L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createSourcingScout(product, false);
+
+        assertEquals(26L, response.taskId());
+        verify(itemRepository).save(argThat(item -> item.getProduct().getId().equals(136L)));
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(26L, false));
     }
 }

@@ -1,8 +1,13 @@
 package com.example.ssds.ai.prompt;
 
+import com.example.ssds.ai.model.FestivalMatch;
 import com.example.ssds.ai.model.ProductInsightInput;
 import com.example.ssds.ai.model.RecommendationInput;
 import com.example.ssds.ai.model.ReviewRiskInput;
+import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.ai.model.TrendInterpreterInput;
+import com.example.ssds.ai.model.SourcingScoutInput;
+import com.example.ssds.ai.model.WeightCalibrationInput;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
@@ -21,6 +26,27 @@ public class PromptSanitizer {
     private static final Pattern ADDRESS = Pattern.compile(
             "[\\p{IsHan}]{1,12}(?:縣|市|區|鄉|鎮|村|里)?[\\p{IsHan}0-9]{1,16}(?:路|街|巷|弄)[\\p{IsHan}0-9-]{0,16}(?:號(?:之\\d+)?)?");
 
+    /** Agent 1 白名單：品項／品類識別資訊、熱度訊號、歷史開團數與節慶匹配。 */
+    public SceneClassifierInput sanitizeSceneClassifier(SceneClassifierInput input) {
+        List<FestivalMatch> festivalMatches = input.festivalMatches().stream()
+                .map(value -> new FestivalMatch(safeLabel(value.festivalCode(), 32), value.affinity()))
+                .toList();
+        return new SceneClassifierInput(
+                input.productId(),
+                safeLabel(input.productName(), 100),
+                input.categoryId(),
+                safeLabel(input.categoryName(), 100),
+                input.season(),
+                input.heatSlope7d(),
+                input.heatSlope30d(),
+                input.heatSlopePercentile(),
+                input.heatStage(),
+                input.heatBucket(),
+                input.historicalCampaignCount(),
+                festivalMatches);
+    }
+
+    /** Agent 2 白名單：只傳遞評論識別碼與去識別化後的評論內容。 */
     public ReviewRiskInput sanitizeReviewRisk(Long productId, List<ReviewRiskInput.ReviewText> reviews) {
         List<ReviewRiskInput.ReviewText> sanitized = reviews.stream()
                 .map(review -> new ReviewRiskInput.ReviewText(
@@ -62,6 +88,46 @@ public class PromptSanitizer {
                 input.matchedPenaltyRules(),
                 festival,
                 input.allowedQuantities());
+    }
+
+    /** Agent 5 白名單：合成時序、來源斜率／可用性及後端允許的輸出組合。 */
+    public TrendInterpreterInput sanitizeTrendInterpreter(TrendInterpreterInput input) {
+        return new TrendInterpreterInput(
+                input.keywordId(),
+                input.compositeSeries(),
+                input.sourceTrends(),
+                input.allowedOutputs());
+    }
+
+    /** Agent 6 白名單：只允許關鍵字及品類識別資訊進入 B 軌探索 Prompt。 */
+    public SourcingScoutInput sanitizeSourcingScout(SourcingScoutInput input) {
+        return new SourcingScoutInput(
+                safeLabel(input.keyword(), 80), input.categoryId(), safeLabel(input.categoryName(), 50));
+    }
+
+    /** Agent 7 僅傳彙總統計；型別本身沒有逐筆銷售、品項、會員或供應商欄位。 */
+    public WeightCalibrationInput sanitizeWeightCalibration(WeightCalibrationInput input) {
+        List<WeightCalibrationInput.FactorStatistic> factors = input.factors().stream()
+                .map(value -> new WeightCalibrationInput.FactorStatistic(
+                        safeLabel(value.factorCode(), 32), value.correlation(), value.currentWeight(),
+                        value.suggestedWeight(), value.pValue()))
+                .toList();
+        WeightCalibrationInput.OverrideStatistics overrides = input.sceneOverrides();
+        List<WeightCalibrationInput.CategoryOverrideStatistic> categories = overrides.concentratedCategories().stream()
+                .map(value -> new WeightCalibrationInput.CategoryOverrideStatistic(
+                        safeLabel(value.category(), 50), value.totalClassifications(),
+                        value.overrideCount(), value.overrideRate()))
+                .toList();
+        List<WeightCalibrationInput.BacktestStatistic> backtests = input.backtests().stream()
+                .map(value -> new WeightCalibrationInput.BacktestStatistic(
+                        safeLabel(value.scheme(), 40), value.correlation(), value.gradeAHitRate()))
+                .toList();
+        return new WeightCalibrationInput(
+                safeLabel(input.quarter(), 8), input.sampleSize(), safeLabel(input.regressionMethod(), 40),
+                factors, safeLabel(input.regressionNote(), 500),
+                new WeightCalibrationInput.OverrideStatistics(overrides.totalClassifications(),
+                        overrides.overrideCount(), overrides.overrideRate(), categories),
+                backtests, safeLabel(input.backtestNote(), 500));
     }
 
     public String sanitizeReviewText(String value) {

@@ -58,7 +58,7 @@ class ProductInsightServiceTest {
                         new ProductInsightRisk("物流條件需留意", InsightRiskType.LOGISTICS, Severity.MEDIUM, true),
                         new ProductInsightRisk("資料不足：無足夠資料支持具體風險", InsightRiskType.OTHER, Severity.LOW, false)));
         ProductInsightResult result = new ProductInsightResult(
-                output, false, null, false, "mistral-medium-latest", "product-insight-v1", 120, 40, 1);
+                output, false, null, false, "mistral-medium-3-5", "product-insight-v1", 120, 40, 1);
         when(productRepository.findWithDetailsById(101L)).thenReturn(Optional.of(product));
         when(reviewRepository.findByProductId(eq(101L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review)));

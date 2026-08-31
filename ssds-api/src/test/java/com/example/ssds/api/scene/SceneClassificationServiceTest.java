@@ -6,24 +6,35 @@ import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.agent.SceneClassifierAgent;
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.model.SceneClassifierInput;
 import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
 import com.example.ssds.ai.schema.SceneClassifierResponseParser;
 import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.core.domain.FactorCode;
+import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Category;
+import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.ProductScore;
 import com.example.ssds.infra.entity.SceneClassificationLog;
+import com.example.ssds.infra.entity.ScoreFactor;
+import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -31,14 +42,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SceneClassificationServiceTest {
     @Mock ProductRepository productRepository;
     @Mock HeatReadingRepository heatReadingRepository;
+    @Mock HeatCompositeDailyRepository heatCompositeDailyRepository;
+    @Mock ProductScoreRepository productScoreRepository;
     @Mock DecisionRecordRepository decisionRecordRepository;
     @Mock ItemFestivalAffinityRepository festivalAffinityRepository;
     @Mock SceneClassificationLogRepository logRepository;
+    @Mock PromptSanitizer promptSanitizer;
 
     private SceneClassificationService service;
 
     @BeforeEach
     void setUp() {
+        lenient().when(promptSanitizer.sanitizeSceneClassifier(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         ObjectMapper mapper = new ObjectMapper();
         TrackAAiClient fakeClient = request -> new AiClientResponse("""
                 {
@@ -61,16 +77,37 @@ class SceneClassificationServiceTest {
         service = new SceneClassificationService(
                 productRepository,
                 heatReadingRepository,
+                heatCompositeDailyRepository,
+                productScoreRepository,
                 decisionRecordRepository,
                 festivalAffinityRepository,
                 logRepository,
+                promptSanitizer,
                 agent);
     }
 
     @Test
     void trackAProductRunsFakeLlmAndPersistsValidatedResult() {
         Product product = product(101L, TrackType.A);
+        TrendKeyword keyword = TrendKeyword.builder().id(301L).keyword("抹茶餅乾").build();
+        product.setKeywords(new LinkedHashSet<>(List.of(keyword)));
+        ScoreFactor trend = ScoreFactor.builder()
+                .factorCode(FactorCode.TREND)
+                .normalizedValue(new BigDecimal("96.00"))
+                .dataAvailable(true)
+                .build();
+        ProductScore score = ProductScore.builder().factors(List.of(trend)).build();
         when(productRepository.findWithDetailsById(101L)).thenReturn(Optional.of(product));
+        when(productScoreRepository
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(101L))
+                .thenReturn(Optional.of(score));
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(301L))
+                .thenReturn(Optional.of(HeatCompositeDaily.builder()
+                        .keyword(keyword)
+                        .statDate(LocalDate.of(2026, 8, 29))
+                        .compositeValue(new BigDecimal("91.00"))
+                        .stage(HeatStage.RISING)
+                        .build()));
         when(decisionRecordRepository.countByProductId(101L)).thenReturn(2L);
         when(festivalAffinityRepository.findByProductId(101L)).thenReturn(List.of());
         when(logRepository.save(any())).thenAnswer(invocation -> {
@@ -83,7 +120,12 @@ class SceneClassificationServiceTest {
 
         assertEquals(501L, response.classificationId());
         assertEquals(SceneCode.FESTIVAL, response.sceneType());
+        assertEquals("MODEL_CLASSIFY", response.modelAlias());
         assertFalse(response.fallbackApplied());
+        ArgumentCaptor<SceneClassifierInput> inputCaptor = ArgumentCaptor.forClass(SceneClassifierInput.class);
+        verify(promptSanitizer).sanitizeSceneClassifier(inputCaptor.capture());
+        assertEquals(new BigDecimal("96.00"), inputCaptor.getValue().heatSlopePercentile());
+        assertEquals(HeatStage.RISING, inputCaptor.getValue().heatStage());
         verify(logRepository).save(argThat(log ->
                 log.getFinalSceneType().name().equals("FESTIVAL")
                         && log.getSignals().size() == 1

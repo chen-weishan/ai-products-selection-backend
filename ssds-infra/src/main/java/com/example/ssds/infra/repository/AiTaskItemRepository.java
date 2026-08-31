@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
-    @EntityGraph(attributePaths = {"product"})
+    @EntityGraph(attributePaths = {"product", "keyword"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */

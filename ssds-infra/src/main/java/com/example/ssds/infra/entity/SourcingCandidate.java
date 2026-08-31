@@ -4,6 +4,8 @@ import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.SourcingStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * B 軌尋源候選（規格書 §7.2 sourcing_candidate、FR-16）。
@@ -82,6 +84,29 @@ public class SourcingCandidate extends BaseAuditEntity {
 
     @Column(name = "scout_report", columnDefinition = "text")
     private String scoutReport;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "opportunity_signals", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String opportunitySignals = "[]";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "risk_signals", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String riskSignals = "[]";
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "trend_interpretation_id")
+    private TrendInterpretation trendInterpretation;
+
+    @Column(length = 80)
+    private String model;
+
+    @Column(name = "prompt_version", length = 20)
+    private String promptVersion;
+
+    @Column(name = "report_generated_at")
+    private java.time.Instant reportGeneratedAt;
 
     @Column(name = "scouted_at")
     private java.time.Instant scoutedAt;

@@ -16,8 +16,8 @@ public class AiAccessRouter {
     }
 
     public AiClientResponse route(AiPromptRequest request) {
-        if (request.taskType().budgetPool() != AiTaskType.BudgetPool.TRACK_A) {
-            throw new IllegalArgumentException("非 A 軌任務不得使用 TrackAAiClient: " + request.taskType());
+        if (request.taskType().budgetPool() == AiTaskType.BudgetPool.TRACK_B) {
+            throw new IllegalArgumentException("B 軌工具任務不得使用無工具的 TrackAAiClient: " + request.taskType());
         }
         return trackAClient.complete(request);
     }

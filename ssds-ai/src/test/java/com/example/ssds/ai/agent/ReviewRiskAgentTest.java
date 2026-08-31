@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 
 class ReviewRiskAgentTest {
     @Test
@@ -33,7 +34,7 @@ class ReviewRiskAgentTest {
 
         assertTrue(result.fallbackApplied());
         assertEquals(FallbackReason.SCHEMA_INVALID, result.fallbackReason());
-        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+        assertEquals(List.of("fake/primary", "fake/primary", "fake/fallback"), client.models);
     }
 
     @Test
@@ -44,12 +45,35 @@ class ReviewRiskAgentTest {
         ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
 
         assertFalse(result.fallbackApplied());
-        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+        assertEquals(List.of("fake/primary", "fake/primary"), client.models);
     }
 
     @Test
     void serviceFailureImmediatelySwitchesToFallbackModel() {
         FakeClient client = new FakeClient(new IllegalStateException("upstream unavailable"), validJson());
+
+        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+    }
+
+    @Test
+    void resourceAccessImmediatelySwitchesToFallback() {
+        FakeClient client = new FakeClient(
+                new ResourceAccessException("timeout"),
+                validJson());
+
+        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+    }
+
+    @Test
+    void model404ImmediatelySwitchesToFallback() {
+        FakeClient client = new FakeClient(
+                new AiModelNotFoundException("fake/primary", null), validJson());
 
         ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
 

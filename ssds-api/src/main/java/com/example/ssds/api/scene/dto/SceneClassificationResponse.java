@@ -22,6 +22,7 @@ public record SceneClassificationResponse(
         boolean cacheHit,
         String heatBucket,
         String model,
+        String modelAlias,
         String promptVersion,
         OffsetDateTime classifiedAt
 ) {
@@ -43,6 +44,7 @@ public record SceneClassificationResponse(
                 result.cacheHit(),
                 log.getHeatBucket(),
                 result.model(),
+                "MODEL_CLASSIFY",
                 result.promptVersion(),
                 toApiTime(log.getCreatedAt()));
     }
@@ -61,6 +63,7 @@ public record SceneClassificationResponse(
                 false,
                 log.getHeatBucket(),
                 log.getModel(),
+                "MODEL_CLASSIFY",
                 log.getPromptVersion(),
                 toApiTime(log.getCreatedAt()));
     }

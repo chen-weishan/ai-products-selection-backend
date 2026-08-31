@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 
 class ProductInsightAgentTest {
     @Test
@@ -42,13 +43,27 @@ class ProductInsightAgentTest {
 
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
-        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+        assertEquals(List.of("fake/primary", "fake/primary"), client.models);
     }
 
     @Test
     void rateLimitUsesNextModelAndCountsBothRequests() {
         FakeClient client = new FakeClient(
                 new AiRateLimitException("rate limited", null), validJson());
+
+        ProductInsightResult result = agent(client).analyze(
+                input(), 0, LocalDate.of(2026, 8, 25), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(2, result.requestCount());
+        assertEquals(List.of("fake/primary", "fake/primary"), client.models);
+    }
+
+    @Test
+    void resourceAccessImmediatelySwitchesToFallback() {
+        FakeClient client = new FakeClient(
+                new ResourceAccessException("timeout"),
+                validJson());
 
         ProductInsightResult result = agent(client).analyze(
                 input(), 0, LocalDate.of(2026, 8, 25), false);

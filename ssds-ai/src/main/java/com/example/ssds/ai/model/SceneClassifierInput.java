@@ -1,6 +1,7 @@
 package com.example.ssds.ai.model;
 
 import com.example.ssds.core.domain.Season;
+import com.example.ssds.core.domain.HeatStage;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -13,7 +14,8 @@ public record SceneClassifierInput(
         Season season,
         BigDecimal heatSlope7d,
         BigDecimal heatSlope30d,
-        BigDecimal latestHeatPercentile,
+        BigDecimal heatSlopePercentile,
+        HeatStage heatStage,
         HeatBucket heatBucket,
         long historicalCampaignCount,
         List<FestivalMatch> festivalMatches

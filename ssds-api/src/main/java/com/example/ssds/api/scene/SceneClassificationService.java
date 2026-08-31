@@ -2,12 +2,17 @@ package com.example.ssds.api.scene;
 
 import com.example.ssds.ai.agent.SceneClassifierAgent;
 import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
+import com.example.ssds.core.domain.FactorCode;
+import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.HeatReading;
+import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.ProductScore;
+import com.example.ssds.infra.entity.ScoreFactor;
 import com.example.ssds.infra.entity.SceneClassificationLog;
 import com.example.ssds.infra.repository.*;
 import java.math.BigDecimal;
@@ -26,30 +31,39 @@ public class SceneClassificationService {
 
     private final ProductRepository productRepository;
     private final HeatReadingRepository heatReadingRepository;
+    private final HeatCompositeDailyRepository heatCompositeDailyRepository;
+    private final ProductScoreRepository productScoreRepository;
     private final DecisionRecordRepository decisionRecordRepository;
     private final ItemFestivalAffinityRepository festivalAffinityRepository;
     private final SceneClassificationLogRepository logRepository;
+    private final PromptSanitizer promptSanitizer;
     private final SceneClassifierAgent agent;
 
     public SceneClassificationService(
             ProductRepository productRepository,
             HeatReadingRepository heatReadingRepository,
+            HeatCompositeDailyRepository heatCompositeDailyRepository,
+            ProductScoreRepository productScoreRepository,
             DecisionRecordRepository decisionRecordRepository,
             ItemFestivalAffinityRepository festivalAffinityRepository,
             SceneClassificationLogRepository logRepository,
+            PromptSanitizer promptSanitizer,
             SceneClassifierAgent agent) {
         this.productRepository = productRepository;
         this.heatReadingRepository = heatReadingRepository;
+        this.heatCompositeDailyRepository = heatCompositeDailyRepository;
+        this.productScoreRepository = productScoreRepository;
         this.decisionRecordRepository = decisionRecordRepository;
         this.festivalAffinityRepository = festivalAffinityRepository;
         this.logRepository = logRepository;
+        this.promptSanitizer = promptSanitizer;
         this.agent = agent;
     }
 
     @Transactional
     public SceneClassificationResponse classify(Long productId, boolean forceRefresh) {
         Product product = loadTrackAProduct(productId);
-        SceneClassifierInput input = buildInput(product);
+        SceneClassifierInput input = promptSanitizer.sanitizeSceneClassifier(buildInput(product));
         SceneClassificationResult result = agent.classify(input, forceRefresh);
         SceneClassificationLog log = SceneClassificationLog.builder()
                 .product(product)
@@ -112,8 +126,9 @@ public class SceneClassificationService {
 
         TreeMap<LocalDate, BigDecimal> series = new TreeMap<>();
         dailyValues.forEach((date, values) -> series.put(date, average(values)));
-        BigDecimal latest = series.isEmpty() ? null : series.lastEntry().getValue();
         LocalDate latestDate = series.isEmpty() ? today : series.lastKey();
+        BigDecimal heatSlopePercentile = latestTrendPercentile(product.getId());
+        HeatStage heatStage = latestHeatStage(product);
 
         List<FestivalMatch> festivalMatches = festivalAffinityRepository.findByProductId(product.getId())
                 .stream()
@@ -128,10 +143,42 @@ public class SceneClassificationService {
                 product.getSeason(),
                 slope(series, latestDate, 7),
                 slope(series, latestDate, 30),
-                latest,
-                HeatBucket.fromPercentile(latest),
+                heatSlopePercentile,
+                heatStage,
+                HeatBucket.fromPercentile(heatSlopePercentile),
                 decisionRecordRepository.countByProductId(product.getId()),
                 festivalMatches);
+    }
+
+    private BigDecimal latestTrendPercentile(Long productId) {
+        return productScoreRepository
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(productId)
+                .stream()
+                .map(ProductScore::getFactors)
+                .flatMap(Collection::stream)
+                .filter(factor -> factor.getFactorCode() == FactorCode.TREND)
+                .filter(factor -> !factor.isPenalty() && factor.isDataAvailable())
+                .map(ScoreFactor::getNormalizedValue)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 品項可綁多個關鍵字；先取最新日期，再以同日合成熱度最高的關鍵字作為代表階段。
+     */
+    private HeatStage latestHeatStage(Product product) {
+        return product.getKeywords().stream()
+                .map(keyword -> heatCompositeDailyRepository
+                        .findFirstByKeywordIdOrderByStatDateDesc(keyword.getId()))
+                .flatMap(Optional::stream)
+                .max(Comparator
+                        .comparing(HeatCompositeDaily::getStatDate)
+                        .thenComparing(
+                                HeatCompositeDaily::getCompositeValue,
+                                Comparator.nullsFirst(BigDecimal::compareTo)))
+                .map(HeatCompositeDaily::getStage)
+                .orElse(null);
     }
 
     private static BigDecimal slope(TreeMap<LocalDate, BigDecimal> series, LocalDate latestDate, int days) {

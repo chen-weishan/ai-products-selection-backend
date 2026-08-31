@@ -10,6 +10,8 @@ import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import java.util.*;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,17 +20,29 @@ public class AiTaskService {
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
     private final ProductRepository productRepository;
+    private final TrendKeywordRepository keywordRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Autowired
     public AiTaskService(
             AiTaskRepository taskRepository,
             AiTaskItemRepository itemRepository,
             ProductRepository productRepository,
+            TrendKeywordRepository keywordRepository,
             ApplicationEventPublisher eventPublisher) {
         this.taskRepository = taskRepository;
         this.itemRepository = itemRepository;
         this.productRepository = productRepository;
+        this.keywordRepository = keywordRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+    AiTaskService(
+            AiTaskRepository taskRepository,
+            AiTaskItemRepository itemRepository,
+            ProductRepository productRepository,
+            ApplicationEventPublisher eventPublisher) {
+        this(taskRepository, itemRepository, productRepository, null, eventPublisher);
     }
 
     @Transactional
@@ -36,10 +50,18 @@ public class AiTaskService {
         if (request.taskType() != AiTaskType.SCENE_CLASSIFY
                 && request.taskType() != AiTaskType.REVIEW_RISK
                 && request.taskType() != AiTaskType.SELLING_POINT
-                && request.taskType() != AiTaskType.RECOMMENDATION) {
+                && request.taskType() != AiTaskType.RECOMMENDATION
+                && request.taskType() != AiTaskType.TREND_INTERPRET) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "目前 A 軌只開放 SCENE_CLASSIFY、REVIEW_RISK、SELLING_POINT 與 RECOMMENDATION 任務");
+                    "目前 A 軌只開放 SCENE_CLASSIFY、REVIEW_RISK、SELLING_POINT、RECOMMENDATION 與 TREND_INTERPRET 任務");
+        }
+        if (request.taskType() == AiTaskType.TREND_INTERPRET) {
+            return createKeywordTask(request);
+        }
+        if (!request.keywordIds().isEmpty() || request.productIds().isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED, "品項型 AI 任務必須只提供 productIds");
         }
         List<Long> distinctIds = request.productIds().stream().distinct().toList();
         List<Product> products = productRepository.findAllById(distinctIds);
@@ -62,6 +84,48 @@ public class AiTaskService {
                 .toList();
         itemRepository.saveAll(items);
         eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), request.forceRefresh()));
+        return AiTaskResponse.from(task);
+    }
+
+    private AiTaskResponse createKeywordTask(CreateAiTaskRequest request) {
+        if (!request.productIds().isEmpty() || request.keywordIds().isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED, "趨勢解讀任務必須只提供 keywordIds");
+        }
+        List<Long> distinctIds = request.keywordIds().stream().distinct().toList();
+        List<TrendKeyword> keywords = keywordRepository.findAllById(distinctIds);
+        if (keywords.size() != distinctIds.size()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "部分趨勢關鍵字不存在");
+        }
+        AiTask task = taskRepository.save(AiTask.builder()
+                .taskType(request.taskType())
+                .status(TaskStatus.PENDING)
+                .totalCount(keywords.size())
+                .build());
+        List<AiTaskItem> items = keywords.stream()
+                .map(keyword -> AiTaskItem.builder().task(task).keyword(keyword).build())
+                .toList();
+        itemRepository.saveAll(items);
+        eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), request.forceRefresh()));
+        return AiTaskResponse.from(task);
+    }
+
+    /** Agent 6 專用入口；B 軌仍沿用相同的非同步 task/item 管線。 */
+    @Transactional
+    public AiTaskResponse createSourcingScout(Product product, boolean forceRefresh) {
+        if (product.getTrackType() != TrackType.B) {
+            throw new BusinessException(ErrorCode.INVALID_STATE_TRANSITION, "尋源探索只能使用 B 軌品項");
+        }
+        List<AiTask> active = taskRepository.findActiveProductTasks(
+                product.getId(),
+                AiTaskType.SOURCING_SCOUT,
+                List.of(TaskStatus.PENDING, TaskStatus.RUNNING),
+                PageRequest.of(0, 1));
+        if (!active.isEmpty()) return AiTaskResponse.from(active.getFirst());
+        AiTask task = taskRepository.save(AiTask.builder()
+                .taskType(AiTaskType.SOURCING_SCOUT).status(TaskStatus.PENDING).totalCount(1).build());
+        itemRepository.save(AiTaskItem.builder().task(task).product(product).build());
+        eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), forceRefresh));
         return AiTaskResponse.from(task);
     }
 

@@ -9,12 +9,14 @@ import com.example.ssds.ai.routing.AiAccessRouter;
 import com.example.ssds.ai.schema.SceneClassifierResponseParser;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.Season;
+import com.example.ssds.core.domain.HeatStage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 
 class SceneClassifierAgentTest {
 
@@ -77,11 +79,11 @@ class SceneClassifierAgentTest {
         assertEquals(SceneCode.REPLENISHMENT, first.output().sceneType());
         assertEquals(FallbackReason.SCHEMA_INVALID, first.fallbackReason());
         assertFalse(second.cacheHit());
-        assertEquals(4, fake.calls.get());
+        assertEquals(6, fake.calls.get());
     }
 
     @Test
-    void schemaFailureRetriesOnceWithNextModel() {
+    void schemaFailureRetriesPrimaryOnceBeforeFallback() {
         CountingFakeClient fake = new CountingFakeClient(
                 """
                 {"sceneType":"VIRAL","confidence":0.9,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"],"weights":{"TREND":0.9}}
@@ -93,7 +95,7 @@ class SceneClassifierAgentTest {
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.HIGH), false);
 
         assertFalse(result.fallbackApplied());
-        assertEquals(List.of("fake/primary", "fake/fallback"), fake.models);
+        assertEquals(List.of("fake/primary", "fake/primary"), fake.models);
     }
 
     @Test
@@ -108,13 +110,27 @@ class SceneClassifierAgentTest {
         assertTrue(result.fallbackApplied());
         assertEquals(FallbackReason.SCHEMA_INVALID, result.fallbackReason());
         assertEquals(SceneCode.REPLENISHMENT, result.output().sceneType());
-        assertEquals(2, fake.calls.get());
+        assertEquals(3, fake.calls.get());
     }
 
     @Test
     void rateLimitRetriesWithNextModel() {
         CountingFakeClient fake = new CountingFakeClient(
                 new AiRateLimitException("rate limited", null),
+                """
+                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 8"]}
+                """);
+
+        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(List.of("fake/primary", "fake/primary"), fake.models);
+    }
+
+    @Test
+    void resourceAccessImmediatelySwitchesToFallback() {
+        CountingFakeClient fake = new CountingFakeClient(
+                new ResourceAccessException("timeout"),
                 """
                 {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 8"]}
                 """);
@@ -133,12 +149,12 @@ class SceneClassifierAgentTest {
 
         assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
         assertEquals(
-                List.of("fake/primary", "fake/fallback", "fake/third", "fake/fourth"),
+                List.of("fake/primary", "fake/primary", "fake/primary", "fake/primary", "fake/fallback"),
                 fake.models);
     }
 
     @Test
-    void cacheKeyIncludesProductAndHeatBucket() {
+    void cacheKeyIncludesProductHeatStageHeatBucketAndPromptVersion() {
         CountingFakeClient fake = new CountingFakeClient("""
                 {
                   "sceneType": "REPLENISHMENT",
@@ -153,8 +169,9 @@ class SceneClassifierAgentTest {
         assertFalse(agent.classify(input(101L, HeatBucket.MEDIUM), false).cacheHit());
         assertTrue(agent.classify(input(101L, HeatBucket.MEDIUM), false).cacheHit());
         assertFalse(agent.classify(input(101L, HeatBucket.HIGH), false).cacheHit());
+        assertFalse(agent.classify(input(101L, HeatBucket.HIGH, HeatStage.RISING), false).cacheHit());
         assertFalse(agent.classify(input(102L, HeatBucket.MEDIUM), false).cacheHit());
-        assertEquals(3, fake.calls.get());
+        assertEquals(4, fake.calls.get());
     }
 
     @Test
@@ -166,6 +183,8 @@ class SceneClassifierAgentTest {
 
         assertTrue(prompt.contains("productId"));
         assertTrue(prompt.contains("heatSlope7d"));
+        assertTrue(prompt.contains("heatSlopePercentile"));
+        assertTrue(prompt.contains("heatStage"));
         assertFalse(prompt.contains("cost"));
         assertFalse(prompt.contains("suggestedPrice"));
         assertFalse(prompt.contains("margin"));
@@ -199,6 +218,10 @@ class SceneClassifierAgentTest {
     }
 
     private static SceneClassifierInput input(Long productId, HeatBucket bucket) {
+        return input(productId, bucket, HeatStage.PLATEAU);
+    }
+
+    private static SceneClassifierInput input(Long productId, HeatBucket bucket, HeatStage heatStage) {
         return new SceneClassifierInput(
                 productId,
                 "日式抹茶夾心餅乾",
@@ -208,6 +231,7 @@ class SceneClassifierAgentTest {
                 new BigDecimal("3.40"),
                 new BigDecimal("1.25"),
                 new BigDecimal("88.00"),
+                heatStage,
                 bucket,
                 2,
                 List.of(new FestivalMatch("MID_AUTUMN", new BigDecimal("0.45"))));

@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 
 @Component
 public class RecommendationAgent {
@@ -46,7 +47,7 @@ public class RecommendationAgent {
             RecommendationResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-short-gen-primary:mistral-small-latest}") String primaryModel,
-            @Value("${mistral.model-short-gen-fallbacks:mistral-medium-latest,magistral-small-latest,magistral-medium-latest}") String fallbackModels,
+            @Value("${mistral.model-short-gen-fallbacks:mistral-medium-3-5}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -108,7 +109,6 @@ public class RecommendationAgent {
         int modelIndex = 0;
         int rateLimitRetries = 0;
         int schemaRetries = 0;
-        int serviceRetries = 0;
         int requestCount = 0;
         while (true) {
             String model = models.get(modelIndex);
@@ -139,29 +139,52 @@ public class RecommendationAgent {
                 log.warn(
                         "Recommendation schema validation failed: productId={}, model={}, reason={}",
                         input.productId(), model, safeLogMessage(exception.getMessage()));
-                if (schemaRetries < 1 && hasNextModel(modelIndex)) {
+                if (schemaRetries == 0) {
+                    schemaRetries++;
+                    if (pause(2_000L, input.productId(), model)) continue;
+                }
+                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
                     schemaRetries++;
                     modelIndex++;
-                    if (pause(2_000L, input.productId(), model)) continue;
+                    continue;
                 }
                 return fallback(input, FallbackReason.SCHEMA_INVALID, model, requestCount);
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax && hasNextModel(modelIndex)) {
+                if (rateLimitRetries < retryMax) {
                     long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
                     rateLimitRetries++;
-                    modelIndex++;
                     log.warn(
-                            "Recommendation rate limited; next model retry: productId={}, model={}, retry={}/{}, backoffMs={}",
+                            "Recommendation rate limited; retrying same model: productId={}, model={}, retry={}/{}, backoffMs={}",
                             input.productId(), model, rateLimitRetries, retryMax, backoffMillis);
                     if (pause(backoffMillis, input.productId(), model)) continue;
+                }
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (AiModelNotFoundException exception) {
+                log.warn("Recommendation model unavailable; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
+                }
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (ResourceAccessException exception) {
+                log.warn(
+                        "Recommendation timed out; switching fallback: productId={}, model={}",
+                        input.productId(), model);
+                if (hasNextModel(modelIndex)) {
+                    modelIndex++;
+                    continue;
                 }
                 return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
             } catch (RuntimeException exception) {
                 log.warn(
                         "Recommendation request failed: productId={}, model={}, errorType={}",
                         input.productId(), model, exception.getClass().getSimpleName());
-                if (serviceRetries < 1 && hasNextModel(modelIndex)) {
-                    serviceRetries++;
+                if (hasNextModel(modelIndex)) {
                     modelIndex++;
                     continue;
                 }
@@ -232,7 +255,7 @@ public class RecommendationAgent {
     }
 
     private boolean hasNextModel(int index) {
-        return index + 1 < models.size();
+        return index == 0 && models.size() > 1;
     }
 
     private boolean pause(long millis, Long productId, String model) {
