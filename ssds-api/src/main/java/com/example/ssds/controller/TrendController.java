@@ -5,6 +5,7 @@ import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.service.TrendService;
 
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class TrendController {
     }
 
     // 取得所有趨勢訊號
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<TrendSignalRow> getTrends() {
         return trendService.getAllTrendSignals();
     }
