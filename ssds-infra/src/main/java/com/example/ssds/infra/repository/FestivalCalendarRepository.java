@@ -18,6 +18,8 @@ public interface FestivalCalendarRepository extends JpaRepository<FestivalCalend
 
     List<FestivalCalendar> findByFestivalCodeIn(Set<String> festivalCodes);
 
+    List<FestivalCalendar> findAllByOrderByFestivalNameAscYearDesc();
+
     /** 時間窗計算只需要「今天之後、備貨期之內」的節慶，不必整年掃。 */
     List<FestivalCalendar> findByFestivalDateBetweenOrderByFestivalDateAsc(
             LocalDate from, LocalDate to);

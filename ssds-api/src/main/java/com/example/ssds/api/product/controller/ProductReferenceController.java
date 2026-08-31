@@ -2,6 +2,7 @@ package com.example.ssds.api.product.controller;
 
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
+import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
 import com.example.ssds.api.product.service.ProductReferenceQueryService;
@@ -47,5 +48,11 @@ public class ProductReferenceController {
         return ApiResponse.success(
                 queryService.getTrendKeywords(keyword, enabled)
         );
+    }
+
+    @GetMapping("/festivals")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<List<FestivalOptionResponse>> getFestivals() {
+        return ApiResponse.success(queryService.getFestivals());
     }
 }

@@ -1,15 +1,19 @@
 package com.example.ssds.api.product.service;
 
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
+import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
 import com.example.ssds.infra.entity.Category;
+import com.example.ssds.infra.entity.FestivalCalendar;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.CategoryRepository;
+import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,15 +29,18 @@ public class ProductReferenceQueryService {
                     .thenComparing(Category::getId);
 
     private final CategoryRepository categoryRepository;
+    private final FestivalCalendarRepository festivalCalendarRepository;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
 
     public ProductReferenceQueryService(
             CategoryRepository categoryRepository,
+            FestivalCalendarRepository festivalCalendarRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository
     ) {
         this.categoryRepository = categoryRepository;
+        this.festivalCalendarRepository = festivalCalendarRepository;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
     }
@@ -86,6 +93,18 @@ public class ProductReferenceQueryService {
 
         return keywords.stream()
                 .map(this::toTrendKeywordResponse)
+                .toList();
+    }
+
+    public List<FestivalOptionResponse> getFestivals() {
+        LinkedHashMap<String, String> festivals = new LinkedHashMap<>();
+        festivalCalendarRepository.findAllByOrderByFestivalNameAscYearDesc()
+                .forEach(festival -> festivals.putIfAbsent(
+                        festival.getFestivalCode(),
+                        festival.getFestivalName()
+                ));
+        return festivals.entrySet().stream()
+                .map(entry -> new FestivalOptionResponse(entry.getKey(), entry.getValue()))
                 .toList();
     }
 

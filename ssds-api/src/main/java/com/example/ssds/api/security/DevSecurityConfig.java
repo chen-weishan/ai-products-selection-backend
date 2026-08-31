@@ -92,11 +92,11 @@ public class DevSecurityConfig {
             @Value("${ssds.security.dev.password}") String password,
             PasswordEncoder passwordEncoder
     ) {
-        UserDetails buyer = User.withUsername(username)
+        UserDetails sysAdmin = User.withUsername(username)
                 .password(passwordEncoder.encode(password))
-                .roles("BUYER")
+                .roles("SYS_ADMIN")
                 .build();
-        return new InMemoryUserDetailsManager(buyer);
+        return new InMemoryUserDetailsManager(sysAdmin);
     }
 
     @Bean
