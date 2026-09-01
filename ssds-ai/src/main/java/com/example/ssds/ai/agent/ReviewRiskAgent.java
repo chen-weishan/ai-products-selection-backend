@@ -13,6 +13,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,7 +43,7 @@ public class ReviewRiskAgent {
             ReviewRiskResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-long-text-primary:mistral-medium-3-5}") String primaryModel,
-            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest}") String fallbackModels,
+            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -81,9 +82,9 @@ public class ReviewRiskAgent {
     }
 
     public ReviewRiskResult analyze(
-            ReviewRiskInput input, long totalReviewCount, Long latestReviewId, boolean forceRefresh) {
+            ReviewRiskInput input, int reviewCountBucket, LocalDate latestReviewDate, boolean forceRefresh) {
         CacheKey key = new CacheKey(
-                input.productId(), totalReviewCount, latestReviewId, ReviewRiskPromptFactory.PROMPT_VERSION);
+                input.productId(), reviewCountBucket, latestReviewDate, ReviewRiskPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
             ReviewRiskResult cached = cache.getIfPresent(key);
             if (cached != null) return cached.asCacheHit();
@@ -109,6 +110,7 @@ public class ReviewRiskAgent {
         int modelIndex = 0;
         int rateLimitRetries = 0;
         int schemaRetries = 0;
+        int requestCount = 0;
         while (true) {
             String model = models.get(modelIndex);
             try {
@@ -120,7 +122,9 @@ public class ReviewRiskAgent {
                         model,
                         promptFactory.systemPrompt(),
                         promptFactory.userPrompt(input),
-                        ReviewRiskSchema.create(objectMapper));
+                        ReviewRiskSchema.create(objectMapper),
+                        requestCount > 0);
+                requestCount++;
                 AiClientResponse response = router.route(request);
                 ReviewRiskOutput output = parser.parse(response.content(), input);
                 return new ReviewRiskResult(
@@ -175,6 +179,8 @@ public class ReviewRiskAgent {
                     continue;
                 }
                 return fallback(FallbackReason.AI_UNAVAILABLE, model);
+            } catch (AiBudgetExceededException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "ReviewRisk AI request failed: productId={}, model={}, errorType={}",
@@ -189,7 +195,7 @@ public class ReviewRiskAgent {
     }
 
     private boolean hasNextModel(int modelIndex) {
-        return modelIndex == 0 && models.size() > 1;
+        return modelIndex + 1 < models.size();
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {
@@ -239,7 +245,8 @@ public class ReviewRiskAgent {
         return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
     }
 
-    private record CacheKey(Long productId, long reviewCount, Long latestReviewId, String promptVersion) {}
+    private record CacheKey(
+            Long productId, int reviewCountBucket, LocalDate latestReviewDate, String promptVersion) {}
 
     @FunctionalInterface
     interface RetrySleeper {

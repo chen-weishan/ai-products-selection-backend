@@ -20,6 +20,7 @@ class SourcingScoutAgentTest {
     void connectorQuotaStopsWithoutRetryOrModelFallback() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
         when(client.complete(anyString(), anyString()))
                 .thenThrow(new SourcingConnectorQuotaExceededException(null));
         AtomicInteger sleeps = new AtomicInteger();
@@ -28,9 +29,9 @@ class SourcingScoutAgentTest {
                 new SourcingScoutPromptFactory(mapper),
                 new SourcingScoutResponseParser(mapper),
                 mapper,
-                new TrackBSourcingBudget(1000, 0.2),
+                budget,
                 "fake/primary",
-                "fake/fallback",
+                "fake/fallback,fake/third",
                 3,
                 3,
                 millis -> sleeps.incrementAndGet());
@@ -42,13 +43,16 @@ class SourcingScoutAgentTest {
         assertEquals("B 軌尋源 Connector 額度已達上限，請於服務額度重置後再試", thrown.getMessage());
         assertEquals(0, sleeps.get());
         verify(client, times(1)).complete(eq("fake/primary"), anyString());
+        verify(budget).acquire(false);
     }
 
     @Test
     void resourceAccessImmediatelySwitchesToFallback() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
         when(client.complete(anyString(), anyString()))
+                .thenThrow(new ResourceAccessException("timeout"))
                 .thenThrow(new ResourceAccessException("timeout"))
                 .thenReturn(new ScoutClientResponse(
                         """
@@ -57,15 +61,15 @@ class SourcingScoutAgentTest {
                          "riskSignals":["單一來源資訊有限"],
                          "heatStage":"PLATEAU"}
                         """,
-                        "fake/fallback", 100, 30, true, true));
+                "fake/third", 100, 30, true, true));
         SourcingScoutAgent agent = new SourcingScoutAgent(
                 client,
                 new SourcingScoutPromptFactory(mapper),
                 new SourcingScoutResponseParser(mapper),
                 mapper,
-                new TrackBSourcingBudget(1000, 0.2),
+                budget,
                 "fake/primary",
-                "fake/fallback",
+                "fake/fallback,fake/third",
                 3,
                 3,
                 millis -> {});
@@ -74,9 +78,12 @@ class SourcingScoutAgentTest {
                 new SourcingScoutInput("巧克力", 10L, "零食"), true);
 
         assertFalse(result.cacheHit());
-        assertEquals(2, result.requestCount());
+        assertEquals(3, result.requestCount());
         ArgumentCaptor<String> models = ArgumentCaptor.forClass(String.class);
-        verify(client, times(2)).complete(models.capture(), anyString());
-        assertEquals(List.of("fake/primary", "fake/fallback"), models.getAllValues());
+        verify(client, times(3)).complete(models.capture(), anyString());
+        assertEquals(List.of("fake/primary", "fake/fallback", "fake/third"), models.getAllValues());
+        var budgetOrder = inOrder(budget);
+        budgetOrder.verify(budget).acquire(false);
+        budgetOrder.verify(budget, times(2)).acquire(true);
     }
 }

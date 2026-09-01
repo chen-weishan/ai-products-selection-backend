@@ -39,7 +39,7 @@ public class ProductInsightAgent {
             ProductInsightResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-long-text-primary:mistral-medium-3-5}") String primaryModel,
-            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest}") String fallbackModels,
+            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -127,7 +127,8 @@ public class ProductInsightAgent {
                         model,
                         promptFactory.systemPrompt(),
                         promptFactory.userPrompt(input),
-                        ProductInsightSchema.create(objectMapper));
+                        ProductInsightSchema.create(objectMapper),
+                        requestCount > 0);
                 requestCount++;
                 AiClientResponse response = router.route(request);
                 ProductInsightOutput output = parser.parse(response.content(), input);
@@ -186,6 +187,8 @@ public class ProductInsightAgent {
                     continue;
                 }
                 return fallback(FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (AiBudgetExceededException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "ProductInsight request failed: productId={}, model={}, errorType={}",
@@ -200,7 +203,7 @@ public class ProductInsightAgent {
     }
 
     private boolean hasNextModel(int modelIndex) {
-        return modelIndex == 0 && models.size() > 1;
+        return modelIndex + 1 < models.size();
     }
 
     private boolean pause(long millis, Long productId, String model) {

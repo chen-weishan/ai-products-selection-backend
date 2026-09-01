@@ -18,6 +18,7 @@ public class WeightCalibrationAgentTest {
         WeightCalibrationResult result=agent(client).interpret(input(),false);
         assertFalse(result.fallbackApplied()); assertEquals(3,result.requestCount());
         assertEquals(List.of("fake/primary","fake/primary","fake/fallback"),client.models);
+        assertEquals(List.of(false,true,true),client.retryAttempts);
     }
     @Test void repeatedFailureFallsBackToRawStatisticsMessage(){
         FakeClient client=new FakeClient(new IllegalStateException("offline"));
@@ -25,15 +26,16 @@ public class WeightCalibrationAgentTest {
         assertTrue(result.fallbackApplied());
         assertEquals("AI 解讀未完成，請直接查看統計原始結果表。",result.output().report());
         assertTrue(result.output().adjustmentAdvice().isEmpty());
+        assertEquals(List.of("fake/primary","fake/fallback","fake/third"),client.models);
     }
-    @Test void successfulResultIsCachedPerQuarterAndInput(){
+    @Test void successfulResultIsNeverCached(){
         FakeClient client=new FakeClient(validJson()); WeightCalibrationAgent agent=agent(client);
-        assertFalse(agent.interpret(input(),false).cacheHit()); assertTrue(agent.interpret(input(),false).cacheHit());
-        assertEquals(1,client.calls.get());
+        assertFalse(agent.interpret(input(),false).cacheHit()); assertFalse(agent.interpret(input(),false).cacheHit());
+        assertEquals(2,client.calls.get());
     }
     private static WeightCalibrationAgent agent(TrackAAiClient client){ObjectMapper m=new ObjectMapper();return new WeightCalibrationAgent(
             new AiAccessRouter(client),new WeightCalibrationPromptFactory(m),new WeightCalibrationResponseParser(m),m,
-            new TrackRetryBudget(1000,0.1),"fake/primary","fake/fallback",3,6,ms->{});}
+            "fake/primary","fake/fallback,fake/third",3,ms->{});}
     public static WeightCalibrationInput input(){return new WeightCalibrationInput("2026Q3",200,"pearson",
             List.of(new WeightCalibrationInput.FactorStatistic("TREND",bd("0.71"),bd("0.50"),bd("0.47"),bd("0.11"))),
             "結果僅供參考",new WeightCalibrationInput.OverrideStatistics(200,20,bd("0.10"),
@@ -45,6 +47,6 @@ public class WeightCalibrationAgentTest {
              "adjustmentAdvice":[{"factorCode":"TREND","explanation":"依統計模組建議方向調整，不另提出數值。"}],
              "attentionNotes":["零食品類覆寫率為 0.20，需確認是否為情境判定問題。"]}
             """;}
-    private static final class FakeClient implements TrackAAiClient {final List<Object> outcomes;final AtomicInteger calls=new AtomicInteger();final List<String>models=new ArrayList<>();
-        FakeClient(Object...o){outcomes=List.of(o);}@Override public AiClientResponse complete(AiPromptRequest r){int i=calls.getAndIncrement();models.add(r.model());Object o=outcomes.get(Math.min(i,outcomes.size()-1));if(o instanceof RuntimeException e)throw e;return new AiClientResponse((String)o,r.model(),10,5);}}
+    private static final class FakeClient implements TrackAAiClient {final List<Object> outcomes;final AtomicInteger calls=new AtomicInteger();final List<String>models=new ArrayList<>();final List<Boolean>retryAttempts=new ArrayList<>();
+        FakeClient(Object...o){outcomes=List.of(o);}@Override public AiClientResponse complete(AiPromptRequest r){int i=calls.getAndIncrement();models.add(r.model());retryAttempts.add(r.retryAttempt());Object o=outcomes.get(Math.min(i,outcomes.size()-1));if(o instanceof RuntimeException e)throw e;return new AiClientResponse((String)o,r.model(),10,5);}}
 }

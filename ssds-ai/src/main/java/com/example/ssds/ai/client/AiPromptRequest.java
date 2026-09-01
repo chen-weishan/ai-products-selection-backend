@@ -8,5 +8,15 @@ public record AiPromptRequest(
         String model,
         String systemPrompt,
         String userPrompt,
-        JsonNode responseSchema
-) {}
+        JsonNode responseSchema,
+        boolean retryAttempt
+) {
+    public AiPromptRequest(
+            AiTaskType taskType,
+            String model,
+            String systemPrompt,
+            String userPrompt,
+            JsonNode responseSchema) {
+        this(taskType, model, systemPrompt, userPrompt, responseSchema, false);
+    }
+}

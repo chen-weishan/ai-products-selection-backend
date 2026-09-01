@@ -149,12 +149,14 @@ class SceneClassifierAgentTest {
 
         assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
         assertEquals(
-                List.of("fake/primary", "fake/primary", "fake/primary", "fake/primary", "fake/fallback"),
+                List.of(
+                        "fake/primary", "fake/primary", "fake/primary", "fake/primary",
+                        "fake/fallback", "fake/third"),
                 fake.models);
     }
 
     @Test
-    void cacheKeyIncludesProductHeatStageHeatBucketAndPromptVersion() {
+    void cacheKeyUsesStageSlopeBucketFestivalMatchAndProduct() {
         CountingFakeClient fake = new CountingFakeClient("""
                 {
                   "sceneType": "REPLENISHMENT",
@@ -166,12 +168,13 @@ class SceneClassifierAgentTest {
                 """);
         SceneClassifierAgent agent = agent(fake);
 
-        assertFalse(agent.classify(input(101L, HeatBucket.MEDIUM), false).cacheHit());
-        assertTrue(agent.classify(input(101L, HeatBucket.MEDIUM), false).cacheHit());
-        assertFalse(agent.classify(input(101L, HeatBucket.HIGH), false).cacheHit());
-        assertFalse(agent.classify(input(101L, HeatBucket.HIGH, HeatStage.RISING), false).cacheHit());
-        assertFalse(agent.classify(input(102L, HeatBucket.MEDIUM), false).cacheHit());
-        assertEquals(4, fake.calls.get());
+        assertFalse(agent.classify(input(101L, HeatStage.PLATEAU, "0.034", "MID_AUTUMN"), false).cacheHit());
+        assertTrue(agent.classify(input(101L, HeatStage.PLATEAU, "0.039", "MID_AUTUMN"), false).cacheHit());
+        assertFalse(agent.classify(input(101L, HeatStage.PLATEAU, "0.104", "MID_AUTUMN"), false).cacheHit());
+        assertFalse(agent.classify(input(101L, HeatStage.RISING, "0.104", "MID_AUTUMN"), false).cacheHit());
+        assertFalse(agent.classify(input(101L, HeatStage.RISING, "0.104", "LUNAR_NEW_YEAR"), false).cacheHit());
+        assertFalse(agent.classify(input(102L, HeatStage.PLATEAU, "0.034", "MID_AUTUMN"), false).cacheHit());
+        assertEquals(5, fake.calls.get());
     }
 
     @Test
@@ -211,7 +214,7 @@ class SceneClassifierAgentTest {
                 new SceneClassifierResponseParser(mapper),
                 mapper,
                 "fake/primary",
-                "fake/fallback,fake/third,fake/fourth",
+                "fake/fallback,fake/third",
                 3,
                 7,
                 millis -> {});
@@ -222,19 +225,29 @@ class SceneClassifierAgentTest {
     }
 
     private static SceneClassifierInput input(Long productId, HeatBucket bucket, HeatStage heatStage) {
+        return input(productId, heatStage, "3.40", "MID_AUTUMN", bucket);
+    }
+
+    private static SceneClassifierInput input(
+            Long productId, HeatStage heatStage, String slope7d, String festivalCode) {
+        return input(productId, heatStage, slope7d, festivalCode, HeatBucket.MEDIUM);
+    }
+
+    private static SceneClassifierInput input(
+            Long productId, HeatStage heatStage, String slope7d, String festivalCode, HeatBucket bucket) {
         return new SceneClassifierInput(
                 productId,
                 "日式抹茶夾心餅乾",
                 10L,
                 "進口零食",
                 Season.SUMMER,
-                new BigDecimal("3.40"),
+                new BigDecimal(slope7d),
                 new BigDecimal("1.25"),
                 new BigDecimal("88.00"),
                 heatStage,
                 bucket,
                 2,
-                List.of(new FestivalMatch("MID_AUTUMN", new BigDecimal("0.45"))));
+                List.of(new FestivalMatch(festivalCode, new BigDecimal("0.45"))));
     }
 
     private static final class CountingFakeClient implements TrackAAiClient {

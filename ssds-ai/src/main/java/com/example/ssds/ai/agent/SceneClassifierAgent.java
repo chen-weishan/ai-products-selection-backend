@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.AiClientResponse;
+import com.example.ssds.ai.client.AiBudgetExceededException;
 import com.example.ssds.ai.client.AiModelNotFoundException;
 import com.example.ssds.ai.client.AiPromptRequest;
 import com.example.ssds.ai.client.AiRateLimitException;
@@ -15,7 +16,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import org.slf4j.Logger;
@@ -45,9 +48,9 @@ public class SceneClassifierAgent {
             SceneClassifierResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-classify-primary:mistral-medium-3-5}") String primaryModel,
-            @Value("${mistral.model-classify-fallbacks:mistral-small-latest}") String fallbackModels,
+            @Value("${mistral.model-classify-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
-            @Value("${ai.cache-days:7}") long cacheDays) {
+            @Value("${ai.cache-days:6}") long cacheDays) {
         this(
                 router,
                 promptFactory,
@@ -82,7 +85,11 @@ public class SceneClassifierAgent {
 
     public SceneClassificationResult classify(SceneClassifierInput input, boolean forceRefresh) {
         CacheKey key = new CacheKey(
-                input.productId(), input.heatStage(), input.heatBucket(), SceneClassifierPromptFactory.PROMPT_VERSION);
+                input.productId(),
+                input.heatStage(),
+                slopeBucket(input.heatSlope7d()),
+                festivalFingerprint(input.festivalMatches()),
+                SceneClassifierPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
             SceneClassificationResult cached = cache.getIfPresent(key);
             if (cached != null) return cached.asCacheHit();
@@ -100,6 +107,7 @@ public class SceneClassifierAgent {
         int modelIndex = 0;
         int rateLimitRetries = 0;
         int schemaRetries = 0;
+        int requestCount = 0;
         while (true) {
             String model = models.get(modelIndex);
             String raw = null;
@@ -112,7 +120,9 @@ public class SceneClassifierAgent {
                         model,
                         promptFactory.systemPrompt(),
                         promptFactory.userPrompt(input),
-                        SceneClassifierSchema.create(objectMapper));
+                        SceneClassifierSchema.create(objectMapper),
+                        requestCount > 0);
+                requestCount++;
                 AiClientResponse response = router.route(request);
                 raw = response.content();
                 SceneClassifierOutput output = parser.parse(raw);
@@ -192,6 +202,8 @@ public class SceneClassifierAgent {
                     continue;
                 }
                 return unavailableFallback(raw, model);
+            } catch (AiBudgetExceededException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "SceneClassifier AI request failed: productId={}, model={}, errorType={}",
@@ -208,7 +220,7 @@ public class SceneClassifierAgent {
     }
 
     private boolean hasNextModel(int modelIndex) {
-        return modelIndex == 0 && models.size() > 1;
+        return modelIndex + 1 < models.size();
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {
@@ -271,9 +283,32 @@ public class SceneClassifierAgent {
         return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
     }
 
+    private static Integer slopeBucket(BigDecimal slope7d) {
+        if (slope7d == null) return null;
+        return slope7d.multiply(BigDecimal.TEN)
+                .setScale(0, RoundingMode.FLOOR)
+                .intValueExact();
+    }
+
+    private static List<FestivalKey> festivalFingerprint(List<FestivalMatch> matches) {
+        return matches.stream()
+                .map(value -> new FestivalKey(
+                        value.festivalCode(),
+                        value.affinity() == null ? null : value.affinity().stripTrailingZeros()))
+                .sorted(Comparator
+                        .comparing(FestivalKey::festivalCode, Comparator.nullsFirst(String::compareTo))
+                        .thenComparing(FestivalKey::affinity, Comparator.nullsFirst(BigDecimal::compareTo)))
+                .toList();
+    }
+
+    private record FestivalKey(String festivalCode, BigDecimal affinity) {}
+
     private record CacheKey(
-            Long productId, com.example.ssds.core.domain.HeatStage heatStage,
-            HeatBucket heatBucket, String promptVersion) {}
+            Long productId,
+            com.example.ssds.core.domain.HeatStage heatStage,
+            Integer slope7dBucket,
+            List<FestivalKey> festivalMatches,
+            String promptVersion) {}
 
     @FunctionalInterface
     interface RetrySleeper {

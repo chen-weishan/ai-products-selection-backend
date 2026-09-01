@@ -1,32 +1,37 @@
 package com.example.ssds.ai.client;
 
-import java.time.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** Agent 6 的隔離每日配額；不會消耗或阻斷 A 軌池。 */
 @Component
 public class TrackBSourcingBudget {
-    private static final ZoneId ZONE = ZoneId.of("Asia/Taipei");
-    private final int dailyLimit;
-    private final AtomicInteger used = new AtomicInteger();
-    private volatile LocalDate usageDate = LocalDate.now(ZONE);
+    private final DailyAiBudget budget;
 
-    public TrackBSourcingBudget(
-            @Value("${ai.quota-daily:1000}") int dailyQuota,
-            @Value("${ai.quota-share-track-b:0.2}") double share) {
-        this.dailyLimit = Math.max(0, (int) Math.floor(dailyQuota * share));
+    @Autowired
+    public TrackBSourcingBudget(DailyAiBudget budget) {
+        this.budget = budget;
     }
 
-    public synchronized void acquire() {
-        LocalDate today = LocalDate.now(ZONE);
-        if (!today.equals(usageDate)) { usageDate = today; used.set(0); }
-        if (used.get() >= dailyLimit) throw new SourcingBudgetExceededException(resetAt());
-        used.incrementAndGet();
+    public TrackBSourcingBudget(int dailyQuota, double share) {
+        this(new DailyAiBudget(dailyQuota, 0, share, 0, java.time.Clock.systemUTC()));
     }
 
-    public OffsetDateTime resetAt() {
-        return usageDate.plusDays(1).atStartOfDay(ZONE).toOffsetDateTime();
+    public void acquire() {
+        acquire(false);
+    }
+
+    public void acquire(boolean retryAttempt) {
+        try {
+            budget.acquire(
+                    com.example.ssds.core.domain.AiTaskType.BudgetPool.TRACK_B,
+                    retryAttempt);
+        } catch (AiBudgetExceededException exception) {
+            if (exception.pool()
+                    == com.example.ssds.core.domain.AiTaskType.BudgetPool.RETRY) {
+                throw exception;
+            }
+            throw new SourcingBudgetExceededException(exception.resetAt());
+        }
     }
 }

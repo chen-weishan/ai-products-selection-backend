@@ -47,7 +47,7 @@ public class RecommendationAgent {
             RecommendationResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-short-gen-primary:mistral-small-latest}") String primaryModel,
-            @Value("${mistral.model-short-gen-fallbacks:mistral-medium-3-5}") String fallbackModels,
+            @Value("${mistral.model-short-gen-fallbacks:mistral-medium-3-5,magistral-medium-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -121,7 +121,8 @@ public class RecommendationAgent {
                         model,
                         promptFactory.systemPrompt(),
                         promptFactory.userPrompt(input),
-                        RecommendationSchema.create(objectMapper));
+                        RecommendationSchema.create(objectMapper),
+                        requestCount > 0);
                 requestCount++;
                 AiClientResponse response = router.route(request);
                 RecommendationOutput output = parser.parse(response.content(), input);
@@ -180,6 +181,8 @@ public class RecommendationAgent {
                     continue;
                 }
                 return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (AiBudgetExceededException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "Recommendation request failed: productId={}, model={}, errorType={}",
@@ -223,12 +226,12 @@ public class RecommendationAgent {
                         ? "建議首批 " + qtyMin + " 件"
                         : "建議首批 " + qtyMin + "–" + qtyMax + " 件";
             } else {
-                action = DecisionType.WATCH;
+                quantityText = "建議採納，首批數量需人工確認";
             }
         }
         String reasoning = switch (action) {
-            case ADOPT -> "規則式預設建議：分級適合採納，數量限於後端允許範圍。";
-            case WATCH -> "規則式預設建議：資料或分級仍需觀察，暫不建立首批數量。";
+            case ADOPT -> "規則式預設建議：分級達採納條件且扣分未達風險抑制門檻，建議採納。";
+            case WATCH -> "規則式預設建議：分級尚未達採納條件且扣分未達淘汰條件，建議持續觀察。";
             case REJECT -> "規則式預設建議：扣分已達風險抑制條件，不建議進貨。";
         };
         return new RecommendationResult(
@@ -255,7 +258,7 @@ public class RecommendationAgent {
     }
 
     private boolean hasNextModel(int index) {
-        return index == 0 && models.size() > 1;
+        return index + 1 < models.size();
     }
 
     private boolean pause(long millis, Long productId, String model) {

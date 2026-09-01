@@ -35,7 +35,7 @@ public class TrendInterpreterAgent {
             TrendInterpreterResponseParser parser,
             ObjectMapper objectMapper,
             @Value("${mistral.model-numeric-primary:mistral-small-latest}") String primaryModel,
-            @Value("${mistral.model-numeric-fallbacks:mistral-medium-3-5}") String fallbackModels,
+            @Value("${mistral.model-numeric-fallbacks:mistral-medium-3-5,magistral-medium-latest}") String fallbackModels,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days-trend:3}") long cacheDays) {
         this(router, promptFactory, parser, objectMapper, primaryModel, fallbackModels,
@@ -102,7 +102,8 @@ public class TrendInterpreterAgent {
                         model,
                         promptFactory.systemPrompt(),
                         promptFactory.userPrompt(input),
-                        TrendInterpreterSchema.create(objectMapper));
+                        TrendInterpreterSchema.create(objectMapper),
+                        requestCount > 0);
                 requestCount++;
                 AiClientResponse response = router.route(request);
                 TrendInterpreterOutput output = parser.parse(response.content(), input);
@@ -155,6 +156,8 @@ public class TrendInterpreterAgent {
                     continue;
                 }
                 return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (AiBudgetExceededException exception) {
+                throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "TrendInterpreter request failed: keywordId={}, model={}, errorType={}",
@@ -192,7 +195,7 @@ public class TrendInterpreterAgent {
     }
 
     private boolean hasNextModel(int index) {
-        return index == 0 && models.size() > 1;
+        return index + 1 < models.size();
     }
 
     private boolean pause(long millis, Long keywordId, String model) {

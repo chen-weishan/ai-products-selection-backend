@@ -9,9 +9,4 @@ public record WeightCalibrationResult(
         String promptVersion,
         Integer promptTokens,
         Integer completionTokens,
-        int requestCount) {
-    public WeightCalibrationResult asCacheHit() {
-        return new WeightCalibrationResult(output, fallbackApplied, fallbackReason, true, model,
-                promptVersion, promptTokens, completionTokens, requestCount);
-    }
-}
+        int requestCount) {}

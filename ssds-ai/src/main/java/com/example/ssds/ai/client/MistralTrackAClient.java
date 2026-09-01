@@ -33,6 +33,7 @@ public class MistralTrackAClient implements TrackAAiClient {
     private final ObjectMapper objectMapper;
     private final String apiKey;
     private final ApplicationEventPublisher eventPublisher;
+    private final DailyAiBudget budget;
     private final Set<String> verifiedReasoningModels = ConcurrentHashMap.newKeySet();
 
     @Autowired
@@ -41,17 +42,30 @@ public class MistralTrackAClient implements TrackAAiClient {
             @Value("${mistral.base-url:https://api.mistral.ai/v1}") String baseUrl,
             @Value("${mistral.api-key:}") String apiKey,
             @Value("${mistral.timeout-seconds:30}") int timeoutSeconds,
+            DailyAiBudget budget,
             ApplicationEventPublisher eventPublisher) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.eventPublisher = eventPublisher;
+        this.budget = budget;
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
         requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
         this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
     }
 
     MistralTrackAClient(ObjectMapper objectMapper, String baseUrl, String apiKey, int timeoutSeconds) {
-        this(objectMapper, baseUrl, apiKey, timeoutSeconds, event -> {});
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds,
+                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), event -> {});
+    }
+
+    MistralTrackAClient(
+            ObjectMapper objectMapper,
+            String baseUrl,
+            String apiKey,
+            int timeoutSeconds,
+            ApplicationEventPublisher eventPublisher) {
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds,
+                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), eventPublisher);
     }
 
     @Override
@@ -79,6 +93,7 @@ public class MistralTrackAClient implements TrackAAiClient {
         body.put("store", false);
         body.put("stream", false);
 
+        budget.acquire(request.taskType().budgetPool(), request.retryAttempt());
         JsonNode response = parseResponse(
                 postConversation(request.taskType(), request.model(), body), request.model());
         JsonNode output = findMessageOutput(response);
@@ -168,6 +183,7 @@ public class MistralTrackAClient implements TrackAAiClient {
 
     private static String modelAlias(AiTaskType taskType) {
         return switch (taskType) {
+            case FULL_ANALYSIS -> "FULL_ANALYSIS";
             case SCENE_CLASSIFY -> "MODEL_CLASSIFY";
             case REVIEW_RISK, SELLING_POINT -> "MODEL_LONG_TEXT";
             case RECOMMENDATION -> "MODEL_SHORT_GEN";

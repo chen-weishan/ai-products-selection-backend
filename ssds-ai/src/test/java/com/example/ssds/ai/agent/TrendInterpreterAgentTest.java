@@ -40,6 +40,7 @@ class TrendInterpreterAgentTest {
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
         assertEquals(List.of("fake/primary", "fake/primary"), client.models);
+        assertEquals(List.of(false, true), client.retryAttempts);
     }
 
     @Test
@@ -77,7 +78,7 @@ class TrendInterpreterAgentTest {
                 new TrendInterpreterResponseParser(mapper),
                 mapper,
                 "fake/primary",
-                "fake/fallback,fake/third,fake/fourth",
+                "fake/fallback,fake/third",
                 3,
                 3,
                 millis -> {});
@@ -87,6 +88,7 @@ class TrendInterpreterAgentTest {
         private final List<Object> outcomes;
         private final AtomicInteger calls = new AtomicInteger();
         private final List<String> models = new ArrayList<>();
+        private final List<Boolean> retryAttempts = new ArrayList<>();
 
         private FakeClient(Object... outcomes) {
             this.outcomes = List.of(outcomes);
@@ -96,6 +98,7 @@ class TrendInterpreterAgentTest {
         public AiClientResponse complete(AiPromptRequest request) {
             int index = calls.getAndIncrement();
             models.add(request.model());
+            retryAttempts.add(request.retryAttempt());
             Object outcome = outcomes.get(Math.min(index, outcomes.size() - 1));
             if (outcome instanceof RuntimeException exception) throw exception;
             return new AiClientResponse((String) outcome, request.model(), 100, 20);

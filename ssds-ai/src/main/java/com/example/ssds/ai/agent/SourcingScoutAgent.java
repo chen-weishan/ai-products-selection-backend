@@ -32,7 +32,7 @@ public class SourcingScoutAgent {
             SourcingScoutResponseParser parser, ObjectMapper mapper,
             TrackBSourcingBudget budget,
             @Value("${mistral.model-reasoning-primary:mistral-medium-3-5}") String primary,
-            @Value("${mistral.model-reasoning-fallbacks:mistral-small-latest}") String fallbacks,
+            @Value("${mistral.model-reasoning-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbacks,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days-sourcing:3}") long cacheDays) {
         this(client, promptFactory, parser, mapper, budget, primary, fallbacks,
@@ -67,7 +67,7 @@ public class SourcingScoutAgent {
                 String prompt = promptFactory.systemPrompt()
                         + (retryInstruction == null ? "" : "\n\n" + retryInstruction)
                         + "\n\nINPUT_JSON:\n" + promptFactory.userPrompt(input);
-                budget.acquire();
+                budget.acquire(requests > 0);
                 requests++;
                 ScoutClientResponse response = client.complete(model, prompt);
                 SourcingScoutOutput output = parser.parse(response.content());
@@ -90,6 +90,8 @@ public class SourcingScoutAgent {
                 }
                 throw new IllegalStateException("尋源探索回應驗證失敗，功能暫時停用", exception);
             } catch (SourcingBudgetExceededException exception) {
+                throw exception;
+            } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (SourcingConnectorQuotaExceededException exception) {
                 log.warn("SourcingScout connector quota exhausted; stopping without retry or model fallback");
@@ -139,7 +141,7 @@ public class SourcingScoutAgent {
         return List.copyOf(values);
     }
     private boolean hasFallbackModel(int modelIndex) {
-        return modelIndex == 0 && models.size() > 1;
+        return modelIndex + 1 < models.size();
     }
     private static String safe(String message) {
         if (message == null) return "unavailable";

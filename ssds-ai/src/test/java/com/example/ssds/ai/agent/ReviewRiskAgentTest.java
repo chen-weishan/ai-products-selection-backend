@@ -8,6 +8,7 @@ import com.example.ssds.ai.prompt.ReviewRiskPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
 import com.example.ssds.ai.schema.ReviewRiskResponseParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,17 +21,19 @@ class ReviewRiskAgentTest {
         FakeClient client = new FakeClient(validJson());
         ReviewRiskAgent agent = agent(client);
 
-        assertFalse(agent.analyze(input(), 2, 2L, false).cacheHit());
-        assertTrue(agent.analyze(input(), 2, 2L, false).cacheHit());
-        assertFalse(agent.analyze(input(), 3, 3L, false).cacheHit());
-        assertEquals(2, client.calls.get());
+        LocalDate date = LocalDate.of(2026, 8, 20);
+        assertFalse(agent.analyze(input(), 0, date, false).cacheHit());
+        assertTrue(agent.analyze(input(), 0, date, false).cacheHit());
+        assertFalse(agent.analyze(input(), 1, date, false).cacheHit());
+        assertFalse(agent.analyze(input(), 1, date.plusDays(1), false).cacheHit());
+        assertEquals(3, client.calls.get());
     }
 
     @Test
     void schemaFailureRetriesOnceWithNextModelThenFallsBack() {
         FakeClient client = new FakeClient("{\"unexpected\":true}");
 
-        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+        ReviewRiskResult result = agent(client).analyze(input(), 0, LocalDate.of(2026, 8, 20), false);
 
         assertTrue(result.fallbackApplied());
         assertEquals(FallbackReason.SCHEMA_INVALID, result.fallbackReason());
@@ -42,7 +45,7 @@ class ReviewRiskAgentTest {
         FakeClient client = new FakeClient(
                 new AiRateLimitException("rate limited", null), validJson());
 
-        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+        ReviewRiskResult result = agent(client).analyze(input(), 0, LocalDate.of(2026, 8, 20), false);
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/primary"), client.models);
@@ -52,7 +55,7 @@ class ReviewRiskAgentTest {
     void serviceFailureImmediatelySwitchesToFallbackModel() {
         FakeClient client = new FakeClient(new IllegalStateException("upstream unavailable"), validJson());
 
-        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+        ReviewRiskResult result = agent(client).analyze(input(), 0, LocalDate.of(2026, 8, 20), false);
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
@@ -64,7 +67,7 @@ class ReviewRiskAgentTest {
                 new ResourceAccessException("timeout"),
                 validJson());
 
-        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+        ReviewRiskResult result = agent(client).analyze(input(), 0, LocalDate.of(2026, 8, 20), false);
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
@@ -75,7 +78,7 @@ class ReviewRiskAgentTest {
         FakeClient client = new FakeClient(
                 new AiModelNotFoundException("fake/primary", null), validJson());
 
-        ReviewRiskResult result = agent(client).analyze(input(), 2, 2L, false);
+        ReviewRiskResult result = agent(client).analyze(input(), 0, LocalDate.of(2026, 8, 20), false);
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
@@ -89,7 +92,7 @@ class ReviewRiskAgentTest {
                 new ReviewRiskResponseParser(mapper),
                 mapper,
                 "fake/primary",
-                "fake/fallback,fake/third,fake/fourth",
+                "fake/fallback,fake/third",
                 3,
                 7,
                 millis -> {});

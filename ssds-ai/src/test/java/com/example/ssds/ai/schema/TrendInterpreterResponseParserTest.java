@@ -43,6 +43,8 @@ public class TrendInterpreterResponseParserTest {
                         point(latest, "70", "0.30")),
                 List.of(new TrendInterpreterInput.SourceTrend(
                         HeatSourceCode.THREADS,
+                        HeatGranularity.KEYWORD,
+                        null,
                         new BigDecimal("0.20"),
                         new BigDecimal("0.30"),
                         SourceAvailability.AVAILABLE)),

@@ -24,6 +24,8 @@ public record TrendInterpreterInput(
 
     public record SourceTrend(
             HeatSourceCode source,
+            HeatGranularity granularity,
+            Long categoryId,
             BigDecimal slope7d,
             BigDecimal slope30d,
             SourceAvailability availability) {}

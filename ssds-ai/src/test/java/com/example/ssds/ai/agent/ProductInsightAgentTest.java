@@ -81,7 +81,7 @@ class ProductInsightAgentTest {
                 new ProductInsightResponseParser(mapper),
                 mapper,
                 "fake/primary",
-                "fake/fallback,fake/third,fake/fourth",
+                "fake/fallback,fake/third",
                 3,
                 6,
                 millis -> {});
