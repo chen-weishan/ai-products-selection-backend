@@ -6,8 +6,8 @@ import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
+import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.FactorCode;
-import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.Product;
@@ -16,7 +16,6 @@ import com.example.ssds.infra.entity.ScoreFactor;
 import com.example.ssds.infra.entity.SceneClassificationLog;
 import com.example.ssds.infra.repository.*;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
@@ -27,10 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SceneClassificationService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Taipei");
-    private static final BigDecimal SLOPE_EPSILON = new BigDecimal("0.0001");
-
     private final ProductRepository productRepository;
-    private final HeatReadingRepository heatReadingRepository;
     private final HeatCompositeDailyRepository heatCompositeDailyRepository;
     private final ProductScoreRepository productScoreRepository;
     private final DecisionRecordRepository decisionRecordRepository;
@@ -41,7 +37,6 @@ public class SceneClassificationService {
 
     public SceneClassificationService(
             ProductRepository productRepository,
-            HeatReadingRepository heatReadingRepository,
             HeatCompositeDailyRepository heatCompositeDailyRepository,
             ProductScoreRepository productScoreRepository,
             DecisionRecordRepository decisionRecordRepository,
@@ -50,7 +45,6 @@ public class SceneClassificationService {
             PromptSanitizer promptSanitizer,
             SceneClassifierAgent agent) {
         this.productRepository = productRepository;
-        this.heatReadingRepository = heatReadingRepository;
         this.heatCompositeDailyRepository = heatCompositeDailyRepository;
         this.productScoreRepository = productScoreRepository;
         this.decisionRecordRepository = decisionRecordRepository;
@@ -113,22 +107,8 @@ public class SceneClassificationService {
     }
 
     private SceneClassifierInput buildInput(Product product) {
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        TreeMap<LocalDate, List<BigDecimal>> dailyValues = new TreeMap<>();
-        product.getKeywords().forEach(keyword -> heatReadingRepository
-                .findByKeywordIdAndReadingDateBetweenOrderByReadingDateAsc(
-                        keyword.getId(), today.minusDays(30), today)
-                .stream()
-                .filter(reading -> reading.getPercentileWithinSource() != null)
-                .forEach(reading -> dailyValues
-                        .computeIfAbsent(reading.getReadingDate(), ignored -> new ArrayList<>())
-                        .add(reading.getPercentileWithinSource())));
-
-        TreeMap<LocalDate, BigDecimal> series = new TreeMap<>();
-        dailyValues.forEach((date, values) -> series.put(date, average(values)));
-        LocalDate latestDate = series.isEmpty() ? today : series.lastKey();
+        HeatCompositeDaily latestHeat = latestHeat(product).orElse(null);
         BigDecimal heatSlopePercentile = latestTrendPercentile(product.getId());
-        HeatStage heatStage = latestHeatStage(product);
 
         List<FestivalMatch> festivalMatches = festivalAffinityRepository.findByProductId(product.getId())
                 .stream()
@@ -141,12 +121,12 @@ public class SceneClassificationService {
                 product.getCategory().getId(),
                 product.getCategory().getName(),
                 product.getSeason(),
-                slope(series, latestDate, 7),
-                slope(series, latestDate, 30),
+                latestHeat == null ? null : latestHeat.getSlope7d(),
+                latestHeat == null ? null : latestHeat.getSlope30d(),
                 heatSlopePercentile,
-                heatStage,
+                latestHeat == null ? null : latestHeat.getStage(),
                 HeatBucket.fromPercentile(heatSlopePercentile),
-                decisionRecordRepository.countByProductId(product.getId()),
+                decisionRecordRepository.countByProductIdAndDecision(product.getId(), DecisionType.ADOPT),
                 festivalMatches);
     }
 
@@ -167,7 +147,7 @@ public class SceneClassificationService {
     /**
      * 品項可綁多個關鍵字；先取最新日期，再以同日合成熱度最高的關鍵字作為代表階段。
      */
-    private HeatStage latestHeatStage(Product product) {
+    private Optional<HeatCompositeDaily> latestHeat(Product product) {
         return product.getKeywords().stream()
                 .map(keyword -> heatCompositeDailyRepository
                         .findFirstByKeywordIdOrderByStatDateDesc(keyword.getId()))
@@ -176,22 +156,6 @@ public class SceneClassificationService {
                         .comparing(HeatCompositeDaily::getStatDate)
                         .thenComparing(
                                 HeatCompositeDaily::getCompositeValue,
-                                Comparator.nullsFirst(BigDecimal::compareTo)))
-                .map(HeatCompositeDaily::getStage)
-                .orElse(null);
-    }
-
-    private static BigDecimal slope(TreeMap<LocalDate, BigDecimal> series, LocalDate latestDate, int days) {
-        if (series.isEmpty()) return null;
-        Map.Entry<LocalDate, BigDecimal> prior = series.floorEntry(latestDate.minusDays(days));
-        if (prior == null) return null;
-        BigDecimal latest = series.lastEntry().getValue();
-        BigDecimal denominator = prior.getValue().abs().max(SLOPE_EPSILON);
-        return latest.subtract(prior.getValue()).divide(denominator, 4, RoundingMode.HALF_UP);
-    }
-
-    private static BigDecimal average(List<BigDecimal> values) {
-        return values.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP);
+                                Comparator.nullsFirst(BigDecimal::compareTo)));
     }
 }

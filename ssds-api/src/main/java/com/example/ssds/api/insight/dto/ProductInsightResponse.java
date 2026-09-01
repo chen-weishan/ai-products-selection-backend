@@ -30,7 +30,11 @@ public record ProductInsightResponse(
         boolean completed = !result.fallbackApplied() && !result.output().sellingPoints().isEmpty();
         String message = result.fallbackApplied()
                 ? "賣點與風險分析未完成"
-                : completed ? null : "評論資料不足";
+                : completed
+                        ? null
+                        : sourceReviewCount == 0
+                                ? "賣點與風險分析未執行：無評論資料"
+                                : "賣點與風險分析未完成";
         return new ProductInsightResponse(
                 productId,
                 result.output().sellingPoints(),

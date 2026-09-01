@@ -19,6 +19,7 @@ import com.example.ssds.infra.repository.ReviewAnalysisRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
@@ -31,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReviewRiskService {
     private static final int REVIEW_LIMIT = 200;
+    private static final int REVIEW_BUCKET_SIZE = 50;
+    private static final int MINIMUM_REVIEW_SAMPLE = 20;
     private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
 
     private final ProductRepository productRepository;
@@ -56,16 +59,16 @@ public class ReviewRiskService {
     public ReviewRiskResponse analyze(Long productId, boolean forceRefresh) {
         loadTrackAProduct(productId);
         long totalReviewCount = productReviewRepository.countByProductId(productId);
-        Long latestReviewId = productReviewRepository
-                .findFirstByProductIdOrderByIdDesc(productId)
-                .map(ProductReview::getId)
-                .orElse(null);
         List<ProductReview> reviews = latestReviews(productId);
         List<ReviewRiskInput.ReviewText> rawInput = reviews.stream()
                 .map(review -> new ReviewRiskInput.ReviewText(review.getId(), review.getContent()))
                 .toList();
         ReviewRiskInput input = promptSanitizer.sanitizeReviewRisk(productId, rawInput);
-        ReviewRiskResult result = agent.analyze(input, totalReviewCount, latestReviewId, forceRefresh);
+        ReviewRiskResult result = agent.analyze(
+                input,
+                Math.toIntExact(totalReviewCount / REVIEW_BUCKET_SIZE),
+                latestReviewDate(reviews),
+                forceRefresh);
         Instant analyzedAt = Instant.now();
         if (!result.fallbackApplied()) {
             persist(reviews, result, analyzedAt);
@@ -101,8 +104,12 @@ public class ReviewRiskService {
                 analyses,
                 statistics,
                 true,
-                reviews.isEmpty() ? "評論資料不足" : null,
-                null,
+                reviews.isEmpty()
+                        ? "評論風險分析未執行：無評論資料，評論風險扣分計為 0"
+                        : reviews.size() < MINIMUM_REVIEW_SAMPLE
+                                ? "評論樣本不足（少於 20 則），評論風險扣分計為 0"
+                                : null,
+                reviews.size() < MINIMUM_REVIEW_SAMPLE ? 0 : null,
                 false,
                 null,
                 false,
@@ -140,6 +147,18 @@ public class ReviewRiskService {
         return productReviewRepository
                 .findByProductId(productId, PageRequest.of(0, REVIEW_LIMIT, sort))
                 .getContent();
+    }
+
+    private static LocalDate latestReviewDate(List<ProductReview> reviews) {
+        return reviews.stream()
+                .map(review -> review.getReviewedAt() != null
+                        ? review.getReviewedAt()
+                        : review.getCreatedAt() == null
+                                ? null
+                                : review.getCreatedAt().atZone(API_ZONE).toLocalDate())
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
     }
 
     private void persist(List<ProductReview> reviews, ReviewRiskResult result, Instant analyzedAt) {

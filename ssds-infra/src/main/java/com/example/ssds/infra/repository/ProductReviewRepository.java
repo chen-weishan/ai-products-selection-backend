@@ -2,7 +2,6 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.infra.entity.ProductReview;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -27,6 +26,4 @@ public interface ProductReviewRepository extends JpaRepository<ProductReview, Lo
 
     long countByProductId(Long productId);
 
-    /** 快取版本依據：評論新增時流水號會前進，內容未變時可直接命中快取。 */
-    Optional<ProductReview> findFirstByProductIdOrderByIdDesc(Long productId);
 }

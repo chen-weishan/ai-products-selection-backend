@@ -24,11 +24,19 @@ public record ReviewRiskResponse(
         String promptVersion,
         OffsetDateTime analyzedAt) {
 
+    private static final int MINIMUM_REVIEW_SAMPLE = 20;
     private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
 
     public static ReviewRiskResponse from(
             Long productId, int reviewCount, ReviewRiskResult result, Instant analyzedAt) {
         boolean completed = !result.fallbackApplied();
+        String statusMessage = result.fallbackApplied()
+                ? "評論分析未完成"
+                : reviewCount == 0
+                        ? "評論風險分析未執行：無評論資料，評論風險扣分計為 0"
+                        : reviewCount < MINIMUM_REVIEW_SAMPLE
+                                ? "評論樣本不足（少於 20 則），評論風險扣分計為 0"
+                                : null;
         return new ReviewRiskResponse(
                 productId,
                 reviewCount,
@@ -36,8 +44,8 @@ public record ReviewRiskResponse(
                 result.output().reviews(),
                 result.output().topicStatistics(),
                 completed,
-                completed ? (reviewCount == 0 ? "評論資料不足" : null) : "評論分析未完成",
-                completed ? null : 0,
+                statusMessage,
+                result.fallbackApplied() || reviewCount < MINIMUM_REVIEW_SAMPLE ? 0 : null,
                 result.fallbackApplied(),
                 result.fallbackReason() == null ? null : result.fallbackReason().name(),
                 result.cacheHit(),

@@ -41,7 +41,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class SceneClassificationServiceTest {
     @Mock ProductRepository productRepository;
-    @Mock HeatReadingRepository heatReadingRepository;
     @Mock HeatCompositeDailyRepository heatCompositeDailyRepository;
     @Mock ProductScoreRepository productScoreRepository;
     @Mock DecisionRecordRepository decisionRecordRepository;
@@ -76,7 +75,6 @@ class SceneClassificationServiceTest {
                 7);
         service = new SceneClassificationService(
                 productRepository,
-                heatReadingRepository,
                 heatCompositeDailyRepository,
                 productScoreRepository,
                 decisionRecordRepository,
@@ -106,9 +104,12 @@ class SceneClassificationServiceTest {
                         .keyword(keyword)
                         .statDate(LocalDate.of(2026, 8, 29))
                         .compositeValue(new BigDecimal("91.00"))
+                        .slope7d(new BigDecimal("0.25"))
+                        .slope30d(new BigDecimal("0.40"))
                         .stage(HeatStage.RISING)
                         .build()));
-        when(decisionRecordRepository.countByProductId(101L)).thenReturn(2L);
+        when(decisionRecordRepository.countByProductIdAndDecision(
+                101L, com.example.ssds.core.domain.DecisionType.ADOPT)).thenReturn(2L);
         when(festivalAffinityRepository.findByProductId(101L)).thenReturn(List.of());
         when(logRepository.save(any())).thenAnswer(invocation -> {
             SceneClassificationLog log = invocation.getArgument(0);
@@ -125,6 +126,9 @@ class SceneClassificationServiceTest {
         ArgumentCaptor<SceneClassifierInput> inputCaptor = ArgumentCaptor.forClass(SceneClassifierInput.class);
         verify(promptSanitizer).sanitizeSceneClassifier(inputCaptor.capture());
         assertEquals(new BigDecimal("96.00"), inputCaptor.getValue().heatSlopePercentile());
+        assertEquals(new BigDecimal("0.25"), inputCaptor.getValue().heatSlope7d());
+        assertEquals(new BigDecimal("0.40"), inputCaptor.getValue().heatSlope30d());
+        assertEquals(2L, inputCaptor.getValue().historicalCampaignCount());
         assertEquals(HeatStage.RISING, inputCaptor.getValue().heatStage());
         verify(logRepository).save(argThat(log ->
                 log.getFinalSceneType().name().equals("FESTIVAL")
