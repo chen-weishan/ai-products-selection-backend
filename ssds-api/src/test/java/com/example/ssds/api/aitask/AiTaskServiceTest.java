@@ -9,6 +9,7 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
+import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import java.util.List;
@@ -190,5 +191,30 @@ class AiTaskServiceTest {
         assertEquals(26L, response.taskId());
         verify(itemRepository).save(argThat(item -> item.getProduct().getId().equals(136L)));
         verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(26L, false));
+    }
+
+    @Test
+    void fullAnalysisUsesTrackABudgetPool() {
+        Product product = Product.builder()
+                .id(101L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(730L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.FULL_ANALYSIS,
+                List.of(101L),
+                new CreateAiTaskRequest.Options(false)));
+
+        assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool());
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(730L, false));
     }
 }

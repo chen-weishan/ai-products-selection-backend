@@ -8,7 +8,7 @@ import java.util.List;
 
 public record CreateAiTaskRequest(
         @NotNull AiTaskType taskType,
-        @Size(max = 100) List<@NotNull Long> productIds,
+        @Size(max = 150) List<@NotNull Long> productIds,
         @Size(max = 100) List<@NotNull Long> keywordIds,
         @Valid Options options
 ) {

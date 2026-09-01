@@ -23,6 +23,20 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
 
     List<AiTask> findByTaskTypeOrderByStartedAtDesc(AiTaskType taskType);
 
+    boolean existsByTaskTypeAndStatusIn(AiTaskType taskType, List<TaskStatus> statuses);
+
+    /** 當日任務總請求、其中 RETRY 池請求與快取命中，供服務重啟後恢復三池計數。 */
+    @Query("""
+            select t.budgetPool,
+                   coalesce(sum(t.requestCount), 0),
+                   coalesce(sum(t.retryPoolRequestCount), 0),
+                   coalesce(sum(t.cacheHitCount), 0)
+            from AiTask t
+            where t.startedAt >= :since
+            group by t.budgetPool
+            """)
+    List<Object[]> summarizeBudgetUsageSince(@Param("since") Instant since);
+
     /** 同品項的尋源任務尚未結束時直接沿用，避免重複 Web Search 造成逾時與 429。 */
     @Query("""
             select t

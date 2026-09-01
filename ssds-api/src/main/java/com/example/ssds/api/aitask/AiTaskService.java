@@ -47,17 +47,21 @@ public class AiTaskService {
 
     @Transactional
     public AiTaskResponse create(CreateAiTaskRequest request) {
-        if (request.taskType() != AiTaskType.SCENE_CLASSIFY
+        if (request.taskType() != AiTaskType.FULL_ANALYSIS
+                && request.taskType() != AiTaskType.SCENE_CLASSIFY
                 && request.taskType() != AiTaskType.REVIEW_RISK
                 && request.taskType() != AiTaskType.SELLING_POINT
                 && request.taskType() != AiTaskType.RECOMMENDATION
                 && request.taskType() != AiTaskType.TREND_INTERPRET) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "目前 A 軌只開放 SCENE_CLASSIFY、REVIEW_RISK、SELLING_POINT、RECOMMENDATION 與 TREND_INTERPRET 任務");
+                    "目前只開放 FULL_ANALYSIS 與既有 Agent 測試任務");
         }
         if (request.taskType() == AiTaskType.TREND_INTERPRET) {
             return createKeywordTask(request);
+        }
+        if (request.taskType() == AiTaskType.FULL_ANALYSIS && request.productIds().isEmpty()) {
+            return createFullAnalysis(productRepository.findFullAnalysisCandidates(eligibleStatuses()), request.forceRefresh());
         }
         if (!request.keywordIds().isEmpty() || request.productIds().isEmpty()) {
             throw new BusinessException(
@@ -74,8 +78,17 @@ public class AiTaskService {
                     request.taskType() + " 任務只能包含 A 軌品項");
         }
 
+        if (request.taskType() == AiTaskType.FULL_ANALYSIS
+                && products.stream().anyMatch(product -> !eligibleStatuses().contains(product.getStatus()))) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "FULL_ANALYSIS 只接受 EVALUATING、WATCHING、ADOPTED 品項");
+        }
+
         AiTask task = taskRepository.save(AiTask.builder()
                 .taskType(request.taskType())
+                .budgetPool(request.taskType() == AiTaskType.FULL_ANALYSIS
+                        ? AiTaskType.BudgetPool.TRACK_A : AiTaskType.BudgetPool.RETRY)
                 .status(TaskStatus.PENDING)
                 .totalCount(products.size())
                 .build());
@@ -99,6 +112,7 @@ public class AiTaskService {
         }
         AiTask task = taskRepository.save(AiTask.builder()
                 .taskType(request.taskType())
+                .budgetPool(AiTaskType.BudgetPool.RETRY)
                 .status(TaskStatus.PENDING)
                 .totalCount(keywords.size())
                 .build());
@@ -123,10 +137,55 @@ public class AiTaskService {
                 PageRequest.of(0, 1));
         if (!active.isEmpty()) return AiTaskResponse.from(active.getFirst());
         AiTask task = taskRepository.save(AiTask.builder()
-                .taskType(AiTaskType.SOURCING_SCOUT).status(TaskStatus.PENDING).totalCount(1).build());
+                .taskType(AiTaskType.SOURCING_SCOUT).budgetPool(AiTaskType.BudgetPool.TRACK_B)
+                .status(TaskStatus.PENDING).totalCount(1).build());
         itemRepository.save(AiTaskItem.builder().task(task).product(product).build());
         eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), forceRefresh));
         return AiTaskResponse.from(task);
+    }
+
+    /** 每週排程入口；空清單時不建立沒有工作項目的任務。 */
+    @Transactional
+    public Optional<AiTaskResponse> createScheduledFullAnalysis() {
+        if (taskRepository.existsByTaskTypeAndStatusIn(
+                AiTaskType.FULL_ANALYSIS, List.of(TaskStatus.PENDING, TaskStatus.RUNNING))) {
+            return Optional.empty();
+        }
+        List<Product> products = productRepository.findFullAnalysisCandidates(eligibleStatuses());
+        return products.isEmpty() ? Optional.empty() : Optional.of(createFullAnalysis(products, false));
+    }
+
+    /** 隔日續跑前一輪因配額或單輪上限略過的品項。 */
+    @Transactional
+    public Optional<AiTaskResponse> resumeQuotaSkippedFullAnalysis() {
+        if (taskRepository.existsByTaskTypeAndStatusIn(
+                AiTaskType.FULL_ANALYSIS, List.of(TaskStatus.PENDING, TaskStatus.RUNNING))) {
+            return Optional.empty();
+        }
+        List<Product> products = itemRepository.findProductsPendingQuotaRetry(
+                AiTaskType.FULL_ANALYSIS, com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA);
+        return products.isEmpty() ? Optional.empty() : Optional.of(createFullAnalysis(products, false));
+    }
+
+    private AiTaskResponse createFullAnalysis(List<Product> products, boolean forceRefresh) {
+        AiTask task = taskRepository.save(AiTask.builder()
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.PENDING)
+                .totalCount(products.size())
+                .build());
+        itemRepository.saveAll(products.stream()
+                .map(product -> AiTaskItem.builder().task(task).product(product).build())
+                .toList());
+        eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), forceRefresh));
+        return AiTaskResponse.from(task);
+    }
+
+    private static List<com.example.ssds.core.domain.ProductStatus> eligibleStatuses() {
+        return List.of(
+                com.example.ssds.core.domain.ProductStatus.EVALUATING,
+                com.example.ssds.core.domain.ProductStatus.WATCHING,
+                com.example.ssds.core.domain.ProductStatus.ADOPTED);
     }
 
     @Transactional(readOnly = true)

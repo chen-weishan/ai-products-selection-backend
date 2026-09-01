@@ -11,10 +11,14 @@ import java.time.ZoneId;
 public record AiTaskResponse(
         Long taskId,
         AiTaskType taskType,
+        AiTaskType.BudgetPool budgetPool,
         TaskStatus status,
         int totalCount,
         int successCount,
         int failCount,
+        int cacheHitCount,
+        int requestCount,
+        int retryPoolRequestCount,
         int progressPercent,
         BigDecimal totalCostUsd,
         OffsetDateTime startedAt,
@@ -24,8 +28,9 @@ public record AiTaskResponse(
 
     public static AiTaskResponse from(AiTask task) {
         return new AiTaskResponse(
-                task.getId(), task.getTaskType(), task.getStatus(), task.getTotalCount(),
-                task.getSuccessCount(), task.getFailCount(), task.progressPercent(),
+                task.getId(), task.getTaskType(), task.getBudgetPool(), task.getStatus(), task.getTotalCount(),
+                task.getSuccessCount(), task.getFailCount(), task.getCacheHitCount(), task.getRequestCount(),
+                task.getRetryPoolRequestCount(), task.progressPercent(),
                 task.getTotalCostUsd(), toApiTime(task.getStartedAt()), toApiTime(task.getFinishedAt()));
     }
 

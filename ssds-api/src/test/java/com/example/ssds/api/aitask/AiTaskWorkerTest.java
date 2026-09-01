@@ -14,6 +14,7 @@ import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import com.example.ssds.ai.client.AiExecutionWarningContext;
 import com.example.ssds.ai.client.AiModelUnavailableEvent;
 import com.example.ssds.ai.client.SourcingConnectorQuotaExceededException;
+import com.example.ssds.ai.client.DailyAiBudget;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
@@ -91,6 +92,7 @@ class AiTaskWorkerTest {
         RecommendationService recommendationService = mock(RecommendationService.class);
         ReviewRiskResponse fallback = mock(ReviewRiskResponse.class);
         when(fallback.fallbackApplied()).thenReturn(true);
+        when(fallback.statusMessage()).thenReturn("評論分析未完成");
         when(reviewRiskService.analyze(101L, true)).thenReturn(fallback);
         Product product = Product.builder().id(101L).build();
         AiTask task = AiTask.builder()
@@ -218,5 +220,46 @@ class AiTaskWorkerTest {
         verify(trendService).interpret(31L, true);
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void fullAnalysisStopsAtItemCapAndPersistsRequestCount() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        Product firstProduct = Product.builder().id(101L).build();
+        Product secondProduct = Product.builder().id(102L).build();
+        AiTask task = AiTask.builder()
+                .id(720L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(2)
+                .build();
+        AiTaskItem first = AiTaskItem.builder().id(721L).task(task).product(firstProduct).build();
+        AiTaskItem second = AiTaskItem.builder().id(722L).task(task).product(secondProduct).build();
+        when(taskRepository.findById(720L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(720L)).thenReturn(List.of(first, second));
+        when(orchestrator.analyze(101L, false)).thenAnswer(ignored -> {
+            for (int index = 0; index < 4; index++) budget.acquire(AiTaskType.BudgetPool.TRACK_A);
+            return new FullAnalysisOrchestrator.Result(0, "");
+        });
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService, null, null,
+                orchestrator, budget, 1);
+
+        worker.run(new AiTaskCreatedEvent(720L, false));
+
+        verify(orchestrator).analyze(101L, false);
+        verify(orchestrator, never()).analyze(102L, false);
+        assertEquals(TaskItemStatus.SUCCEEDED, first.getStatus());
+        assertEquals(TaskItemStatus.SKIPPED_QUOTA, second.getStatus());
+        assertEquals(4, task.getRequestCount());
+        assertEquals(TaskStatus.PARTIAL, task.getStatus());
     }
 }
