@@ -1,7 +1,9 @@
 package com.example.ssds.api.trend;
 
+import com.example.ssds.ai.client.AiBudgetExecutionContext;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.trend.dto.TrendInterpretationResponse;
+import com.example.ssds.core.domain.AiTaskType;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,7 +19,12 @@ public class TrendInterpretationController {
     public ApiResponse<TrendInterpretationResponse> interpret(
             @PathVariable Long keywordId,
             @RequestParam(defaultValue = "false") boolean forceRefresh) {
-        return ApiResponse.success(service.interpret(keywordId, forceRefresh));
+        AiBudgetExecutionContext.begin(AiTaskType.BudgetPool.RETRY);
+        try {
+            return ApiResponse.success(service.interpret(keywordId, forceRefresh));
+        } finally {
+            AiBudgetExecutionContext.clear();
+        }
     }
 
     @GetMapping("/latest")

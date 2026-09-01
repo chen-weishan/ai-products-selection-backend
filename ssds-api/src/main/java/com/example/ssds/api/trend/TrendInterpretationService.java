@@ -62,7 +62,7 @@ public class TrendInterpretationService {
                 .findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
                         keywordId, from, latest.getStatDate());
         List<HeatReading> readings = readingRepository
-                .findByKeywordIdAndReadingDateBetweenOrderByReadingDateAsc(
+                .findForKeywordIncludingCategorySources(
                         keywordId, from, latest.getStatDate());
         TrendInterpreterInput input = promptSanitizer.sanitizeTrendInterpreter(
                 buildInput(keywordId, latest.getStatDate(), composites, readings));
@@ -117,11 +117,12 @@ public class TrendInterpretationService {
                 .toList();
         List<TrendInterpreterInput.SourceTrend> sourceTrends = readings.stream()
                 .collect(Collectors.groupingBy(
-                        value -> value.getSource().getSourceCode(),
-                        () -> new EnumMap<>(HeatSourceCode.class),
+                        SourceKey::from,
                         Collectors.toList()))
                 .entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
+                .sorted(Map.Entry.comparingByKey(Comparator
+                        .comparing(SourceKey::source)
+                        .thenComparing(SourceKey::categoryId, Comparator.nullsFirst(Long::compareTo))))
                 .map(entry -> sourceTrend(entry.getKey(), entry.getValue()))
                 .toList();
         List<TrendInterpreterInput.AllowedOutput> allowed = Arrays.stream(HeatStage.values())
@@ -135,7 +136,7 @@ public class TrendInterpretationService {
     }
 
     private static TrendInterpreterInput.SourceTrend sourceTrend(
-            HeatSourceCode source, List<HeatReading> readings) {
+            SourceKey source, List<HeatReading> readings) {
         List<HeatReading> sorted = readings.stream()
                 .filter(value -> value.getPercentileWithinSource() != null)
                 .sorted(Comparator.comparing(HeatReading::getReadingDate))
@@ -144,10 +145,21 @@ public class TrendInterpretationService {
                 .max(Comparator.comparing(HeatReading::getReadingDate))
                 .orElseThrow();
         return new TrendInterpreterInput.SourceTrend(
-                source,
+                source.source(),
+                source.granularity(),
+                source.categoryId(),
                 slope(sorted, 7),
                 slope(sorted, 30),
                 latest.getSource().getAvailability());
+    }
+
+    private record SourceKey(HeatSourceCode source, HeatGranularity granularity, Long categoryId) {
+        private static SourceKey from(HeatReading reading) {
+            return new SourceKey(
+                    reading.getSource().getSourceCode(),
+                    reading.getSource().getGranularity(),
+                    reading.getCategory() == null ? null : reading.getCategory().getId());
+        }
     }
 
     private static BigDecimal slope(List<HeatReading> readings, int days) {

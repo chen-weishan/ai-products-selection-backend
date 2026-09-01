@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import org.slf4j.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,15 +25,18 @@ public class SourcingScoutService {
     private final CategoryRepository categories; private final CategoryLeadTimeRepository leadTimes;
     private final TrendKeywordRepository keywords; private final ProductRepository products;
     private final SourcingCandidateRepository candidates; private final TrendInterpretationRepository trends;
+    private final HeatCompositeDailyRepository heatComposites;
     private final AiTaskService tasks; private final PromptSanitizer sanitizer;
     private final SourcingScoutAgent agent; private final ObjectMapper mapper;
 
     public SourcingScoutService(CategoryRepository categories, CategoryLeadTimeRepository leadTimes,
             TrendKeywordRepository keywords, ProductRepository products, SourcingCandidateRepository candidates,
-            TrendInterpretationRepository trends, AiTaskService tasks, PromptSanitizer sanitizer,
+            TrendInterpretationRepository trends, HeatCompositeDailyRepository heatComposites,
+            AiTaskService tasks, PromptSanitizer sanitizer,
             SourcingScoutAgent agent, ObjectMapper mapper) {
         this.categories=categories; this.leadTimes=leadTimes; this.keywords=keywords; this.products=products;
-        this.candidates=candidates; this.trends=trends; this.tasks=tasks; this.sanitizer=sanitizer;
+        this.candidates=candidates; this.trends=trends; this.heatComposites=heatComposites;
+        this.tasks=tasks; this.sanitizer=sanitizer;
         this.agent=agent; this.mapper=mapper;
     }
 
@@ -69,11 +73,20 @@ public class SourcingScoutService {
         candidate.setScoutReport(result.output().report());
         candidate.setOpportunitySignals(write(result.output().opportunitySignals()));
         candidate.setRiskSignals(write(result.output().riskSignals()));
-        candidate.setHeatStage(result.output().heatStage());
-        trends.findByKeywordIdAndCurrentTrue(candidate.getKeyword().getId()).ifPresentOrElse(trend -> {
-            candidate.setTrendInterpretation(trend); candidate.setStageWeeks(trend.getStageWeeks());
-            candidate.setEstimatedLifespanDays(trend.getEstimatedLifespanDays());
-        }, () -> { candidate.setStageWeeks((short)1); candidate.setEstimatedLifespanDays(lifespan(result.output().heatStage())); });
+        Long keywordId = candidate.getKeyword().getId();
+        heatComposites.findFirstByKeywordIdOrderByStatDateDesc(keywordId).ifPresentOrElse(composite -> {
+            candidate.setHeatStage(composite.getStage());
+            candidate.setStageWeeks(composite.getStageWeeks());
+            candidate.setEstimatedLifespanDays(composite.getEstimatedLifespanDays() == null
+                    ? lifespan(composite.getStage(), composite.getStageWeeks())
+                    : composite.getEstimatedLifespanDays());
+        }, () -> {
+            candidate.setHeatStage(result.output().heatStage()); candidate.setStageWeeks((short)1);
+            candidate.setEstimatedLifespanDays(lifespan(result.output().heatStage(), 1));
+        });
+        candidate.setTrendInterpretation(trends.findByKeywordIdAndCurrentTrue(keywordId)
+                .filter(trend -> matches(candidate, trend))
+                .orElse(null));
         candidate.setModel(result.model()); candidate.setPromptVersion(result.promptVersion());
         candidate.setReportGeneratedAt(now); candidate.setScoutedAt(now); candidate.recalculateTimeGap();
         if (candidate.getProduct().getSourcingStatus() == SourcingStatus.PENDING
@@ -89,5 +102,12 @@ public class SourcingScoutService {
             new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的尋源候選")); }
     private String write(Object value) { try { return mapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new IllegalStateException("無法序列化尋源訊號", e); } }
-    private static int lifespan(HeatStage stage) { return switch(stage) { case RISING -> 56; case PLATEAU -> 42; case DECLINING -> 17; }; }
+    private static boolean matches(SourcingCandidate candidate, TrendInterpretation trend) {
+        return candidate.getHeatStage() == trend.getHeatStage()
+                && Objects.equals(candidate.getStageWeeks(), trend.getStageWeeks())
+                && Objects.equals(candidate.getEstimatedLifespanDays(), trend.getEstimatedLifespanDays());
+    }
+    private static int lifespan(HeatStage stage, int stageWeeks) { return switch(stage) {
+        case RISING -> 56; case PLATEAU -> stageWeeks <= 2 ? 42 : 35; case DECLINING -> 17;
+    }; }
 }

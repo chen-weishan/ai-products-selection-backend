@@ -46,12 +46,22 @@ class TrendInterpretationServiceTest {
         HeatSource source = HeatSource.builder()
                 .id(1L)
                 .sourceCode(HeatSourceCode.THREADS)
+                .granularity(HeatGranularity.KEYWORD)
+                .availability(SourceAvailability.AVAILABLE)
+                .build();
+        Category category = Category.builder().id(10L).name("進口食品").build();
+        HeatSource categorySource = HeatSource.builder()
+                .id(2L)
+                .sourceCode(HeatSourceCode.INSTAGRAM)
+                .granularity(HeatGranularity.CATEGORY)
                 .availability(SourceAvailability.AVAILABLE)
                 .build();
         List<HeatReading> readings = List.of(
                 reading(keyword, source, latestDate.minusDays(30), "40"),
                 reading(keyword, source, latestDate.minusDays(7), "60"),
-                reading(keyword, source, latestDate, "70"));
+                reading(keyword, source, latestDate, "70"),
+                categoryReading(category, categorySource, latestDate.minusDays(7), "50"),
+                categoryReading(category, categorySource, latestDate, "65"));
         TrendInterpreterOutput output = new TrendInterpreterOutput(HeatStage.RISING, 4, 56);
         TrendInterpreterResult result = new TrendInterpreterResult(
                 output, false, null, false, "mistral-small-latest",
@@ -62,7 +72,7 @@ class TrendInterpretationServiceTest {
         when(compositeRepository.findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
                 eq(31L), eq(latestDate.minusDays(89)), eq(latestDate)))
                 .thenReturn(composites);
-        when(readingRepository.findByKeywordIdAndReadingDateBetweenOrderByReadingDateAsc(
+        when(readingRepository.findForKeywordIncludingCategorySources(
                 eq(31L), eq(latestDate.minusDays(89)), eq(latestDate)))
                 .thenReturn(readings);
         when(agent.interpret(any(), eq(false))).thenReturn(result);
@@ -82,8 +92,14 @@ class TrendInterpretationServiceTest {
         verify(agent).interpret(inputCaptor.capture(), eq(false));
         TrendInterpreterInput input = inputCaptor.getValue();
         assertEquals(22, input.compositeSeries().size());
-        assertEquals(1, input.sourceTrends().size());
+        assertEquals(2, input.sourceTrends().size());
         assertEquals(SourceAvailability.AVAILABLE, input.sourceTrends().getFirst().availability());
+        TrendInterpreterInput.SourceTrend instagram = input.sourceTrends().stream()
+                .filter(value -> value.source() == HeatSourceCode.INSTAGRAM)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(HeatGranularity.CATEGORY, instagram.granularity());
+        assertEquals(10L, instagram.categoryId());
         assertTrue(input.allowedOutputs().contains(
                 new TrendInterpreterInput.AllowedOutput(HeatStage.RISING, 4, 56)));
         assertEquals(56, latest.getEstimatedLifespanDays());
@@ -100,6 +116,17 @@ class TrendInterpretationServiceTest {
             TrendKeyword keyword, HeatSource source, LocalDate date, String percentile) {
         return HeatReading.builder()
                 .keyword(keyword)
+                .source(source)
+                .readingDate(date)
+                .rawValue(BigDecimal.ONE)
+                .percentileWithinSource(new BigDecimal(percentile))
+                .build();
+    }
+
+    private static HeatReading categoryReading(
+            Category category, HeatSource source, LocalDate date, String percentile) {
+        return HeatReading.builder()
+                .category(category)
                 .source(source)
                 .readingDate(date)
                 .rawValue(BigDecimal.ONE)

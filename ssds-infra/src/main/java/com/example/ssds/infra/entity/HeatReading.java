@@ -29,9 +29,14 @@ public class HeatReading {
     @JoinColumn(name = "source_id", nullable = false)
     private HeatSource source;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "keyword_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "keyword_id")
     private TrendKeyword keyword;
+
+    /** 品類級來源（如 Instagram）；與 keyword 依來源粒度擇一使用。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private Category category;
 
     @Column(name = "reading_date", nullable = false)
     private LocalDate readingDate;
