@@ -70,6 +70,11 @@ public class CalibrationReport {
     @Column(name = "backtest_result", columnDefinition = "jsonb")
     private String backtestResult;
 
+    /** 部分採納時逐項勾選的結果；完整審核流程由權重模組負責。 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "accepted_items", columnDefinition = "jsonb")
+    private String acceptedItems;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
