@@ -23,6 +23,10 @@ dependencies {
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
+	// DB-backed integration tests use an isolated PostgreSQL 17.6 container.
+	// They never connect to the shared Supabase database.
+	testImplementation libs.test.testcontainers.postgresql
+	testImplementation libs.test.testcontainers.junit
 }
 
 // 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改
