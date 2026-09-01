@@ -2,11 +2,14 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.WeightVersionStatus;
 import com.example.ssds.infra.entity.WeightVersion;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** 權重版本（規格書 §7.2 weight_version、FR-08）。 */
 @Repository
@@ -35,4 +38,17 @@ public interface WeightVersionRepository extends JpaRepository<WeightVersion, Lo
     /** 評分時要連權重明細一起取，否則每個因子都會多一次查詢。 */
     @EntityGraph(attributePaths = {"profiles"})
     Optional<WeightVersion> findWithProfilesById(Long id);
+
+    @Query(value = """
+            select grade_a_min as "gradeAMin", grade_b_min as "gradeBMin"
+            from grade_threshold
+            where version_id = :versionId and scene_type = :sceneType
+            """, nativeQuery = true)
+    Optional<GradeThresholdView> findGradeThreshold(
+            @Param("versionId") Long versionId, @Param("sceneType") String sceneType);
+
+    interface GradeThresholdView {
+        BigDecimal getGradeAMin();
+        BigDecimal getGradeBMin();
+    }
 }
