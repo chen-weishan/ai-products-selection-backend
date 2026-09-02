@@ -4,6 +4,7 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.product.dto.ProductReviewFileUploadResponse;
+import com.example.ssds.api.product.dto.ProductReviewSummaryResponse;
 import com.example.ssds.infra.dao.BulkImportDao;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.ProductReviewRepository;
@@ -34,7 +35,7 @@ public class ProductReviewFileService {
 
     private static final long MAX_FILE_BYTES = 2L * 1024 * 1024;
     private static final int MAX_ROWS = 10_000;
-    private static final int LOW_CONFIDENCE_THRESHOLD = 30;
+    private static final int LOW_CONFIDENCE_THRESHOLD = 20;
     private static final Set<String> CONTENT_HEADERS = Set.of("content", "comment", "評論內容", "評論");
     private static final Set<String> SOURCE_HEADERS = Set.of("source", "來源", "平台");
     private static final Set<String> RATING_HEADERS = Set.of("rating", "評分", "星等");
@@ -58,9 +59,7 @@ public class ProductReviewFileService {
 
     @Transactional
     public ProductReviewFileUploadResponse upload(Long productId, MultipartFile file) {
-        productRepository.findById(productId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
-        );
+        requireProduct(productId);
         validateFile(file);
 
         List<BulkImportDao.ReviewRow> rows = parse(productId, file);
@@ -73,6 +72,22 @@ public class ProductReviewFileService {
                 rows.size() - inserted,
                 totalReviewCount,
                 totalReviewCount < LOW_CONFIDENCE_THRESHOLD
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public ProductReviewSummaryResponse summary(Long productId) {
+        requireProduct(productId);
+        long totalReviewCount = reviewRepository.countByProductId(productId);
+        return new ProductReviewSummaryResponse(
+                totalReviewCount,
+                totalReviewCount < LOW_CONFIDENCE_THRESHOLD
+        );
+    }
+
+    private void requireProduct(Long productId) {
+        productRepository.findById(productId).orElseThrow(() ->
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
         );
     }
 

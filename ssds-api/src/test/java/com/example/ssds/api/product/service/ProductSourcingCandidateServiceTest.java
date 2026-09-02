@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -139,5 +140,27 @@ class ProductSourcingCandidateServiceTest {
         assertNull(existing.getEstimatedLifespanDays());
         assertNull(existing.getTimeGapDays());
         verify(candidateRepository).saveAndFlush(existing);
+    }
+
+    @Test
+    void missingCategoryLeadTimeKeepsProductAndDefersCandidateCreation() {
+        Category category = Category.builder().id(3L).name("飲品").build();
+        Product product = Product.builder()
+                .id(101L)
+                .category(category)
+                .trackType(TrackType.B)
+                .sourcingStatus(SourcingStatus.PENDING)
+                .keywords(new LinkedHashSet<>(Set.of(
+                        TrendKeyword.builder().id(9L).keyword("抹茶").build()
+                )))
+                .build();
+        when(leadTimeRepository.findById(3L)).thenReturn(Optional.empty());
+        when(candidateRepository.findByProductId(101L)).thenReturn(Optional.empty());
+
+        service.synchronize(product);
+
+        assertEquals(SourcingStatus.PENDING, product.getSourcingStatus());
+        verify(candidateRepository, never()).saveAndFlush(any());
+        verify(heatSignalDao, never()).findLatest(any());
     }
 }

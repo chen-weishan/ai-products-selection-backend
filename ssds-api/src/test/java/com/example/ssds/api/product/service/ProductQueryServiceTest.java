@@ -174,7 +174,7 @@ class ProductQueryServiceTest {
     }
 
     @Test
-    void getByIdTrackBHidesPricingAndReturnsTimeGap() {
+    void getByIdTrackBReturnsOptionalPricingAndTimeGapForEditing() {
         Product product = Product.builder()
                 .id(201L)
                 .name("B 軌詳情")
@@ -198,9 +198,9 @@ class ProductQueryServiceTest {
 
         ProductResponse response = service.getById(201L);
 
-        assertNull(response.cost());
-        assertNull(response.suggestedPrice());
-        assertNull(response.marginRate());
+        assertEquals(new BigDecimal("80.00"), response.cost());
+        assertEquals(new BigDecimal("120.00"), response.suggestedPrice());
+        assertEquals(new BigDecimal("0.3333"), response.marginRate());
         assertEquals(12, response.timeGapDays());
     }
 

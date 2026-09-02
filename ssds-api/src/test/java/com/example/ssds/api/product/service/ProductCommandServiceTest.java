@@ -37,6 +37,7 @@ import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -51,6 +52,7 @@ import org.springframework.http.HttpStatus;
 class ProductCommandServiceTest {
 
     private ProductRepository productRepository;
+    private ProductScoreRepository productScoreRepository;
     private AppUserRepository appUserRepository;
     private AuditLogRepository auditLogRepository;
     private CategoryRepository categoryRepository;
@@ -63,6 +65,7 @@ class ProductCommandServiceTest {
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
+        productScoreRepository = mock(ProductScoreRepository.class);
         SourcingCandidateRepository sourcingCandidateRepository =
                 mock(SourcingCandidateRepository.class);
         appUserRepository = mock(AppUserRepository.class);
@@ -74,6 +77,7 @@ class ProductCommandServiceTest {
 
         service = new ProductCommandService(
                 productRepository,
+                productScoreRepository,
                 sourcingCandidateRepository,
                 appUserRepository,
                 auditLogRepository,
@@ -276,6 +280,20 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void createTrackBWithOptionalPricingReturnsPricingForEditing() {
+        ProductCreateResponse response = createProduct(createRequest(
+                TrackType.B,
+                SourcingStatus.SOURCING,
+                new BigDecimal("80.00"),
+                new BigDecimal("120.00")
+        ));
+
+        assertEquals(new BigDecimal("80.00"), response.product().cost());
+        assertEquals(new BigDecimal("120.00"), response.product().suggestedPrice());
+        assertEquals(new BigDecimal("0.3333"), response.product().marginRate());
+    }
+
+    @Test
     void createTrackBWithoutSourcingStatusDefaultsToPending() {
         ProductCreateResponse response = createProduct(createRequest(
                 TrackType.B,
@@ -316,6 +334,72 @@ class ProductCommandServiceTest {
                 exception,
                 "idealTempMin",
                 "適溫區間下限不可大於上限"
+        );
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
+    }
+
+    @Test
+    void createWithOnlyTemperatureMinimumReturnsValidationFailure() {
+        ProductCreateRequest request = new ProductCreateRequest(
+                "測試商品",
+                1L,
+                null,
+                new BigDecimal("80.00"),
+                new BigDecimal("120.00"),
+                10,
+                Season.ALL,
+                TrackType.A,
+                null,
+                Set.of(LogisticsCondition.NORMAL),
+                new BigDecimal("20.0"),
+                null,
+                180,
+                Set.of(),
+                false
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> createProduct(request)
+        );
+
+        assertBadRequest(
+                exception,
+                "idealTempMax",
+                "適溫區間上下限必須同時填寫"
+        );
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
+    }
+
+    @Test
+    void createWithOnlyTemperatureMaximumReturnsValidationFailure() {
+        ProductCreateRequest request = new ProductCreateRequest(
+                "測試商品",
+                1L,
+                null,
+                new BigDecimal("80.00"),
+                new BigDecimal("120.00"),
+                10,
+                Season.ALL,
+                TrackType.A,
+                null,
+                Set.of(LogisticsCondition.NORMAL),
+                null,
+                new BigDecimal("26.0"),
+                180,
+                Set.of(),
+                false
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> createProduct(request)
+        );
+
+        assertBadRequest(
+                exception,
+                "idealTempMin",
+                "適溫區間上下限必須同時填寫"
         );
         verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
@@ -363,7 +447,7 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    void updateTrackBToAClearsSourcingStatus() {
+    void updateTrackBToAClearsSourcingStatusAndInvalidatesOldScores() {
         Product product = existingProduct(TrackType.B, SourcingStatus.SOURCING);
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
 
@@ -379,6 +463,7 @@ class ProductCommandServiceTest {
 
         assertEquals(TrackType.A, response.product().trackType());
         assertNull(response.product().sourcingStatus());
+        verify(productScoreRepository).deactivateAllCurrent(product.getId());
     }
 
     @Test
@@ -393,6 +478,7 @@ class ProductCommandServiceTest {
 
         assertEquals(TrackType.B, response.product().trackType());
         assertEquals(SourcingStatus.PENDING, response.product().sourcingStatus());
+        verify(productScoreRepository).deactivateAllCurrent(product.getId());
     }
 
     @Test
@@ -452,6 +538,8 @@ class ProductCommandServiceTest {
         assertEquals(targetCategory, first.getCategory());
         verify(sourcingCandidateService, never()).synchronize(first);
         verify(sourcingCandidateService).synchronize(second);
+        verify(productScoreRepository).deactivateAllCurrent(first.getId());
+        verify(productScoreRepository, never()).deactivateAllCurrent(second.getId());
         assertEquals(targetCategory, second.getCategory());
         assertEquals(ProductStatus.LISTED, first.getStatus());
         assertEquals(ProductStatus.WATCHING, second.getStatus());

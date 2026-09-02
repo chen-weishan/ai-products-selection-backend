@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -19,6 +20,16 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
     /** FR-07「重跑失敗項」的取件範圍。 */
     List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskItemStatus status);
+
+    @Query("select i.id from AiTaskItem i where i.task.id = :taskId and i.status = :status order by i.id")
+    List<Long> findIdsByTaskIdAndStatus(
+            @Param("taskId") Long taskId,
+            @Param("status") TaskItemStatus status
+    );
+
+    @EntityGraph(attributePaths = {"task", "product", "product.category"})
+    @Query("select i from AiTaskItem i where i.id = :id")
+    java.util.Optional<AiTaskItem> findForProcessing(@Param("id") Long id);
 
     long countByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 

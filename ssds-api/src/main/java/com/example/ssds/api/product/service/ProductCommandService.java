@@ -28,6 +28,7 @@ import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -62,6 +63,7 @@ public class ProductCommandService {
     );
 
     private final ProductRepository productRepository;
+    private final ProductScoreRepository productScoreRepository;
     private final SourcingCandidateRepository sourcingCandidateRepository;
     private final AppUserRepository appUserRepository;
     private final AuditLogRepository auditLogRepository;
@@ -72,6 +74,7 @@ public class ProductCommandService {
 
     public ProductCommandService(
             ProductRepository productRepository,
+            ProductScoreRepository productScoreRepository,
             SourcingCandidateRepository sourcingCandidateRepository,
             AppUserRepository appUserRepository,
             AuditLogRepository auditLogRepository,
@@ -81,6 +84,7 @@ public class ProductCommandService {
             ProductSourcingCandidateService sourcingCandidateService
     ) {
         this.productRepository = productRepository;
+        this.productScoreRepository = productScoreRepository;
         this.sourcingCandidateRepository = sourcingCandidateRepository;
         this.appUserRepository = appUserRepository;
         this.auditLogRepository = auditLogRepository;
@@ -176,6 +180,7 @@ public class ProductCommandService {
         TrackType trackType = request.trackType() == null
                 ? product.getTrackType()
                 : request.trackType();
+        TrackType previousTrackType = product.getTrackType();
         SourcingStatus sourcingStatus = resolveSourcingStatusForUpdate(
                 product,
                 trackType,
@@ -226,6 +231,9 @@ public class ProductCommandService {
         }
 
         Product savedProduct = productRepository.saveAndFlush(product);
+        if (previousTrackType != trackType) {
+            productScoreRepository.deactivateAllCurrent(savedProduct.getId());
+        }
         sourcingCandidateService.synchronize(savedProduct);
         return new ProductUpdateResponse(
                 toResponse(savedProduct),
@@ -258,6 +266,9 @@ public class ProductCommandService {
 
         products.forEach(product -> product.setCategory(category));
         productRepository.saveAllAndFlush(products);
+        products.stream()
+                .filter(product -> product.getTrackType() == TrackType.A)
+                .forEach(product -> productScoreRepository.deactivateAllCurrent(product.getId()));
         products.stream()
                 .filter(product -> product.getTrackType() == TrackType.B)
                 .forEach(sourcingCandidateService::synchronize);
@@ -528,6 +539,20 @@ public class ProductCommandService {
             BigDecimal idealTempMin,
             BigDecimal idealTempMax
     ) {
+        if ((idealTempMin == null) != (idealTempMax == null)) {
+            String missingField = idealTempMin == null
+                    ? "idealTempMin"
+                    : "idealTempMax";
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "商品資料驗證失敗",
+                    List.of(new FieldError(
+                            missingField,
+                            "適溫區間上下限必須同時填寫"
+                    ))
+            );
+        }
+
         if (idealTempMin != null
                 && idealTempMax != null
                 && idealTempMin.compareTo(idealTempMax) > 0) {
@@ -562,9 +587,9 @@ public class ProductCommandService {
                 product.getCategory().getName(),
                 supplier == null ? null : supplier.getId(),
                 supplier == null ? null : supplier.getName(),
-                trackB ? null : product.getCost(),
-                trackB ? null : product.getSuggestedPrice(),
-                trackB ? null : product.getMarginRate(),
+                product.getCost(),
+                product.getSuggestedPrice(),
+                product.getMarginRate(),
                 product.getMoq(),
                 product.getSeason(),
                 product.getStatus(),

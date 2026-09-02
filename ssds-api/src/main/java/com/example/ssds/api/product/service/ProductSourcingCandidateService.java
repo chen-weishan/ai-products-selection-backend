@@ -1,7 +1,5 @@
 package com.example.ssds.api.product.service;
 
-import com.example.ssds.api.common.error.BusinessException;
-import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.dao.SourcingHeatSignalDao;
 import com.example.ssds.infra.dao.projection.SourcingHeatSignal;
@@ -45,10 +43,17 @@ public class ProductSourcingCandidateService {
 
         CategoryLeadTime categoryLeadTime = leadTimeRepository
                 .findById(product.getCategory().getId())
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "品項類別尚未設定尋源前置天數：" + product.getCategory().getId()
-                ));
+                .orElse(null);
+        if (categoryLeadTime == null) {
+            /*
+             * FR-03-2 只要求 B 軌具備名稱、類別與關聯關鍵字。
+             * 前置天數屬於 FR-17 的參照資料；尚未維護時仍允許品項
+             * 建檔，清單以「—」顯示時效落差，待參照資料齊全後再同步。
+             */
+            candidateRepository.findByProductId(product.getId())
+                    .ifPresent(candidateRepository::delete);
+            return;
+        }
 
         SourcingCandidate candidate = candidateRepository
                 .findByProductId(product.getId())

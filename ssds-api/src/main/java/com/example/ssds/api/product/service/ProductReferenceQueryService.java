@@ -1,6 +1,7 @@
 package com.example.ssds.api.product.service;
 
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
+import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
 import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
@@ -9,6 +10,7 @@ import com.example.ssds.infra.entity.FestivalCalendar;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.CategoryRepository;
+import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -29,17 +31,20 @@ public class ProductReferenceQueryService {
                     .thenComparing(Category::getId);
 
     private final CategoryRepository categoryRepository;
+    private final ProductMarginStatisticsDao marginStatisticsDao;
     private final FestivalCalendarRepository festivalCalendarRepository;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
 
     public ProductReferenceQueryService(
             CategoryRepository categoryRepository,
+            ProductMarginStatisticsDao marginStatisticsDao,
             FestivalCalendarRepository festivalCalendarRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository
     ) {
         this.categoryRepository = categoryRepository;
+        this.marginStatisticsDao = marginStatisticsDao;
         this.festivalCalendarRepository = festivalCalendarRepository;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
@@ -106,6 +111,20 @@ public class ProductReferenceQueryService {
         return festivals.entrySet().stream()
                 .map(entry -> new FestivalOptionResponse(entry.getKey(), entry.getValue()))
                 .toList();
+    }
+
+    public CategoryMarginMedianResponse getCategoryMarginMedian(Long categoryId) {
+        var statistics = marginStatisticsDao.findCategoryStatistics(categoryId)
+                .orElseThrow(() -> new com.example.ssds.api.common.error.BusinessException(
+                        com.example.ssds.api.common.error.ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的類別：" + categoryId
+                ));
+        return new CategoryMarginMedianResponse(
+                statistics.categoryId(),
+                statistics.categoryName(),
+                statistics.medianMarginRate(),
+                statistics.sampleCount()
+        );
     }
 
     private CategoryTreeResponse toCategoryTreeResponse(Category category) {

@@ -65,6 +65,24 @@ class ProductReviewFileServiceTest {
     }
 
     @Test
+    void returnsExistingReviewSummary() {
+        when(reviewRepository.countByProductId(101L)).thenReturn(42L);
+
+        var response = service.summary(101L);
+
+        assertEquals(42L, response.totalReviewCount());
+        assertEquals(false, response.lowConfidence());
+    }
+
+    @Test
+    void usesTwentyReviewsAsTheConfidenceBoundary() {
+        when(reviewRepository.countByProductId(101L)).thenReturn(19L, 20L);
+
+        assertEquals(true, service.summary(101L).lowConfidence());
+        assertEquals(false, service.summary(101L).lowConfidence());
+    }
+
+    @Test
     void rejectsCsvWithoutContentHeader() {
         BusinessException exception = assertThrows(
                 BusinessException.class,

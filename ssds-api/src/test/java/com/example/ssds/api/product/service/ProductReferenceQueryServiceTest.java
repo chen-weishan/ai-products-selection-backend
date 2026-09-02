@@ -12,6 +12,7 @@ import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.FestivalCalendar;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
 import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 class ProductReferenceQueryServiceTest {
 
     private CategoryRepository categoryRepository;
+    private ProductMarginStatisticsDao marginStatisticsDao;
     private SupplierRepository supplierRepository;
     private FestivalCalendarRepository festivalCalendarRepository;
     private TrendKeywordRepository trendKeywordRepository;
@@ -31,11 +33,13 @@ class ProductReferenceQueryServiceTest {
     @BeforeEach
     void setUp() {
         categoryRepository = mock(CategoryRepository.class);
+        marginStatisticsDao = mock(ProductMarginStatisticsDao.class);
         supplierRepository = mock(SupplierRepository.class);
         festivalCalendarRepository = mock(FestivalCalendarRepository.class);
         trendKeywordRepository = mock(TrendKeywordRepository.class);
         service = new ProductReferenceQueryService(
                 categoryRepository,
+                marginStatisticsDao,
                 festivalCalendarRepository,
                 supplierRepository,
                 trendKeywordRepository

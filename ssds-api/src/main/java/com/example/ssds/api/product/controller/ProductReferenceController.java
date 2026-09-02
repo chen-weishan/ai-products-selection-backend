@@ -2,6 +2,7 @@ package com.example.ssds.api.product.controller;
 
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
+import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
 import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
@@ -54,5 +55,13 @@ public class ProductReferenceController {
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<FestivalOptionResponse>> getFestivals() {
         return ApiResponse.success(queryService.getFestivals());
+    }
+
+    @GetMapping("/categories/{categoryId}/margin-median")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<CategoryMarginMedianResponse> getCategoryMarginMedian(
+            @org.springframework.web.bind.annotation.PathVariable Long categoryId
+    ) {
+        return ApiResponse.success(queryService.getCategoryMarginMedian(categoryId));
     }
 }
