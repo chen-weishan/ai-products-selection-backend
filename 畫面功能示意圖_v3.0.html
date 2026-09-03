@@ -1,0 +1,3017 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>畫面功能示意圖 v3.0｜團購產業 AI 採購選品策略系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#123A56; --navy-deep:#0E2A3F; --navy-line:#1D4A69;
+  --teal:#1E7A9E; --teal-soft:#D8EAF2;
+  --a:#1E7A4D; --b:#B8791A; --c:#8A9299;
+  --risk:#C0392B; --warn:#D68910;
+  --page:#EDF1F4; --card:#FFFFFF; --surface:#F4F6F8;
+  --ink:#16232E; --ink-2:#4A5A67; --ink-3:#8A9AA6;
+  --line:#DCE3E9; --line-soft:#EAEFF3;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --serif:"Noto Serif TC","Songti TC",serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--page);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── 文件外框 ───────────────────────── */
+.doc-head{background:var(--navy-deep);color:#fff;padding:56px 40px 44px;position:relative;overflow:hidden}
+.doc-head::after{content:"";position:absolute;right:-90px;top:-90px;width:320px;height:320px;border-radius:50%;background:#16496B;opacity:.55}
+.doc-head-inner{max-width:1240px;margin:0 auto;position:relative;z-index:1}
+.doc-head .eyebrow{font-size:12px;letter-spacing:.22em;color:#8FC4DC;font-weight:500}
+.doc-head h1{font-family:var(--serif);font-size:38px;font-weight:700;margin:10px 0 8px;letter-spacing:.02em}
+.doc-head p{color:#B7CEDD;font-size:15px}
+.doc-head .rule{width:64px;height:3px;background:var(--teal);margin:22px 0 18px}
+.doc-head .meta{font-size:13px;color:#8FA9BB}
+.doc-head .meta b{color:#D6E6EF;font-weight:500}
+
+.wrap{max-width:1240px;margin:0 auto;padding:0 40px;display:grid;grid-template-columns:196px 1fr;gap:40px;align-items:start}
+
+/* ── 側邊索引 ───────────────────────── */
+.index{position:sticky;top:24px;padding:28px 0 60px}
+.index h4{font-size:11px;letter-spacing:.16em;color:var(--ink-3);margin-bottom:12px;font-weight:700}
+.index a{display:block;font-size:13px;color:var(--ink-2);text-decoration:none;padding:5px 0 5px 10px;border-left:2px solid var(--line);transition:.15s}
+.index a:hover{color:var(--teal);border-left-color:var(--teal);background:rgba(30,122,158,.05)}
+.index a .n{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-right:6px}
+.index .grp{font-size:11px;color:var(--ink-3);margin:16px 0 6px;letter-spacing:.1em;font-weight:700}
+
+/* ── 畫面區塊 ───────────────────────── */
+.screens{padding:28px 0 100px}
+.screen{margin-bottom:52px;scroll-margin-top:20px}
+.screen-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.sid{font-family:var(--mono);font-size:12px;font-weight:500;color:#fff;background:var(--navy);padding:3px 8px;border-radius:4px;letter-spacing:.04em}
+.screen-head h2{font-family:var(--serif);font-size:23px;font-weight:600;letter-spacing:.01em}
+.screen-head .fr{font-family:var(--mono);font-size:12px;color:var(--teal);background:var(--teal-soft);padding:2px 7px;border-radius:4px}
+.screen-desc{font-size:13.5px;color:var(--ink-2);margin-bottom:16px;max-width:760px}
+.screen-body{display:grid;grid-template-columns:1fr 268px;gap:22px;align-items:start}
+
+/* ── 瀏覽器外框 ─────────────────────── */
+.frame{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(18,58,86,.07),0 8px 24px -12px rgba(18,58,86,.18)}
+.frame-bar{background:#F0F3F6;border-bottom:1px solid var(--line);padding:9px 14px;display:flex;align-items:center;gap:6px}
+.frame-bar i{width:9px;height:9px;border-radius:50%;display:block}
+.frame-bar i:nth-child(1){background:#F2685C}.frame-bar i:nth-child(2){background:#F5BE4F}.frame-bar i:nth-child(3){background:#63C466}
+.frame-bar span{margin-left:auto;margin-right:auto;font-size:11.5px;color:var(--ink-3);font-family:var(--mono)}
+
+/* ── 應用程式版面 ───────────────────── */
+.app{display:grid;grid-template-columns:132px 1fr;min-height:420px}
+.app.full{grid-template-columns:1fr}
+.nav{background:var(--navy);padding:16px 0;color:#fff}
+.nav .brand{font-size:13px;font-weight:700;padding:0 14px 14px;letter-spacing:.04em;border-bottom:1px solid var(--navy-line);margin-bottom:10px}
+.nav a{display:flex;align-items:center;gap:8px;font-size:12px;color:#A9C4D6;padding:8px 14px;text-decoration:none}
+.nav a b{width:7px;height:7px;border-radius:2px;background:#40708F;display:block;flex:none}
+.nav a.on{background:var(--teal);color:#fff;font-weight:500}
+.nav a.on b{background:#fff}
+.main{padding:18px 20px 22px;background:var(--card);min-width:0}
+
+/* ── 頁首 ───────────────────────────── */
+.mh{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.mh h3{font-family:var(--serif);font-size:17px;font-weight:600}
+.mh .sub{font-size:11.5px;color:var(--ink-3)}
+.tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* ── 通用元件 ───────────────────────── */
+.btn{font-family:var(--sans);font-size:11.5px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--ink-2);cursor:default;white-space:nowrap}
+.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:500}
+.btn.gho{background:transparent}
+.sel{font-size:11.5px;padding:5px 22px 5px 9px;border:1px solid var(--line);border-radius:7px;color:var(--ink-2);background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5'><path d='M0 0l4 5 4-5z' fill='%238A9AA6'/></svg>") no-repeat right 8px center}
+.inp{font-size:11.5px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;color:var(--ink-3);background:#fff;min-width:120px}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:4px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line-soft);white-space:nowrap}
+.tag.teal{background:var(--teal-soft);color:#155F7C;border-color:#BEDCE8}
+.tag.red{background:#FBE9E7;color:var(--risk);border-color:#F3CFCB}
+.tag.amber{background:#FDF3E2;color:var(--b);border-color:#F2E0C0}
+.tag.green{background:#E4F3EB;color:var(--a);border-color:#C9E6D6}
+
+.chip{font-size:11px;font-weight:700;width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;color:#fff;font-family:var(--serif)}
+.chip.A{background:var(--a)}.chip.B{background:var(--b)}.chip.C{background:var(--c)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--risk);display:inline-block;flex:none}
+.dot.mid{background:var(--warn)}
+
+.bar{height:8px;border-radius:5px;background:var(--line-soft);overflow:hidden;flex:1}
+.bar>i{display:block;height:100%;background:var(--teal);border-radius:5px}
+.bar.grey>i{background:#AFBCC6}
+.bar.thin{height:6px}
+
+/* ── KPI ────────────────────────────── */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.kpi{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--surface);position:relative}
+.kpi .v{font-family:var(--serif);font-size:26px;font-weight:700;line-height:1.1;color:var(--navy)}
+.kpi .l{font-size:11px;color:var(--ink-3);margin-top:2px}
+.kpi.alert .v{color:var(--risk)}
+.kpi .delta{font-size:10.5px;color:var(--a);margin-top:3px}
+
+/* ── 表格 ───────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;font-size:10.5px;color:var(--ink-3);font-weight:500;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);font-weight:500;text-align:right}
+td.name{font-weight:500}
+.rank{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:22px}
+
+/* ── 卡片區 ─────────────────────────── */
+.card{border:1px solid var(--line);border-radius:9px;padding:13px;background:#fff}
+.card.soft{background:var(--surface)}
+.card h5{font-size:12px;font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+
+/* ── AI 面板 ────────────────────────── */
+.ai{background:linear-gradient(180deg,#F2F8FB 0%,#EDF5F9 100%);border:1px solid #CFE3ED;border-radius:9px;padding:13px}
+.ai-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.ai-head .t{font-size:12px;font-weight:700;color:#12556F;display:flex;align-items:center;gap:5px}
+.ai-head .m{font-size:10px;color:#6E96A9;font-family:var(--mono)}
+.ai-sec{font-size:11px;font-weight:700;color:var(--a);margin:8px 0 4px}
+.ai-sec.r{color:var(--risk)}
+.ai li{list-style:none;font-size:11.5px;color:var(--ink-2);display:flex;gap:6px;padding:2px 0}
+.ai li em{font-style:normal;color:var(--ink-3);font-size:10.5px;font-family:var(--mono)}
+.ai-rec{background:var(--navy);color:#fff;border-radius:7px;padding:10px 12px;margin-top:10px;font-size:11.5px;line-height:1.65}
+.ai-rec b{display:block;font-size:11px;color:#8FC4DC;margin-bottom:2px;letter-spacing:.04em}
+.ai-foot{font-size:10px;color:#7FA0B1;margin-top:8px;display:flex;justify-content:space-between;align-items:center}
+
+/* ── 標號 ───────────────────────────── */
+.mk{width:17px;height:17px;border-radius:50%;background:var(--teal);color:#fff;font-size:10px;font-family:var(--mono);display:inline-flex;align-items:center;justify-content:center;flex:none;font-weight:500}
+.mk.r{background:var(--risk)}
+
+/* ── 說明欄 ─────────────────────────── */
+.notes{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px;position:sticky;top:24px}
+.notes h4{font-size:11px;letter-spacing:.14em;color:var(--ink-3);font-weight:700;margin-bottom:11px}
+.notes ol{list-style:none;counter-reset:n}
+.notes ol li{counter-increment:n;position:relative;padding-left:24px;margin-bottom:11px;font-size:11.5px;color:var(--ink-2);line-height:1.6}
+.notes ol li::before{content:counter(n);position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:50%;background:var(--teal);color:#fff;font-size:10px;font-family:var(--mono);display:flex;align-items:center;justify-content:center}
+.notes ol li b{color:var(--ink);font-weight:700;display:block;font-size:12px}
+.notes .div{height:1px;background:var(--line-soft);margin:14px 0}
+.notes .apilist{max-height:150px;overflow-y:auto;border:1px solid var(--line-soft);border-radius:6px;padding:0 9px}
+.notes .apilist::-webkit-scrollbar{width:6px}
+.notes .apilist::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.notes .api{font-family:var(--mono);font-size:11px;color:var(--ink-2);padding:6px 0;border-bottom:1px solid var(--line-soft);word-break:break-all}
+.notes .api:last-child{border-bottom:none}
+.notes .api .v{color:var(--teal);font-weight:500}
+.notes .api .rgn{font-family:var(--sans);font-size:11px;color:var(--teal);margin-top:3px;display:flex;align-items:center;gap:5px}
+.notes .api .rgn .mk{width:15px;height:15px;font-size:9px;flex:none}
+.notes .api .rgn .tr{color:var(--ink-3);font-family:var(--mono);font-size:10px}
+.notes .ac{font-size:10.5px;color:var(--ink-3);font-family:var(--mono);line-height:1.9}
+
+/* ── 雜項 ───────────────────────────── */
+.empty{text-align:center;padding:34px 20px;color:var(--ink-3)}
+.empty .ic{width:38px;height:38px;border-radius:50%;background:var(--surface);margin:0 auto 10px}
+.empty b{display:block;font-size:13px;color:var(--ink-2);margin-bottom:3px}
+.empty p{font-size:11.5px}
+.stack{display:flex;gap:6px;align-items:center}
+.col{display:flex;flex-direction:column;gap:9px}
+.sentiment{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:8px 0 5px}
+.sentiment i{display:block}
+.legend{display:flex;gap:12px;font-size:10.5px;color:var(--ink-3)}
+.legend b{font-weight:400;color:var(--ink-2)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:13px}
+.tabs a{font-size:12px;color:var(--ink-3);padding:7px 12px;text-decoration:none;border-bottom:2px solid transparent}
+.tabs a.on{color:var(--teal);border-bottom-color:var(--teal);font-weight:500}
+.step{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink-3)}
+.step .s{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);background:#fff}
+.step.on{color:var(--ink)}.step.on .s{background:var(--teal);border-color:var(--teal);color:#fff}
+.step.done .s{background:var(--a);border-color:var(--a);color:#fff}
+.line{flex:1;height:1px;background:var(--line)}
+
+.doc-foot{background:var(--navy-deep);color:#8FA9BB;padding:26px 40px;font-size:12px;text-align:center}
+
+@media(max-width:1180px){
+  .wrap{grid-template-columns:1fr;padding:0 22px}
+  .index{position:static;padding-bottom:0}
+  .index a{display:inline-block;border-left:none;border-bottom:2px solid var(--line);margin-right:8px}
+  .screen-body{grid-template-columns:1fr}
+  .notes{position:static}
+}
+@media print{
+  body{background:#fff}
+  .index{display:none}
+  .wrap{grid-template-columns:1fr}
+  .screen{page-break-inside:avoid;break-inside:avoid}
+  .notes,.frame{box-shadow:none}
+}
+
+/* ── v2.0 追加 ──────────────────────── */
+.chg{font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:4px;letter-spacing:.03em;white-space:nowrap}
+.chg.new{background:#E4F3EB;color:var(--a);border:1px solid #C9E6D6}
+.chg.mod{background:#FDF3E2;color:var(--b);border:1px solid #F2E0C0}
+.chg.keep{background:var(--surface);color:var(--ink-3);border:1px solid var(--line-soft)}
+.trk{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
+.trk span{font-size:11.5px;padding:5px 11px;color:var(--ink-2);background:#fff;white-space:nowrap}
+.trk span.on{background:var(--navy);color:#fff;font-weight:500}
+.srcbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:7px 11px;margin-bottom:12px;font-size:11px;color:var(--ink-2)}
+.srcbar .s{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.srcbar .s i{width:7px;height:7px;border-radius:50%;background:var(--a);display:block;flex:none}
+.srcbar .s.deg i{background:var(--warn)}
+.srcbar .s.off i{background:var(--ink-3)}
+.deduct{background:#FDF6F5;border:1px solid #F3CFCB;border-radius:9px;padding:12px}
+.deduct h5{color:var(--risk)}
+.deduct .row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-2);padding:3px 0}
+.deduct .row .n{margin-left:auto;font-family:var(--mono);color:var(--risk);font-weight:500}
+.calc{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:9px 12px}
+.calc b{font-size:19px;color:var(--navy);font-family:var(--serif)}
+.calc .op{color:var(--ink-3)}
+.scene{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#F2F8FB,#EDF5F9);border:1px solid #CFE3ED;border-radius:9px;padding:10px 12px;margin-bottom:12px;flex-wrap:wrap}
+.scene .lb{font-size:11px;color:#6E96A9;font-family:var(--mono)}
+.scene .nm{font-size:12.5px;font-weight:700;color:#12556F}
+.rev{width:100%;border-collapse:collapse;font-size:12.5px}
+.rev th{background:var(--surface)}
+.rev td{vertical-align:top}
+.gap-ok{color:var(--a);font-weight:500}
+.gap-warn{color:var(--b);font-weight:500}
+.gap-bad{color:var(--risk);font-weight:500}
+.mini{font-size:10.5px;color:var(--ink-3)}
+.slope{font-family:var(--mono);font-size:11px;font-weight:500}
+.slope.up{color:var(--a)}.slope.dn{color:var(--risk)}.slope.flat{color:var(--ink-3)}
+.wgrid{display:grid;grid-template-columns:1.4fr repeat(5,1fr);gap:6px;font-size:11.5px;align-items:center}
+.wgrid .h{font-size:10.5px;color:var(--ink-3)}
+.wgrid .cell{background:var(--surface);border:1px solid var(--line-soft);border-radius:5px;padding:4px 0;text-align:center;font-family:var(--mono)}
+.wgrid .cell.hi{background:var(--teal-soft);border-color:#BEDCE8;color:#12556F;font-weight:500}
+.wgrid .rowname{font-weight:500}
+</style>
+</head>
+<body>
+
+<header class="doc-head">
+  <div class="doc-head-inner">
+    <div class="eyebrow">畫面功能示意圖 v3.0</div>
+    <h1>團購產業 AI 採購選品策略系統</h1>
+    <p>莊敬生活百貨　×　智慧零售與物流 AI 系統建置計畫｜第一階段專題</p>
+    <div class="rule"></div>
+    <div class="meta">
+      <b>Angular ≥19（建議 21）+ Angular Material</b>　·　<b>Java 17/21 + Spring Boot 4.1 + Gradle（Groovy DSL）</b>　·　<b>MySQL 8</b>　·　<b>A 軌 REST 直連／B 軌 opencode + MCP，OpenRouter 免費模型</b>　·　<b>前後端分離</b>
+      　|　共 21 個畫面，編號 S-01 ～ S-21，對應開發規格書 FR-01 ～ FR-18
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="index">
+    <h4>畫面索引</h4>
+    <a href="#rev"><span class="n">修訂</span>v3.0 變更摘要</a>
+    <div class="grp">入口</div>
+    <a href="#s01"><span class="n">S-01</span>登入</a>
+    <a href="#s02"><span class="n">S-02</span>選品儀表板</a>
+    <div class="grp">A 軌　選品評分</div>
+    <a href="#s03"><span class="n">S-03</span>品項清單</a>
+    <a href="#s04"><span class="n">S-04</span>品項新增／編輯</a>
+    <a href="#s05"><span class="n">S-05</span>選品分數排行</a>
+    <a href="#s06"><span class="n">S-06</span>品項詳情與 AI</a>
+    <div class="grp">熱度資料層</div>
+    <a href="#s07"><span class="n">S-07</span>趨勢分析</a>
+    <a href="#s15"><span class="n">S-15</span>人工熱度標記</a>
+    <a href="#s16"><span class="n">S-16</span>熱度來源狀態</a>
+    <div class="grp">B 軌　尋源探索</div>
+    <a href="#s17"><span class="n">S-17</span>尋源探索</a>
+    <a href="#s18"><span class="n">S-18</span>尋源優先序</a>
+    <div class="grp">AI 與權重</div>
+    <a href="#s08"><span class="n">S-08</span>AI 任務中心</a>
+    <a href="#s09"><span class="n">S-09</span>情境權重組</a>
+    <a href="#s19"><span class="n">S-19</span>權重校準審核</a>
+    <div class="grp">資料與決策</div>
+    <a href="#s10"><span class="n">S-10</span>資料匯入</a>
+    <a href="#s11"><span class="n">S-11</span>風險示警中心</a>
+    <a href="#s12"><span class="n">S-12</span>決策與回饋閉環</a>
+    <a href="#s20"><span class="n">S-20</span>節慶檔期維護</a>
+    <a href="#s13"><span class="n">S-13</span>報表中心</a>
+    <a href="#s14"><span class="n">S-14</span>系統設定</a>
+    <a href="#s21"><span class="n">S-21</span>稽核紀錄</a>
+    <div class="grp">流程</div>
+    <a href="#flow"><span class="n">流程</span>畫面關聯圖</a>
+  </nav>
+
+  <main class="screens">
+
+<!-- ══════════ v3.0 變更摘要 ══════════ -->
+<section class="screen" id="rev">
+  <div class="screen-head"><span class="sid">修訂</span><h2>v3.0 變更摘要</h2></div>
+  <p class="screen-desc">v3.0 不新增功能範圍，是對照《開發規格書 v3.0》的一致性修訂：畫面示意圖原先停留在雙軌／三榜／五因子的 v2.0 假設，本次逐項對齊規格書裁決結果——四榜、六因子、S-21 稽核紀錄獨立、黃金案例數字統一、AI 任務改以請求數計量。</p>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="rev">
+      <tr><th style="width:70px">畫面</th><th style="width:130px">名稱</th><th style="width:64px">狀態</th><th>這次改了什麼</th></tr>
+      <tr><td class="rank" style="width:auto">S-02</td><td class="name">選品儀表板</td><td><span class="chg mod">大改</span></td><td>分組排行由三榜改為<b>四榜</b>（新增季節導向榜）；KPI「A 級主推」改為<b>四榜合計並以品項去重</b></td></tr>
+      <tr><td class="rank" style="width:auto">S-03</td><td class="name">品項清單</td><td><span class="chg mod">修正</span></td><td>篩選補上<b>軌別（A／B）</b>與<b>尋源狀態</b>；表頭補軌別欄，B 軌品項成本/售價/毛利率/分數顯示「—」</td></tr>
+      <tr><td class="rank" style="width:auto">S-04</td><td class="name">品項新增／編輯</td><td><span class="chg mod">修正</span></td><td>新增<b>適溫區間</b>欄位（供氣候適配因子）、效期天數、物流條件；B 軌只需名稱/類別/關鍵字</td></tr>
+      <tr><td class="rank" style="width:auto">S-05</td><td class="name">選品分數排行</td><td><span class="chg mod">大改</span></td><td>三榜改<b>四榜</b>分頁；因子組成由 5 項改為<b>6 項（新增價格帶適配）</b>；黃金案例數字統一為 86.89／4.00／82.9／B 級</td></tr>
+      <tr><td class="rank" style="width:auto">S-06</td><td class="name">品項詳情</td><td><span class="chg mod">大改</span></td><td>加分因子補上<b>價格帶適配度</b>（六因子）；節慶時間窗改為「中秋前 60 天、進口食品前置 45 天、窗權重 1.0」；分數組成改為 <b>加分 86.9 − 扣分 4.0 = 總分 82.9，B 級</b></td></tr>
+      <tr><td class="rank" style="width:auto">S-08</td><td class="name">AI 任務中心</td><td><span class="chg mod">修正</span></td><td>主要度量由金額改為<b>請求數／配額百分比</b>，金額降為次要顯示；模型改為 OpenRouter <b>免費模型（:free）</b>，不再顯示付費模型與美金上限</td></tr>
+      <tr><td class="rank" style="width:auto">S-09</td><td class="name">情境權重組</td><td><span class="chg mod">大改</span></td><td>四組權重表由 5 欄改為<b>6 欄（新增價格帶適配）</b>，數值換為規格書 §FR-08 定案值；權限說明修正為<b>僅 BUYER_LEAD 可建立草稿與核准</b>（DATA_ADMIN 無此權限）；新增各榜分級門檻區塊</td></tr>
+      <tr><td class="rank" style="width:auto">S-14</td><td class="name">系統設定</td><td><span class="chg mod">修正</span></td><td>模型設定改為<b>邏輯別名 → 免費模型 ID</b>；費用控管改以<b>每日請求數配額</b>為主，USD 預算降為次要；<b>稽核紀錄移出本模組</b>（見 S-21）</td></tr>
+      <tr><td class="rank" style="width:auto">S-19</td><td class="name">權重校準審核</td><td><span class="chg mod">修正</span></td><td>因子預測力表補上<b>價格帶適配</b>一列，與六因子對齊</td></tr>
+      <tr><td class="rank" style="width:auto">S-21</td><td class="name">稽核紀錄</td><td><span class="chg new">新增</span></td><td>自系統設定拆出為獨立模組（FR-18），供 BUYER_LEAD 與 SYS_ADMIN 存取，解決「BUYER_LEAD 可看 vs 僅 SYS_ADMIN 可進 /admin」的權限矛盾</td></tr>
+      <tr><td class="rank" style="width:auto">S-11</td><td class="name">風險示警中心</td><td><span class="chg mod">修正</span></td><td>風險類型改用規格書 §FR-10-1 補齊的 9 種正式 <code>risk_type</code>（原稿為未定義觸發式的自由字串，且含一個規格書並未定義的「AI 補充」機制）</td></tr>
+      <tr><td class="rank" style="width:auto">S-13</td><td class="name">報表中心</td><td><span class="chg mod">修正</span></td><td>五份報表清單改為規格書 §FR-12 定義的品項評分明細／尋源優先序／權重校準紀錄等（原稿為品項分析明細／風險彙總／原始資料匯出，多份對不上規格書）；補上 AC-12-4、AC-12-5</td></tr>
+      <tr><td class="rank" style="width:auto">S-15</td><td class="name">人工熱度標記</td><td><span class="chg new">新增</span></td><td>修正熱度等級錨點文字錯誤（誤標 3＝零星討論，規格書定義 1 與 5 才是錨點）；補上多標記者信心度遺漏的「2 人＝0.8」層級（§C-07）</td></tr>
+      <tr><td class="rank" style="width:auto">S-17</td><td class="name">尋源探索（B 軌）</td><td><span class="chg new">新增</span></td><td>修正時效落差邊界值 bug：範例 gap=14 天原標「可行」，規格書 v3.0 明確將 <code>0 ≤ gap ≤ 14</code> 定為「高風險／需加速」（此邊界正是 v3.0 要解決的模糊地帶）；補上 MCP 工具白名單說明</td></tr>
+      <tr><td class="rank" style="width:auto">S-18</td><td class="name">尋源優先序（B 軌）</td><td><span class="chg new">新增</span></td><td>修正排序 bug：AC-16-6 要求依時效落差遞增排序，原稿順序為 ＋21／＋14／＋6／＋32（非遞增），已改為 ＋6／＋14／＋21／＋32；套用同一 14 天邊界值修正</td></tr>
+      <tr><td class="rank" style="width:auto">S-20</td><td class="name">節慶檔期維護</td><td><span class="chg new">新增</span></td><td>原稿只涵蓋 §FR-17-1 節慶時間窗，完全漏掉 §FR-17-2 季節氣候基準；補上品類適溫區間表、「歷史氣候計分／短期預報僅供提醒」的區隔，與抹茶餅乾黃金案例（適配度 0.717、百分位 44）</td></tr>
+      <tr><td class="rank" style="width:auto">其他</td><td class="name">S-01／S-10</td><td><span class="chg keep">沿用</span></td><td>版面不變，僅隨全站導覽列補上「稽核紀錄」入口</td></tr>
+    </table>
+  </div>
+  <div class="card soft" style="margin-top:12px">
+    <h5>四個貫穿全站的設計原則</h5>
+    <div style="font-size:11.5px;color:var(--ink-2);line-height:1.85">
+      <div><b>一、加分與扣分分離。</b>加分項參與權重調整，扣分項固定生效——爆款可以不管毛利，但不能不管食安。</div>
+      <div><b>二、AI 輸出必須離散。</b>AI 選權重組、不填權重數值；每次判定都附理由與依據訊號，且人可一鍵覆寫。</div>
+      <div><b>三、資料不足只標示、不扣分。</b>新品項與 B 軌品項天生缺資料，扣分會讓它們永遠排不上來。</div>
+      <div><b>四、四榜對四組權重、六因子缺一不可。</b>季節導向榜與價格帶適配度分別是 SEASONAL 情境與痛點 P-3 的唯一承載位置，漏一個就等於該情境／該痛點在系統裡沒被處理。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S-01 登入 ══════════ -->
+<section class="screen" id="s01">
+  <div class="screen-head"><span class="sid">S-01</span><h2>登入</h2><span class="fr">FR-01</span><span class="chg keep">沿用</span></div>
+  <p class="screen-desc">內部後台入口。連續失敗 5 次鎖定 15 分鐘；不揭露是帳號錯還是密碼錯。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>ssds.zhuangjing.local / login</span></div>
+      <div class="app full">
+        <div style="display:grid;grid-template-columns:1fr 1fr;min-height:340px">
+          <div style="background:var(--navy-deep);color:#fff;padding:34px 30px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden">
+            <div style="position:absolute;right:-70px;bottom:-70px;width:220px;height:220px;border-radius:50%;background:#16496B;opacity:.5"></div>
+            <div style="position:relative">
+              <div style="font-size:10.5px;letter-spacing:.2em;color:#8FC4DC">莊敬生活百貨</div>
+              <div style="font-family:var(--serif);font-size:24px;font-weight:700;margin:8px 0 6px">選品決策系統</div>
+              <div style="width:44px;height:2px;background:var(--teal);margin:14px 0"></div>
+              <p style="font-size:11.5px;color:#A9C4D6;line-height:1.8">把趨勢、毛利、轉換率與評論<br>量化為可解釋的選品分數。<br><span style="color:#6E90A6">最終決策仍在採購人員手上。</span></p>
+            </div>
+          </div>
+          <div style="padding:38px 34px;display:flex;flex-direction:column;justify-content:center">
+            <h3 style="font-family:var(--serif);font-size:18px;margin-bottom:4px">登入</h3>
+            <p style="font-size:11.5px;color:var(--ink-3);margin-bottom:20px">請使用公司配發的帳號</p>
+            <label style="font-size:11px;color:var(--ink-2)">電子郵件</label>
+            <div class="inp" style="margin:4px 0 14px;padding:8px 10px">buyer01@zhuangjing.com.tw</div>
+            <label style="font-size:11px;color:var(--ink-2)">密碼</label>
+            <div class="inp" style="margin:4px 0 6px;padding:8px 10px;display:flex;justify-content:space-between"><span>••••••••••</span><span style="color:var(--ink-3);font-size:10px">顯示</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <span style="font-size:11px;color:var(--ink-3)">☐ 記住這台裝置</span>
+              <span style="font-size:11px;color:var(--teal)">忘記密碼？</span>
+            </div>
+            <div class="btn pri" style="text-align:center;padding:9px;font-size:13px">登入</div>
+            <div style="margin-top:14px;background:#FBE9E7;border:1px solid #F3CFCB;border-radius:6px;padding:8px 10px;font-size:11px;color:var(--risk)">帳號或密碼不正確。還可嘗試 3 次。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>單一入口</b>不開放自行註冊，帳號由系統管理員建立。</li>
+        <li><b>錯誤訊息不分辨</b>統一顯示「帳號或密碼不正確」，並提示剩餘次數。</li>
+        <li><b>角色決定進站後樣貌</b>登入後依角色決定左側選單與按鈕可見性。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>主要 API</h4>
+      <div class="apilist" style="max-height:none;border:none;padding:0">
+        <div class="api">
+          <div><span class="v">POST</span> /auth/login</div>
+          <div class="rgn">登入表單「登入」按鈕</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /auth/me</div>
+          <div class="rgn">登入成功後 <span class="tr">決定選單與按鈕可見性</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-01-1 / AC-01-2 / AC-01-3</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-02 選品儀表板 ══════════ -->
+<section class="screen" id="s02">
+  <div class="screen-head"><span class="sid">S-02</span><h2>選品儀表板</h2><span class="fr">FR-02</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">採購登入後的第一個畫面。v2.0 最大的改動是不再出單一總榜——不同情境權重算出來的分數分母不同，放在同一張榜上比大小沒有意義。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · dashboard</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a class="on" href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>本週選品建議</h3><div class="sub">2026 / W30　·　權重版本 v3（2026-06-01 生效）</div></div>
+            <div class="tools">
+              <span class="trk"><span class="on">A 軌　有供應商</span><span>B 軌　尋源中</span></span>
+              <span class="btn pri">＋ 我看到一個</span>
+            </div>
+          </div>
+
+          <div class="srcbar">
+            <span class="mk">1</span>
+            <span class="s"><i></i>Threads　今日 06:00</span>
+            <span class="s"><i></i>Google Trends　今日 06:00</span>
+            <span class="s deg"><i></i>Instagram　額度剩 4／30</span>
+            <span class="s"><i></i>人工標記　本週 12 筆</span>
+            <a href="#s16" style="margin-left:auto;color:var(--teal);font-size:11px;text-decoration:none">來源設定 →</a>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span class="mk">5</span><span style="font-size:11px;color:var(--ink-3)">全域彙總 KPI</span></div>
+          <div class="kpis">
+            <div class="kpi"><div class="v">128</div><div class="l">候選品項</div><div class="delta">＋9 本週新增</div></div>
+            <div class="kpi"><div class="v">27</div><div class="l">A 級主推（四榜合計，依品項去重）</div></div>
+            <div class="kpi alert"><div class="v">7</div><div class="l">高風險示警</div></div>
+            <div class="kpi"><div class="v">3</div><div class="l">結案未回填</div><div class="delta" style="color:var(--b)">已逾 7 天</div></div>
+          </div>
+
+          <div class="tabs"><span class="mk" style="margin:6px 8px 0 0">2</span>
+            <a class="on" href="#s05">話題爆款榜</a><a href="#s05">節慶檔期榜</a><a href="#s05">常態補貨榜</a><a href="#s05">季節導向榜</a>
+          </div>
+
+          <table>
+            <tr><th style="width:22px">#</th><th>品項</th><th style="width:22%">選品分數</th><th>分數</th><th>級</th><th>情境判定</th><th style="width:52px">風險</th></tr>
+            <tr><td class="rank">01</td><td class="name">杜拜巧克力（代工版）</td><td><div class="bar"><i style="width:94%"></i></div></td><td class="num">94</td><td><span class="chip A">A</span></td><td><span class="tag teal">話題爆款</span></td><td></td></tr>
+            <tr><td class="rank">02</td><td class="name">日式抹茶夾心餅乾</td><td><div class="bar"><i style="width:83%"></i></div></td><td class="num">82.9</td><td><span class="chip B">B</span></td><td><span class="tag teal">話題爆款</span></td><td></td></tr>
+            <tr><td class="rank">03</td><td class="name">韓式草莓大福</td><td><div class="bar"><i style="width:83%"></i></div></td><td class="num">83</td><td><span class="chip B">B</span></td><td><span class="tag teal">話題爆款</span></td><td><span class="dot mid"></span></td></tr>
+            <tr style="background:#FDFAF3"><td class="rank">04</td><td class="name">手工黑糖薑茶磚</td><td><div class="bar"><i style="width:76%"></i></div></td><td class="num">76</td><td><span class="chip B">B</span></td><td><span class="tag">常態補貨<span style="color:var(--b)">·已覆寫</span></span></td><td><span class="dot"></span></td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+            <div class="card soft">
+              <h5><span class="mk">3</span>待回填結案（3）</h5>
+              <div style="font-size:11.5px;color:var(--ink-2);line-height:2">
+                <div style="display:flex;gap:8px"><span>W27 冷壓初榨橄欖油</span><span class="tag amber" style="margin-left:auto">逾 12 天</span></div>
+                <div style="display:flex;gap:8px"><span>W28 櫻花限定護手霜</span><span class="tag amber" style="margin-left:auto">逾 9 天</span></div>
+                <div style="display:flex;gap:8px"><span>W28 進口氣泡水（箱）</span><span class="tag" style="margin-left:auto">逾 8 天</span></div>
+              </div>
+              <div class="mini" style="margin-top:7px">沒有回填就沒有校準資料，權重不會變準。</div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">4</span>B 軌　尋源中（5）</h5>
+              <div style="font-size:11.5px;color:var(--ink-2);line-height:2">
+                <div style="display:flex;gap:8px">開心果奶油醬<span class="gap-ok" style="margin-left:auto">時效 +21 天</span></div>
+                <div style="display:flex;gap:8px">泰式椰子脆片<span class="gap-warn" style="margin-left:auto">時效 +6 天</span></div>
+                <div style="display:flex;gap:8px" class="mini">冷萃氣泡茶<span class="gap-bad" style="margin-left:auto">時效 −4 天　已淘汰</span></div>
+              </div>
+              <a href="#s18" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-block;margin-top:6px">查看尋源優先序 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>熱度來源狀態列</b>一眼看出今天的分數是用哪些資料算的。IG 額度快用完會顯示黃燈，分數照算但會標示未含該來源。</li>
+        <li><b>四榜並列，不出總榜</b>採購一週要決定的本來就是「這週開哪幾團」，不同性質各出幾個，而不是把 128 項排成一條線。四榜與四組情境權重一對一，季節導向型品項才有榜可上。</li>
+        <li><b>待回填提醒</b>逾 7 天顯示黃標。不硬鎖功能，但要有摩擦力。</li>
+        <li><b>B 軌摘要</b>時效落差是否決條件，來不及的直接標灰，不論熱度多高。</li>
+        <li><b>頂部 KPI</b>候選品項數／A 級主推／風險示警／結案未回填，全域彙總數字，不隨 tab 切換重打。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>設計決策</h4>
+      <p style="font-size:11px;color:var(--ink-3)">「＋ 我看到一個」常駐在頁首而非藏在品項管理裡。採購本來就在滑社群，入口越淺，人工標記的累積量差距越大。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記，無註記＝進頁自動載入</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /dashboard/heat-sources</div>
+          <div class="rgn"><span class="mk">1</span>熱度來源狀態列</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /dashboard/rankings?track=&amp;scene=&amp;limit=5</div>
+          <div class="rgn"><span class="mk">2</span>四榜排行 tabs＋表格 <span class="tr">切換 tab 重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /dashboard/todos</div>
+          <div class="rgn"><span class="mk">3</span>待回填結案卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /dashboard/sourcing-summary?limit=3</div>
+          <div class="rgn"><span class="mk">4</span>B 軌尋源中卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /dashboard/summary?track=A&amp;period=</div>
+          <div class="rgn"><span class="mk">5</span>頂部 KPI ×4</div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-02-1 / AC-02-2 / AC-02-3 / AC-02-4 / AC-02-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-03 品項清單 ══════════ -->
+<section class="screen" id="s03">
+  <div class="screen-head"><span class="sid">S-03</span><h2>品項清單</h2><span class="fr">FR-03-1</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">所有候選品項的作業主頁。篩選條件寫入 URL，可直接分享連結給同事。v3.0 補上軌別與尋源狀態篩選——A／B 兩軌的品項欄位與可篩選範圍不同，缺這兩個篩選器無法對應 §FR-03-1。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · products</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a class="on" href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>品項管理</h3><div class="sub">共 128 筆　·　已選取 2 筆</div></div>
+            <div class="tools"><span class="btn">匯入 CSV</span><span class="btn pri">＋ 新增品項</span></div>
+          </div>
+
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px" >
+            <span class="inp">🔍 搜尋品項名稱</span>
+            <span class="sel">類別：零食類</span>
+            <span class="trk"><span class="on">全部</span><span>A 軌</span><span>B 軌</span></span>
+            <span class="sel">尋源狀態：全部</span>
+            <span class="sel">分級：全部</span>
+            <span class="sel">狀態：評估中</span>
+            <span class="sel">分數 70–100</span>
+            <span class="tag red">☑ 只看有風險</span>
+            <span class="btn gho" style="margin-left:auto">清除條件</span>
+          </div>
+
+          <div style="background:var(--teal-soft);border:1px solid #BEDCE8;border-radius:7px;padding:7px 11px;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+            <span class="mk">1</span><span style="font-size:11.5px;color:#12556F">已選取 2 筆</span>
+            <span class="btn" style="margin-left:auto">批次加入評分佇列</span><span class="btn">批次指定類別</span><span class="btn">批次停用</span>
+          </div>
+
+          <table>
+            <tr><th style="width:18px">☑</th><th>品項名稱</th><th>類別</th><th style="width:34px">軌別</th><th>供應商</th><th>成本</th><th>售價</th><th>毛利率</th><th>分數</th><th>分級</th><th>狀態</th><th style="width:18px"><span class="mk">2</span></th></tr>
+            <tr><td>☑</td><td class="name">日式抹茶夾心餅乾</td><td>零食類</td><td><span class="tag teal">A</span></td><td>京都食品</td><td class="num">92</td><td class="num">149</td><td class="num">38%</td><td class="num">82.9</td><td><span class="chip B">B</span></td><td><span class="tag teal">評估中</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☑</td><td class="name">冷壓初榨橄欖油</td><td>食用油</td><td><span class="tag teal">A</span></td><td>地中海貿易</td><td class="num">266</td><td class="num">459</td><td class="num">42%</td><td class="num">88</td><td><span class="chip A">A</span></td><td><span class="tag teal">評估中</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☐</td><td class="name">櫻花限定護手霜</td><td>美妝</td><td><span class="tag teal">A</span></td><td>日商佳品</td><td class="num">146</td><td class="num">299</td><td class="num">51%</td><td class="num">85</td><td><span class="chip B">B</span></td><td><span class="tag green">已採納</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☐</td><td class="name">手工黑糖薑茶磚 <span class="dot"></span></td><td>沖泡飲</td><td><span class="tag teal">A</span></td><td>南投農會</td><td class="num">247</td><td class="num">380</td><td class="num">35%</td><td class="num">79</td><td><span class="chip B">B</span></td><td><span class="tag">觀察中</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☐</td><td class="name">進口氣泡水（箱） <span class="dot"></span></td><td>飲料</td><td><span class="tag teal">A</span></td><td>歐飲進口</td><td class="num">545</td><td class="num">699</td><td class="num">22%</td><td class="num">68</td><td><span class="chip C">C</span></td><td><span class="tag">觀察中</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☐</td><td class="name">戶外折疊椅</td><td>居家</td><td><span class="tag teal">A</span></td><td>台興五金</td><td class="num">640</td><td class="num">890</td><td class="num">28%</td><td class="num" style="color:var(--ink-3)">—</td><td><span class="tag">未評分</span></td><td><span class="tag">草稿</span></td><td class="mini">⋯</td></tr>
+            <tr><td>☐</td><td class="name">開心果奶油醬</td><td>零食類</td><td><span class="tag">B</span></td><td style="color:var(--ink-3)">—</td><td class="num" style="color:var(--ink-3)">—</td><td class="num" style="color:var(--ink-3)">—</td><td class="num" style="color:var(--ink-3)">—</td><td class="num" style="color:var(--ink-3)">—</td><td class="mini">時效 ＋21 天</td><td><span class="tag green">尋源中</span></td><td class="mini">⋯</td></tr>
+          </table>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:11px;font-size:11px;color:var(--ink-3)">
+            <span>每頁 <span class="sel" style="padding:3px 18px 3px 7px">20</span> 筆</span>
+            <span>1–20 / 128　<span class="btn" style="padding:3px 8px">‹</span> <span class="btn pri" style="padding:3px 8px">1</span> <span class="btn" style="padding:3px 8px">2</span> <span class="btn" style="padding:3px 8px">3</span> <span class="btn" style="padding:3px 8px">›</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>批次列</b>勾選後才出現，三個批次動作對齊規格書：加入評分佇列、指定類別、停用（原稿寫的「批次 AI 分析／匯出選取」非規格項目，已改回）。</li>
+        <li><b>B 軌欄位顯示「—」</b>成本、售價、毛利率、分數皆不顯示，改顯示時效落差天數（AC-03-4）。</li>
+        <li><b>未評分不留白</b>草稿品項分數顯示「—」而非 0，避免被誤讀為評分很差。</li>
+        <li><b>風險紅點就地顯示</b>不必進詳情就知道哪些品項要留意。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>狀態機</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">草稿 → 評估中 → 已採納 → 已上架<br>任一狀態可轉「觀察中」或「已淘汰」（淘汰需填理由 ≥10 字）<br>刪除一律軟刪除（寫入 deleted_at），不出現於任何清單/榜/報表，歷史分數與決策紀錄仍可由稽核紀錄回溯</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /products?trackType=&amp;sourcingStatus=&amp;grade=&amp;status=&amp;hasRisk=&amp;page=&amp;size=</div>
+          <div class="rgn">主表格＋分頁 <span class="tr">篩選/分頁時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /products/batch/queue-score</div>
+          <div class="rgn"><span class="mk">1</span>批次列 · 加入評分佇列</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PATCH</span> /products/batch/category</div>
+          <div class="rgn"><span class="mk">1</span>批次列 · 指定類別</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PATCH</span> /products/batch/status</div>
+          <div class="rgn"><span class="mk">1</span>批次列 · 停用</div>
+        </div>
+        <div class="api">
+          <div><span class="v">DELETE</span> /products/{id}</div>
+          <div class="rgn"><span class="mk">2</span>列尾「⋯」操作選單 <span class="tr">軟刪除</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-03-1 / AC-03-4 / AC-03-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-04 品項新增／編輯 ══════════ -->
+<section class="screen" id="s04">
+  <div class="screen-head"><span class="sid">S-04</span><h2>品項新增／編輯</h2><span class="fr">FR-03-2</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">建檔表單。毛利率即時計算不需送出；趨勢關鍵字是後續抓 Google Trends 的依據，因此設為必填。v3.0 對齊《開發規格書》修正三處：補上 A／B 軌切換（B 軌僅需名稱/類別/關聯關鍵字）、供應商與物流條件改回選填（原稿誤標必填）、新增「適溫區間」與「節慶關聯度」兩欄——氣候適配與節慶時間窗因子若沒有這兩個欄位就無法計算，原本只有一句「8 月均溫 29.4°C」的範例值，卻沒有任何欄位記錄「這個品項適合什麼溫度」。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · products / new</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a class="on" href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>新增品項</h3><div class="sub">品項管理 / 新增</div></div>
+            <div class="tools"><span class="trk"><span class="on">A 軌　完整建檔</span><span>B 軌　僅名稱/類別/關鍵字</span></span><span class="btn">取消</span><span class="btn">存為草稿</span><span class="btn pri">儲存並評分</span></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--ink-3);margin-bottom:12px">切至 <b style="color:var(--ink-2)">B 軌</b> 時，下方成本定價／物流氣候／評論來源卡片整組隱藏，僅留品項名稱、類別、關聯關鍵字三欄（FR-03-2 必填｜B 軌）</div>
+
+          <div class="grid2" style="gap:16px">
+            <div class="col">
+              <div class="card">
+                <h5>基本資料</h5>
+                <div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">品項名稱 <span style="color:var(--risk)">*</span></div>
+                <div class="inp" style="width:100%;padding:7px 9px;color:var(--ink);margin-bottom:10px">日式抹茶夾心餅乾</div>
+                <div class="grid2" style="gap:10px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">類別 <span style="color:var(--risk)">*</span></div><div class="sel" style="width:100%;padding:7px 22px 7px 9px;color:var(--ink)">零食類</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">供應商　<span style="color:var(--ink-3);font-weight:400">選填</span></div><div class="sel" style="width:100%;padding:7px 22px 7px 9px;color:var(--ink)">京都食品</div></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h5><span class="mk">1</span>成本與定價</h5>
+                <div class="grid2" style="gap:10px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">進貨成本 <span style="color:var(--risk)">*</span></div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">92.00</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">建議售價 <span style="color:var(--risk)">*</span></div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">149.00</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:11px;background:var(--surface);border-radius:6px;padding:8px 11px">
+                  <span style="font-size:11px;color:var(--ink-2)">毛利率（自動計算）</span>
+                  <span style="font-family:var(--serif);font-size:20px;font-weight:700;color:var(--a);margin-left:auto">38.3%</span>
+                </div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin-top:6px">高於零食類中位數 32%</div>
+                <div class="grid2" style="gap:10px;margin-top:10px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">最小訂購量</div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">100</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">效期天數</div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">180</div></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h5><span class="mk">2</span>物流與氣候　<span class="tag amber" style="margin-left:4px">v3.0 新增</span></h5>
+                <div style="font-size:11px;color:var(--ink-2);margin-bottom:4px">物流條件　<span style="color:var(--ink-3);font-weight:400">選填，供物流風險扣分使用</span></div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px">
+                  <span class="tag">常溫</span><span class="tag teal">✓ 冷藏</span><span class="tag">冷凍</span><span class="tag">易碎</span><span class="tag teal">✓ 易融化</span>
+                </div>
+                <div class="grid2" style="gap:10px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">適溫區間下限（°C）</div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">18</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">適溫區間上限（°C）</div><div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">26</div></div>
+                </div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin-top:6px">供季節氣候適配因子使用（§5.2.1、§FR-17-2）。未填時沿用所屬品類的預設值；兩者皆無則該因子標為無資料。</div>
+                <div style="font-size:11px;color:var(--ink-2);margin:11px 0 3px">節慶關聯度　<span style="color:var(--ink-3);font-weight:400">選填，供節慶時間窗因子使用（§FR-17-1）</span></div>
+                <div class="sel" style="width:100%;padding:7px 22px 7px 9px;color:var(--ink)">中秋節</div>
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="card">
+                <h5><span class="mk">3</span>分析設定</h5>
+                <div style="font-size:11px;color:var(--ink-2);margin-bottom:4px">趨勢關鍵字 <span style="color:var(--risk)">*</span> <span style="color:var(--ink-3)">（1–5 個）</span></div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px">
+                  <span class="tag teal">抹茶餅乾 ✕</span><span class="tag teal">日式伴手禮 ✕</span><span class="tag teal">夾心餅乾 ✕</span>
+                  <span class="tag" style="border-style:dashed;color:var(--ink-3)">＋ 新增</span>
+                </div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin-bottom:11px">用於每日擷取 Google Trends 熱度</div>
+
+                <div class="grid2" style="gap:10px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">季節性</div><div class="sel" style="width:100%;padding:7px 22px 7px 9px;color:var(--ink)">全年</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">品項圖片</div><div class="inp" style="width:100%;padding:7px 9px">已上傳 2 張</div></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h5><span class="mk">4</span>評論資料來源　<span class="tag" style="margin-left:4px">單品項補件</span></h5>
+                <div style="border:1px dashed var(--line);border-radius:7px;padding:14px;text-align:center;color:var(--ink-3);font-size:11px">
+                  拖曳 CSV 至此，或 <span style="color:var(--teal)">選擇檔案</span><br>
+                  <span style="font-size:10px">已附加：抹茶餅乾_評論.csv（1,240 則）</span>
+                </div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin-top:7px">評論少於 30 則時，AI 分析會標示低信心度。批次評論匯入請走「資料匯入」（S-10 / §FR-09），此處僅供單一品項補件。</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;background:#FBE9E7;border:1px solid #F3CFCB;border-radius:7px;padding:8px 11px;font-size:11px;color:var(--risk)">
+            建議售價需大於進貨成本　·　欄位「建議售價」
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>A／B 軌欄位差異</b>A 軌必填名稱/類別/成本/售價；B 軌只需名稱/類別/關聯關鍵字，其餘欄位整組隱藏（§FR-03-2）。</li>
+        <li><b>毛利率即時算</b>輸入成本與售價當下顯示，並與類別中位數比對，採購當場就知道這價位合不合理。</li>
+        <li><b>物流／氣候／節慶為選填但影響扣分與加分</b>不填不會擋儲存，但物流條件缺值會使物流風險扣分無法計算、適溫區間與節慶關聯度缺值則對應因子標為無資料（不扣分，見 §FR-04 硬規則）。</li>
+        <li><b>評論來源在建檔時就收</b>越早附上評論，AI 賣點與風險摘要越可靠；批次匯入評論走 S-10。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>驗證規則</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">名稱 1–100 字、同類別同名警告但允許儲存<br>A 軌：售價 &gt; 成本，否則阻擋儲存<br>圖片 jpg/png ≤2MB，最多 5 張</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /products</div>
+          <div class="rgn"><span class="mk">1</span>整頁表單送出（新增）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /products/{id}</div>
+          <div class="rgn"><span class="mk">1</span>整頁表單送出（編輯）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /categories · /suppliers</div>
+          <div class="rgn"><span class="mk">2</span>類別／供應商下拉</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET/POST/DELETE</span> /products/{id}/images</div>
+          <div class="rgn"><span class="mk">3</span>品項圖片欄 <span class="tr">選圖即上傳</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /products/{id}/comments-file</div>
+          <div class="rgn"><span class="mk">4</span>評論資料來源卡 <span class="tr">選檔即上傳</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-03-2 / AC-03-3 / AC-03-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-05 選品分數排行 ══════════ -->
+<section class="screen" id="s05">
+  <div class="screen-head"><span class="sid">S-05</span><h2>選品分數排行</h2><span class="fr">FR-04</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">單榜完整檢視。加分與扣分分開兩欄，避免「高分掩蓋致命風險」——這是 v2.0 把評論從加分項改成扣分項之後必要的呈現方式。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · ranking</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a class="on" href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>話題爆款榜</h3><div class="sub">2026 / W30　·　38 個品項套用此情境</div></div>
+            <div class="tools"><span class="sel">類別：全部</span><span class="sel">權重版本：v3</span><span class="btn"><span class="mk" style="width:14px;height:14px;font-size:9px;margin-right:4px">5</span>試算 v4 草稿</span></div>
+          </div>
+
+          <div class="tabs">
+            <a class="on" href="#s05">話題爆款榜 38</a><a href="#s05">節慶檔期榜 24</a><a href="#s05">常態補貨榜 61</a><a href="#s05">季節導向榜 5</a><a href="#s11">高風險示警 7</a>
+          </div>
+
+          <div class="scene">
+            <span class="mk">1</span>
+            <span class="lb">本榜權重</span>
+            <span class="nm">話題爆款型</span>
+            <span class="mini">熱度 50%　毛利 10%　轉換率 8%　價格帶適配 7%　節慶 15%　氣候 10%</span>
+            <a href="#s09" style="margin-left:auto;color:var(--teal);font-size:11px;text-decoration:none">調整 →</a>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span class="mk">4</span><span style="font-size:11px;color:var(--ink-3)">本榜排行表格</span></div>
+          <table>
+            <tr><th style="width:22px">#</th><th>品項</th><th style="width:17%">加分</th><th>加分</th><th style="width:70px">扣分</th><th>總分</th><th>級</th><th style="width:50px">信心度</th><th style="width:16%">因子組成</th></tr>
+            <tr>
+              <td class="rank">01</td><td class="name">杜拜巧克力（代工版）</td>
+              <td><div class="bar"><i style="width:94%"></i></div></td><td class="num">94</td>
+              <td class="mini">—</td><td class="num">94</td><td><span class="chip A">A</span></td>
+              <td class="num">91</td>
+              <td><div class="stack" style="gap:2px"><div class="bar thin" style="max-width:17px"><i style="width:98%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:42%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:35%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:71%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:60%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:55%"></i></div></div></td>
+            </tr>
+            <tr>
+              <td class="rank">02</td><td class="name">日式抹茶夾心餅乾</td>
+              <td><div class="bar"><i style="width:87%"></i></div></td><td class="num">86.89</td>
+              <td class="num" style="color:var(--risk)">−4</td><td class="num">82.9</td><td><span class="chip B">B</span></td>
+              <td class="num">88</td>
+              <td><div class="stack" style="gap:2px"><div class="bar thin" style="max-width:17px"><i style="width:96%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:88%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:90%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:82%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:85%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:44%"></i></div></div></td>
+            </tr>
+            <tr style="background:#FDFAF3">
+              <td class="rank">03</td><td class="name">韓式草莓大福 <span class="dot mid"></span></td>
+              <td><div class="bar"><i style="width:93%"></i></div></td><td class="num">93</td>
+              <td class="num" style="color:var(--risk)">−10</td><td class="num">83</td><td><span class="chip B">B</span></td>
+              <td class="num">79</td>
+              <td><div class="stack" style="gap:2px"><div class="bar thin" style="max-width:17px"><i style="width:95%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:68%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:70%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:64%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:58%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:30%"></i></div></div></td>
+            </tr>
+            <tr style="background:#FDF6F5">
+              <td class="rank">04</td><td class="name">手工黑糖薑茶磚 <span class="dot"></span></td>
+              <td><div class="bar"><i style="width:88%"></i></div></td><td class="num">88</td>
+              <td class="num" style="color:var(--risk)">−22</td><td class="num">66</td><td><span class="chip C">C</span></td>
+              <td class="num">73</td>
+              <td><div class="stack" style="gap:2px"><div class="bar thin" style="max-width:17px"><i style="width:82%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:80%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:77%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:48%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:40%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:66%"></i></div></div></td>
+            </tr>
+            <tr>
+              <td class="rank">05</td><td class="name">泰式手標奶茶粉 <span class="tag" style="margin-left:4px">資料不足</span></td>
+              <td><div class="bar grey"><i style="width:71%"></i></div></td><td class="num">71</td>
+              <td class="mini">—</td><td class="num">71</td><td><span class="chip B">B</span></td>
+              <td class="num" style="color:var(--warn)">38 ⚠</td>
+              <td><div class="stack" style="gap:2px"><div class="bar thin" style="max-width:17px"><i style="width:79%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:64%"></i></div><div class="bar thin" style="max-width:17px;background:#EAEFF3"><i style="width:0"></i></div><div class="bar thin" style="max-width:17px"><i style="width:55%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:55%"></i></div><div class="bar thin" style="max-width:17px"><i style="width:48%"></i></div></div></td>
+            </tr>
+          </table>
+
+          <div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--ink-3);flex-wrap:wrap">
+            <span>因子順序：熱度斜率 · 毛利 · 轉換率 · 價格帶適配 · 節慶時間窗 · 氣候適配</span>
+            <span><i style="display:inline-block;width:9px;height:9px;background:#EAEFF3;border-radius:2px;vertical-align:-1px"></i> 灰底＝該因子無資料，標示但不扣分</span>
+          </div>
+
+          <div style="margin-top:12px;border-top:1px solid var(--line-soft);padding-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card soft">
+              <h5><span class="mk">6</span>本榜分級分布</h5>
+              <div style="display:flex;height:22px;border-radius:5px;overflow:hidden;margin-bottom:7px">
+                <i style="display:block;background:var(--a);width:21%"></i><i style="display:block;background:var(--b);width:37%"></i><i style="display:block;background:var(--c);width:42%"></i>
+              </div>
+              <div class="legend"><span><b style="color:var(--a)">A 級</b> 8</span><span><b style="color:var(--b)">B 級</b> 14</span><span><b style="color:var(--c)">C 級</b> 16</span></div>
+              <div class="mini" style="margin-top:6px">分級門檻依榜別各自設定並綁定權重版本（本榜 A≥85／B 70–84）</div>
+            </div>
+            <div class="deduct">
+              <h5><span class="mk r">3</span>扣分明細　手工黑糖薑茶磚</h5>
+              <div class="row">評論風險　負評集中於受潮結塊<span class="n">−12</span></div>
+              <div class="row">物流風險　夏季高溫易軟化<span class="n">−6</span></div>
+              <div class="row">庫存風險　效期僅 6 個月<span class="n">−4</span></div>
+              <div class="mini" style="margin-top:6px;color:var(--risk)">扣分不受情境權重影響，四組權重下都固定生效。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>加分／扣分兩欄並列</b>看得出來「88 分被扣到 66」跟「本來就只有 66」是兩回事，前者值得花力氣改善包裝或物流。</li>
+        <li><b>資料不足只標示不扣分</b>新品項天生沒有歷史轉換率，扣分會讓它們永遠排不上來（v3.0 補上「信心度」欄，資料不足的品項信心度連動偏低並附 ⚠，供採購自行斟酌採信程度，§5.9）。</li>
+        <li><b>扣分明細獨立成卡</b>紅色系與加分區視覺分離，強調它不參與權重調整。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>硬規則</h4>
+      <p style="font-size:11px;color:var(--ink-3)">扣分達 20 分以上者，即使總分仍高，分級最高只給 B，且強制進入 S-11 風險示警。</p>
+      <div class="div"></div>
+      <h4>分級分布卡的資料範圍</h4>
+      <p style="font-size:11px;color:var(--ink-3)">8＋14＋16＝38，等於頁首「38 個品項套用此情境」，即<b>全榜彙總</b>，非目前分頁可見列。前端不可自行加總當頁列數，須由 <span style="font-family:var(--mono)">/scores/ranking/summary</span> 回傳。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /scores/ranking?period=&amp;scene=&amp;categoryId=&amp;page=</div>
+          <div class="rgn"><span class="mk">4</span>本榜排行表格 <span class="tr">切換分頁/類別重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /scores/{id}/deductions</div>
+          <div class="rgn"><span class="mk r">3</span>扣分明細卡 <span class="tr">點列展開</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /scores/simulate <span style="color:var(--ink-3)">(weightVersionId)</span></div>
+          <div class="rgn"><span class="mk">5</span>試算 v4 草稿按鈕 <span class="tr">不寫入資料庫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /weight-scenes/{scene}</div>
+          <div class="rgn"><span class="mk">1</span>本榜權重列</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /scores/ranking/summary?period=&amp;scene=&amp;categoryId=</div>
+          <div class="rgn"><span class="mk">6</span>本榜分級分布卡</div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-04-1 ～ AC-04-7</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-06 品項詳情與 AI 分析 ══════════ -->
+<section class="screen" id="s06">
+  <div class="screen-head"><span class="sid">S-06</span><h2>品項詳情與 AI 分析</h2><span class="fr">FR-05</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">系統核心畫面。v2.0 新增最上方的情境判定橫幅——這是 AI 唯一會影響分數的地方，所以必須看得到理由，也必須可以一鍵覆寫。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · product detail</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a class="on" href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>日式抹茶夾心餅乾</h3><div class="sub">零食類　·　建議售價 NT$149　·　毛利率 38%　·　供應商：已簽約</div></div>
+            <div class="tools"><span class="btn">觀察</span><span class="btn pri">建立開團決策</span></div>
+          </div>
+
+          <div class="scene">
+            <span class="mk">1</span>
+            <span class="lb">AI 情境判定（主情境）</span>
+            <span class="nm">話題爆款型</span>
+            <span class="tag teal">信心 0.82</span>
+            <span class="mini" style="flex:1;min-width:180px">近 7 日 Threads 討論量成長 340%，無明確節慶對應，歷史開團 2 次</span>
+            <span class="tag">次要情境：常態補貨型</span>
+            <span class="btn">改用其他權重組</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:14px">
+            <div>
+              <div class="card" style="margin-bottom:11px">
+                <h5><span class="mk">2</span>加分因子</h5>
+                <div class="col">
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>熱度斜率</span><span style="margin-left:auto" class="slope up">+340% / 7d</span></div><div class="bar"><i style="width:88%"></i></div></div>
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>毛利率</span><span style="margin-left:auto" class="mini">38%　同類 P88</span></div><div class="bar"><i style="width:88%"></i></div></div>
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>歷史轉換率</span><span style="margin-left:auto" class="mini">4.2%　同類 P90</span></div><div class="bar"><i style="width:90%"></i></div></div>
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>價格帶適配度</span><span style="margin-left:auto" class="mini">0.68（售價 149 元）　同類 P82</span></div><div class="bar"><i style="width:82%"></i></div></div>
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>節慶時間窗</span><span style="margin-left:auto" class="mini">中秋前 60 天　進口食品前置 45 天　窗權重 1.0</span></div><div class="bar"><i style="width:85%"></i></div></div>
+                  <div><div style="display:flex;font-size:11.5px;margin-bottom:3px"><span>季節氣候適配</span><span style="margin-left:auto" class="mini">8 月均溫 29.4°C vs 適溫 18–26°C　同類 P44</span></div><div class="bar"><i style="width:44%"></i></div></div>
+                </div>
+              </div>
+
+              <div class="deduct" style="margin-bottom:11px">
+                <h5><span class="mk r">3</span>風險扣分</h5>
+                <div class="row">評論風險　負評率 10%，未達品類門檻<span class="n">0</span></div>
+                <div class="row">物流風險　夏季高溫易融化<span class="n">−4</span></div>
+                <div class="row">庫存風險　—<span class="n">0</span></div>
+              </div>
+
+              <div class="calc">
+                <span class="mk">4</span>加分 <b>86.9</b><span class="op">−</span>扣分 <b style="color:var(--risk)">4.0</b><span class="op">=</span><b>82.9</b><span class="chip B" style="margin-left:4px">B</span>
+              </div>
+              <div class="mini" style="margin-top:6px">權重版本 v3　·　情境：話題爆款型（話題爆款榜門檻 A≥85）　·　分數信心度 86　·　同品類百分位正規化</div>
+              <div class="mini" style="margin-top:4px;color:var(--ink-3)">若同一品項於 11 月評估（氣候適配百分位 82、無夏季物流扣分），加分小計為 90.69、扣分 0、總分 90.7 → A 級。季節與檔期會直接改變分數，這是刻意設計。</div>
+              <a href="#" style="font-size:11px;color:var(--teal);text-decoration:none;display:inline-block;margin-top:6px">切換檢視「常態補貨型」次要情境的分數 →</a>
+            </div>
+
+            <div>
+              <div class="ai">
+                <div class="ai-head"><div class="t">✦ AI 分析</div><div class="m">nemotron-3.5-lightning · 08-14 06:12</div></div>
+                <div class="ai-sec">賣點</div>
+                <ul>
+                  <li>✓ 抹茶風味評價極高，回購率佳 <em>142 則</em></li>
+                  <li>✓ 主打伴手禮情境，客單價提升 <em>67 則</em></li>
+                </ul>
+                <div class="ai-sec r">潛在風險</div>
+                <ul>
+                  <li>⚠ 夏季高溫易融化，需注意物流 <em>已計入扣分</em></li>
+                  <li>⚠ 單價偏高，對小資客群較敏感 <em>28 則</em></li>
+                </ul>
+                <div class="ai-rec"><b>AI 進貨建議</b>建議列入本週 A 級主推，首批小量試單、觀察轉換後再追加。若排入中秋檔期，建議 7 月中前完成備貨決策。</div>
+                <div class="ai-foot"><span>AI 產出僅供參考，最終決策由採購人員負責</span><span>重新生成</span></div>
+              </div>
+
+              <div class="card soft" style="margin-top:11px">
+                <h5><span class="mk">5</span>評論情緒分佈</h5>
+                <div class="sentiment"><i style="background:var(--a);width:68%"></i><i style="background:var(--b);width:22%"></i><i style="background:var(--risk);width:10%"></i></div>
+                <div class="legend"><span><b>正面</b> 68%</span><span><b>中立</b> 22%</span><span><b>負面</b> 10%</span></div>
+                <div class="mini" style="margin-top:7px">負評主題：包裝破損 4%　·　融化 3%　·　價格 3%<br>未達零食類負評門檻（15%），評論不扣分。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>情境判定橫幅</b>AI 只能從已定義的權重組選一組，不能自訂數值。判定理由與依據訊號必須顯示。</li>
+        <li><b>加分因子區</b>每個因子都附原始值與同類百分位，採購知道「為什麼是這個分數」。</li>
+        <li><b>風險扣分區</b>紅色系獨立成塊。即使扣 0 分也列出來，讓採購看到系統確實檢查過。</li>
+        <li><b>分數組成公式</b>加分減扣分攤在畫面上，不是一個突然出現的 87。</li>
+        <li><b>評論的新角色</b>顯示負評主題與門檻判定——沒過門檻就不扣分，符合「評論不當加分項」的設計。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>覆寫行為</h4>
+      <p style="font-size:11px;color:var(--ink-3)">採購覆寫情境權重組時，理由為必填（非選填），紀錄寫入 scene_classification_log 並立即以新權重組重算分數。這些覆寫是後續權重校準最重要的訊號來源。</p>
+      <div class="div"></div>
+      <h4>兩個信心門檻（v3.0 釐清）</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">＜0.5　採用門檻，退回「常態補貨型」預設權重並標示「AI 判定失敗」<br>＜0.7　計分門檻，判定仍採用，但分數信心度扣 10 分<br>兩者用途不同，非互斥條件</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /products/{id}/scores?period=&amp;scene=</div>
+          <div class="rgn"><span class="mk">2</span>加分因子＋<span class="mk r" style="margin-left:2px">3</span>風險扣分＋<span class="mk" style="margin-left:2px">4</span>分數組成</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /products/{id}/insights</div>
+          <div class="rgn">AI 分析卡（賣點/風險/建議）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /products/{id}/insights/regenerate?type=</div>
+          <div class="rgn">AI 分析卡 <span class="tr">按「重新生成」</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /products/{id}/scene-override</div>
+          <div class="rgn"><span class="mk">1</span>情境判定橫幅 <span class="tr">按「改用其他權重組」</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /products/{id}/scores?scene=alternative</div>
+          <div class="rgn"><span class="mk">1</span>「切換檢視次要情境」連結</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /products/{id}/review-sentiment</div>
+          <div class="rgn"><span class="mk">5</span>評論情緒分佈卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PATCH</span> /products/{id}/status</div>
+          <div class="rgn">頁首「觀察」按鈕</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /products/{id}/decisions</div>
+          <div class="rgn">頁首「建立開團決策」按鈕</div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-05-1 ～ AC-05-7</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-07 趨勢分析 ══════════ -->
+<section class="screen" id="s07">
+  <div class="screen-head"><span class="sid">S-07</span><h2>趨勢分析</h2><span class="fr">FR-06</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">v1.0 只有 Google Trends 一個來源、只看絕對熱度。v2.0 改為多來源合成，且主要看斜率——爆款偵測本質是抓一階導數，等絕對值衝高通常已經來不及。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · trends</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a class="on" href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>杜拜巧克力</h3><div class="sub">合成熱度分數 94　·　更新於今日 06:00</div></div>
+            <div class="tools"><span class="sel">區間：近 90 天</span><a href="#s16" class="btn">來源設定</a></div>
+          </div>
+
+          <div class="card" style="margin-bottom:12px;padding:14px 13px 10px">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:9px;flex-wrap:wrap">
+              <h5 style="margin:0"><span class="mk">1</span>曲線階段判定</h5>
+              <span class="tag amber">高原期　第 3 週</span>
+              <span class="mini">預估剩餘壽命 4–7 週</span>
+            </div>
+            <svg viewBox="0 0 620 130" style="width:100%;height:auto">
+              <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1E7A9E" stop-opacity=".22"/><stop offset="1" stop-color="#1E7A9E" stop-opacity="0"/></linearGradient></defs>
+              <line x1="0" y1="110" x2="620" y2="110" stroke="#DCE3E9"/>
+              <line x1="0" y1="70" x2="620" y2="70" stroke="#EAEFF3"/>
+              <line x1="0" y1="30" x2="620" y2="30" stroke="#EAEFF3"/>
+              <path d="M0,106 L60,104 L120,100 L180,92 L240,70 L300,38 L360,20 L420,17 L480,19 L540,22 L620,26 L620,110 L0,110 Z" fill="url(#g1)"/>
+              <path d="M0,106 L60,104 L120,100 L180,92 L240,70 L300,38 L360,20 L420,17 L480,19 L540,22 L620,26" fill="none" stroke="#1E7A9E" stroke-width="2"/>
+              <rect x="240" y="8" width="120" height="102" fill="#1E7A9E" opacity=".06"/>
+              <text x="300" y="124" text-anchor="middle" font-size="9.5" fill="#8A9AA6" font-family="Noto Sans TC, sans-serif">上升期</text>
+              <rect x="360" y="8" width="180" height="102" fill="#D68910" opacity=".07"/>
+              <text x="450" y="124" text-anchor="middle" font-size="9.5" fill="#B8791A" font-family="Noto Sans TC, sans-serif">高原期（現在）</text>
+              <circle cx="420" cy="17" r="3.5" fill="#1E7A9E"/>
+            </svg>
+          </div>
+
+          <h5 style="font-size:12px;margin-bottom:8px"><span class="mk">2</span>各來源斜率與合成</h5>
+          <table>
+            <tr><th>來源</th><th style="width:70px">7 日斜率</th><th style="width:70px">30 日斜率</th><th style="width:20%">同源百分位</th><th style="width:56px">合成權重</th><th>狀態</th></tr>
+            <tr><td class="name">Threads</td><td><span class="slope up">+340%</span></td><td><span class="slope up">+1120%</span></td><td><div class="bar"><i style="width:97%"></i></div></td><td class="num">40%</td><td><span class="tag green">正常</span></td></tr>
+            <tr><td class="name">Google Trends</td><td><span class="slope up">+86%</span></td><td><span class="slope up">+410%</span></td><td><div class="bar"><i style="width:88%"></i></div></td><td class="num">25%</td><td><span class="tag green">正常</span></td></tr>
+            <tr><td class="name">Instagram（品類）</td><td><span class="slope flat">+4%</span></td><td><span class="slope up">+62%</span></td><td><div class="bar grey"><i style="width:55%"></i></div></td><td class="num">10%</td><td><span class="tag amber">額度不足</span></td></tr>
+            <tr style="background:#F7FAFC"><td class="name">人工標記 <span class="tag" style="margin-left:4px">8 人次</span></td><td><span class="slope up">4.1 → 4.8</span></td><td><span class="slope up">2.6 → 4.8</span></td><td><div class="bar"><i style="width:92%"></i></div></td><td class="num">25%</td><td><span class="tag green">正常</span></td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px">
+            <div class="card soft">
+              <h5><span class="mk">3</span>合成邏輯</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                各來源量級不可比（Threads 的 200 則 vs Trends 指數 78），因此<b>先在各來源內做百分位正規化，再依合成權重加總</b>。<br>
+                Instagram 本期降級，其 10% 權重按比例分攤給其餘三個來源。
+              </div>
+              <div class="mini" style="margin-top:7px">本次合成：Threads 44.4% · Trends 27.8% · 人工 27.8%</div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">4</span>雙窗口的用意</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                7 日斜率抓短期竄升，30 日斜率確認不是單日雜訊。<br>
+                兩者背離時（7 日轉負、30 日仍正）系統標記為<b>可能見頂</b>，提示採購加速決策或觀望。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>曲線階段判定</b>由 TrendInterpreterAgent 判定上升／高原／衰退，並推估剩餘壽命——這是 B 軌時效落差計算的輸入。</li>
+        <li><b>各來源分列</b>不把數字混成一個黑盒子。哪個來源在推動這個分數，看得出來。</li>
+        <li><b>合成邏輯攤開</b>降級時權重怎麼重新分配，畫面直接說明，不需要翻文件。</li>
+        <li><b>雙窗口斜率</b>單一窗口容易被單日雜訊帶偏，兩個窗口背離本身就是訊號。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>資料來源說明</h4>
+      <p style="font-size:11px;color:var(--ink-3)">FB／TikTok／小紅書無合法程式化管道，改由 S-15 人工標記涵蓋。系統不建置爬蟲，理由見規格書附錄 A。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /trends/series?keywordIds=&amp;range=</div>
+          <div class="rgn"><span class="mk">1</span>熱度曲線圖</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /trends/keywords/{id}/sources</div>
+          <div class="rgn"><span class="mk">2</span>各來源斜率與合成表</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /trends/keywords/{id}/composition</div>
+          <div class="rgn"><span class="mk">3</span>合成邏輯卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /trends/keywords/{id}/interpret</div>
+          <div class="rgn"><span class="mk">1</span>曲線階段判定 <span class="tr">TrendInterpreterAgent</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-06-1 ～ AC-06-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-08 AI 任務中心 ══════════ -->
+<section class="screen" id="s08">
+  <div class="screen-head"><span class="sid">S-08</span><h2>AI 任務中心</h2><span class="fr">FR-07</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">所有 LLM 分析都是非同步任務。使用者不必等待，但要看得到進度、錯誤與配額用量。v3.0 修正：本專案一律使用 OpenRouter 免費模型，費用永遠是 $0，主要度量改為<b>請求數與配額百分比</b>，金額降為次要顯示。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · ai-tasks</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a class="on" href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>AI 任務中心</h3><div class="sub">A 軌 REST 直連 OpenRouter・B 軌經 opencode + MCP　·　免費模型　·　併發上限 5</div></div>
+            <div class="tools"><span class="sel">狀態：全部</span><span class="btn pri">＋ 建立任務</span></div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-bottom:10px">
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px">1</div><div class="l">執行中</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px">42</div><div class="l">本月完成</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px;color:var(--risk)">3</div><div class="l">失敗待重跑</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px">0.00</div><div class="l">本月費用 USD（次要）</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span class="mk">3</span><span style="font-size:11px;color:var(--ink-3)">三個預算池，皆以每日請求數計</span></div>
+          <div class="grid3" style="margin-bottom:12px">
+            <div class="kpi">
+              <div style="display:flex;align-items:baseline;gap:6px"><span class="v" style="font-size:18px">476</span><span style="font-size:10.5px;color:var(--ink-3)">/ 700</span></div>
+              <div class="bar thin" style="margin-top:5px"><i style="width:68%"></i></div>
+              <div class="l" style="margin-top:4px">A 軌批次　68%　·　占日配額 70%</div>
+            </div>
+            <div class="kpi">
+              <div style="display:flex;align-items:baseline;gap:6px"><span class="v" style="font-size:18px">142</span><span style="font-size:10.5px;color:var(--ink-3)">/ 200</span></div>
+              <div class="bar thin" style="margin-top:5px"><i style="width:71%"></i></div>
+              <div class="l" style="margin-top:4px">B 軌探索　71%　·　占日配額 20%　·　耗盡不影響 A 軌</div>
+            </div>
+            <div class="kpi">
+              <div style="display:flex;align-items:baseline;gap:6px"><span class="v" style="font-size:18px">18</span><span style="font-size:10.5px;color:var(--ink-3)">/ 100</span></div>
+              <div class="bar thin" style="margin-top:5px"><i style="width:18%"></i></div>
+              <div class="l" style="margin-top:4px">重試／臨時／季度校準　18%　·　占日配額 10%</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:11px;border-color:#BEDCE8;background:#F5FAFC">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span class="mk">1</span>
+              <b style="font-size:12.5px">#T-1042　完整分析（評論情感 → 賣點 → 風險 → 建議）</b>
+              <span class="tag teal">執行中</span>
+              <span style="margin-left:auto;font-size:10.5px;color:var(--ink-3)">建立者 buyer01　·　已耗時 2m 14s</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <div class="bar" style="height:10px"><i style="width:62%"></i></div>
+              <span style="font-family:var(--mono);font-size:11.5px;width:78px">31 / 50 品項</span>
+              <span class="btn">取消</span>
+            </div>
+            <div style="display:flex;gap:14px;margin-top:8px;font-size:10.5px;color:var(--ink-3)">
+              <span>成功 29　·　<span style="color:var(--risk)">失敗 2</span>　·　排隊 19　·　快取命中 8</span>
+              <span>模型別名 MODEL_ANALYSIS → nemotron-3.5-lightning:free（備援 free-models-router）</span>
+              <span style="margin-left:auto">124 次請求　·　$0.00　·　64.2K tokens</span>
+            </div>
+          </div>
+
+          <table>
+            <tr><th>任務</th><th>類型</th><th>品項數</th><th>狀態</th><th style="width:16%">進度</th><th>耗時</th><th>請求數</th><th style="color:var(--ink-3)">費用（次要）</th><th>建立者</th></tr>
+            <tr><td class="name">#T-1041</td><td>趨勢解讀</td><td class="num">12</td><td><span class="tag green">完成</span></td><td><div class="bar thin"><i style="width:100%;background:var(--a)"></i></div></td><td class="num">48s</td><td class="num">12</td><td class="num" style="color:var(--ink-3)">$0.00</td><td style="color:var(--ink-3)">排程</td></tr>
+            <tr><td class="name">#T-1040</td><td>批次評分</td><td class="num">128</td><td><span class="tag green">完成</span></td><td><div class="bar thin"><i style="width:100%;background:var(--a)"></i></div></td><td class="num">34s</td><td class="num">0</td><td class="num" style="color:var(--ink-3)">$0.00</td><td style="color:var(--ink-3)">排程</td></tr>
+            <tr style="background:#FDF6F5">
+              <td class="name">#T-1039 <span class="dot"></span></td><td>賣點萃取</td><td class="num">20</td><td><span class="tag red">部分失敗</span></td><td><div class="bar thin"><i style="width:85%;background:var(--warn)"></i></div></td><td class="num">2m 51s</td><td class="num">37</td><td class="num" style="color:var(--ink-3)">$0.00</td><td style="color:var(--ink-3)">lead01</td>
+            </tr>
+            <tr><td colspan="9" style="background:#FDF6F5;padding:9px 12px">
+              <div style="display:flex;align-items:flex-start;gap:9px">
+                <span class="mk r">2</span>
+                <div style="flex:1">
+                  <div style="font-size:11px;color:var(--risk);font-weight:700;margin-bottom:4px">3 個子項目失敗</div>
+                  <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-2);background:#fff;border:1px solid #F3CFCB;border-radius:5px;padding:6px 8px;line-height:1.7">
+                    進口氣泡水（箱）　AI_SCHEMA_INVALID：回應缺少必要欄位 supportCount（已重試 2 次，含備援模型）<br>
+                    戶外折疊椅　　　　評論筆數 0，無可分析資料<br>
+                    韓式泡菜罐　　　　TIMEOUT：60 秒逾時
+                  </div>
+                </div>
+                <span class="btn pri">重跑失敗項</span>
+              </div>
+            </td></tr>
+            <tr><td class="name">#T-1038</td><td>評論情感</td><td class="num">6</td><td><span class="tag">已取消</span></td><td><div class="bar thin grey"><i style="width:40%"></i></div></td><td class="num">21s</td><td class="num">3</td><td class="num" style="color:var(--ink-3)">$0.00</td><td style="color:var(--ink-3)">buyer01</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>進度即時可見</b>以 SSE 推播（或 3 秒輪詢）更新，可中途取消，已完成的子項目結果保留。</li>
+        <li><b>錯誤攤開來看</b>顯示錯誤碼與 LLM 原始回應片段，失敗項可單獨重跑，不必整批重來。</li>
+        <li><b>請求數是一級資訊，費用降為次要</b>免費模型下費用永遠是 $0，主要看每個預算池的請求數與配額百分比；當日達 80% 於畫面警示、達 100% 停止送出並保留待重跑清單。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>可靠度機制</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">JSON Schema 驗證 → 失敗重試 2 次（第 2 次換備援模型）→ 仍失敗標記並保留原始回應。<br>AI 全數失效時，因子評分與總分仍正常顯示。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /ai/tasks</div>
+          <div class="rgn">頁首「＋ 建立任務」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /ai/tasks?status=&amp;page=</div>
+          <div class="rgn">下方任務列表 <span class="tr">篩選狀態時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /ai/tasks/{id}/items</div>
+          <div class="rgn"><span class="mk r">2</span>失敗子項目清單</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /ai/tasks/{id}/stream</div>
+          <div class="rgn"><span class="mk">1</span>執行中任務卡 <span class="tr">SSE 推播</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /ai/tasks/{id}/cancel</div>
+          <div class="rgn"><span class="mk">1</span>執行中任務卡「取消」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /ai/tasks/{id}/retry-failed</div>
+          <div class="rgn"><span class="mk r">2</span>「重跑失敗項」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /ai/budgets</div>
+          <div class="rgn"><span class="mk">3</span>三個預算池卡</div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-07-1 ～ AC-07-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-09 情境權重組 ══════════ -->
+<section class="screen" id="s09">
+  <div class="screen-head"><span class="sid">S-09</span><h2>情境權重組</h2><span class="fr">FR-08</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">四組具名權重＋版本管理：AI 判斷情境後選其中一組，但不能自己填數值——這是讓 AI 參與評分又保住可稽核性的關鍵約束。v3.0 將加分因子由 5 項補齊為<b>六因子</b>，新增「價格帶適配度」（全系統唯一對應痛點 P-3 客群未對齊的因子），四組權重重新分配至 100%。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · weights</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a class="on" href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>情境權重組</h3><div class="sub">目前生效：v3　·　2026-06-01 起　·　核准人：採購主管 林</div></div>
+            <div class="tools"><span class="sel">版本：v3（生效中）</span><a href="#s19" class="btn">校準建議 1</a><span class="btn pri">建立新版本</span></div>
+          </div>
+
+          <div class="wgrid" style="grid-template-columns:1.3fr repeat(6,1fr);margin-bottom:6px">
+            <div class="h">權重組</div><div class="h" style="text-align:center">熱度斜率</div><div class="h" style="text-align:center">毛利率</div><div class="h" style="text-align:center">轉換率</div><div class="h" style="text-align:center">價格帶適配</div><div class="h" style="text-align:center">節慶窗</div><div class="h" style="text-align:center">氣候</div>
+            <div class="rowname">話題爆款型 <span class="mini">38 項</span></div><div class="cell hi">50%</div><div class="cell">10%</div><div class="cell">8%</div><div class="cell">7%</div><div class="cell">15%</div><div class="cell">10%</div>
+            <div class="rowname">節慶檔期型 <span class="mini">24 項</span></div><div class="cell">18%</div><div class="cell">18%</div><div class="cell">17%</div><div class="cell">7%</div><div class="cell hi">30%</div><div class="cell">10%</div>
+            <div class="rowname">常態補貨型 <span class="mini">61 項</span></div><div class="cell">13%</div><div class="cell hi">30%</div><div class="cell hi">30%</div><div class="cell">12%</div><div class="cell">5%</div><div class="cell">10%</div>
+            <div class="rowname">季節導向型 <span class="mini">5 項</span></div><div class="cell">18%</div><div class="cell">22%</div><div class="cell">18%</div><div class="cell">7%</div><div class="cell">5%</div><div class="cell hi">30%</div>
+          </div>
+          <div class="mini" style="margin-bottom:14px">每列合計 100%　·　`heat_volume`（熱度絕對量級）不進權重，改為門檻條件：熱度量級未達品類近 90 日中位數的 20% 時，熱度斜率因子不計分</div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+            <div class="card soft" style="padding:9px 11px"><div class="mini">話題爆款榜門檻</div><div style="font-size:13px;font-weight:700;color:var(--navy)">A ≥ 85　B 70–84</div></div>
+            <div class="card soft" style="padding:9px 11px"><div class="mini">節慶檔期榜門檻</div><div style="font-size:13px;font-weight:700;color:var(--navy)">A ≥ 85　B 70–84</div></div>
+            <div class="card soft" style="padding:9px 11px"><div class="mini">常態補貨榜門檻</div><div style="font-size:13px;font-weight:700;color:var(--navy)">A ≥ 80　B 65–79</div></div>
+            <div class="card soft" style="padding:9px 11px"><div class="mini">季節導向榜門檻</div><div style="font-size:13px;font-weight:700;color:var(--navy)">A ≥ 82　B 68–81</div></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card">
+              <h5><span class="mk">1</span>AI 選組規則</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                SceneClassifierAgent 每次評分時判定情境，輸出必須是四組之一，並附信心值與依據訊號。<br>
+                <span class="mini">信心 &lt; 0.5 時退回「常態補貨型」並標示；JSON Schema 驗證失敗時同樣退回預設。</span>
+              </div>
+              <div class="calc" style="margin-top:9px;font-size:11px">
+                <span>本季判定 128 項</span><span class="op">·</span><span>人工覆寫 <b style="font-size:14px">12</b> 項</span><span class="op">·</span><span>覆寫率 9.4%</span>
+              </div>
+            </div>
+            <div class="deduct">
+              <h5>風險扣分規則　<span class="tag red">不受權重影響</span></h5>
+              <div class="row">評論風險　負評率 &gt; 品類門檻且主題命中<span class="n">最多 −20</span></div>
+              <div class="row">物流風險　冷鏈／易融／易碎／材積<span class="n">最多 −10</span></div>
+              <div class="row">庫存風險　效期短／季節性／MOQ 偏高<span class="n">最多 −10</span></div>
+              <div class="mini" style="margin-top:6px">四組權重下皆固定生效，SYS_ADMIN 可調門檻但不可停用。</div>
+            </div>
+          </div>
+
+          <div class="card soft" style="margin-top:12px">
+            <h5><span class="mk">2</span>版本歷程</h5>
+            <table>
+              <tr><th style="width:52px">版本</th><th style="width:96px">生效日</th><th>變更內容</th><th style="width:80px">核准人</th><th style="width:60px">狀態</th></tr>
+              <tr><td class="num">v4</td><td class="mini">草稿</td><td>話題爆款型熱度 50% → 57%（來自 S-19 校準建議，其餘因子等比例調降）</td><td class="mini">—</td><td><span class="tag amber">待審核</span></td></tr>
+              <tr><td class="num">v3</td><td class="mini">2026-06-01</td><td>納入價格帶適配度（第六因子），四組權重重新分配至 100%；四榜與四組情境對齊</td><td class="mini">主管 林</td><td><span class="tag green">生效中</span></td></tr>
+              <tr><td class="num">v2</td><td class="mini">2026-03-01</td><td>節慶窗權重自 20% 調升至 30%（節慶檔期型）</td><td class="mini">主管 林</td><td><span class="tag">已停用</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>四組具名權重</b>讓 AI 從離散選項中選一組，而不是填 6 個小數——連續數值沒人審得動，也不可重現。</li>
+        <li><b>版本歷程</b>每筆評分都記錄當時的 weight_version_id，三個月後回頭看得出「當初為什麼給 87 分」。</li>
+        <li><b>覆寫率是指標</b>覆寫率偏高代表情境判定規則需要調整，這個數字會餵給 S-19 校準。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>權限</h4>
+      <p style="font-size:11px;color:var(--ink-3)">僅 BUYER_LEAD 可建立／編輯權重版本草稿與核准生效（DATA_ADMIN 無此權限，§2.1 第 15／16 列）。生效後的版本不可修改，只能建立新版本。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /weight-versions</div>
+          <div class="rgn">頁首版本選擇器＋版本歷程表</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /weight-versions/{id}/profiles</div>
+          <div class="rgn">六因子權重表格＋四榜門檻卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /weight-versions</div>
+          <div class="rgn">「建立新版本」按鈕</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /weight-versions/{id}</div>
+          <div class="rgn">草稿版本編輯（僅未生效版本可編輯）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /weight-versions/{id}/approve</div>
+          <div class="rgn"><span class="mk">2</span>版本歷程表「待審核」列 <span class="tr">僅 BUYER_LEAD</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /weight-versions/{id}/scene-stats</div>
+          <div class="rgn"><span class="mk">1</span>AI 選組規則卡（判定數／覆寫率）</div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-08-1 ～ AC-08-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-10 資料匯入 ══════════ -->
+<section class="screen" id="s10">
+  <div class="screen-head"><span class="sid">S-10</span><h2>資料匯入</h2><span class="fr">FR-09</span><span class="chg keep">沿用</span></div>
+  <p class="screen-desc">歷史銷售、商品評論、會員輪廓的入口。這頁的成敗直接決定「歷史轉換率」與「評論情感」兩個因子能不能用。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · imports</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a class="on" href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>資料匯入</h3><div class="sub">歷史銷售紀錄　·　2024-01 ～ 2026-06_銷售.xlsx（38,412 列）</div></div>
+            <div class="tools"><span class="btn">下載範本</span><span class="btn">匯入紀錄</span></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <div class="step done"><span class="s">✓</span>上傳檔案</div><div class="line"></div>
+            <div class="step on"><span class="s">2</span>欄位對應</div><div class="line"></div>
+            <div class="step"><span class="s">3</span>預覽與驗證</div><div class="line"></div>
+            <div class="step"><span class="s">4</span>確認匯入</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="card">
+              <h5><span class="mk">1</span>欄位對應</h5>
+              <table>
+                <tr><th>檔案欄位</th><th style="width:18px"></th><th>系統欄位</th><th>狀態</th></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">訂單日期</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">orderDate</span></td><td><span class="tag green">自動對應</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">品名</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">productName</span></td><td><span class="tag green">自動對應</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">大類</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">category</span></td><td><span class="tag amber">已人工調整</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">單價</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">price</span></td><td><span class="tag green">自動對應</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">數量</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">qty</span></td><td><span class="tag green">自動對應</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px">瀏覽數</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px">impression</span></td><td><span class="tag teal">選填</span></td></tr>
+                <tr><td style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">會員 ID</td><td style="color:var(--ink-3)">→</td><td><span class="sel" style="padding:3px 20px 3px 7px;font-size:11px;color:var(--ink-3)">不匯入</span></td><td><span class="tag red">含個資</span></td></tr>
+              </table>
+              <div style="margin-top:9px;background:#FBE9E7;border:1px solid #F3CFCB;border-radius:6px;padding:7px 9px;font-size:10.5px;color:var(--risk)">
+                偵測到可識別個資欄位，預設不匯入。系統僅接受去識別化資料。
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="card">
+                <h5><span class="mk">2</span>驗證結果（前 20 列預覽）</h5>
+                <div style="display:flex;gap:9px;margin-bottom:9px">
+                  <div style="flex:1;background:#E4F3EB;border-radius:6px;padding:8px 10px"><div style="font-family:var(--serif);font-size:18px;font-weight:700;color:var(--a)">38,164</div><div style="font-size:10.5px;color:var(--ink-3)">通過驗證</div></div>
+                  <div style="flex:1;background:#FBE9E7;border-radius:6px;padding:8px 10px"><div style="font-family:var(--serif);font-size:18px;font-weight:700;color:var(--risk)">248</div><div style="font-size:10.5px;color:var(--ink-3)">有錯誤</div></div>
+                  <div style="flex:1;background:var(--surface);border-radius:6px;padding:8px 10px"><div style="font-family:var(--serif);font-size:18px;font-weight:700;color:var(--ink-2)">1,206</div><div style="font-size:10.5px;color:var(--ink-3)">重複（將略過）</div></div>
+                </div>
+                <table>
+                  <tr><th>列</th><th>日期</th><th>品名</th><th>數量</th><th>驗證</th></tr>
+                  <tr><td class="rank">1</td><td style="font-family:var(--mono);font-size:11px">2024-01-03</td><td>抹茶餅乾</td><td class="num">12</td><td><span style="color:var(--a)">✓</span></td></tr>
+                  <tr><td class="rank">2</td><td style="font-family:var(--mono);font-size:11px">2024-01-03</td><td>橄欖油 500ml</td><td class="num">4</td><td><span style="color:var(--a)">✓</span></td></tr>
+                  <tr style="background:#FDF6F5"><td class="rank">3</td><td style="font-family:var(--mono);font-size:11px;color:var(--risk)">2024/1/4</td><td>護手霜</td><td class="num">7</td><td><span style="color:var(--risk);font-size:10.5px">日期格式錯誤</span></td></tr>
+                  <tr><td class="rank">4</td><td style="font-family:var(--mono);font-size:11px">2024-01-04</td><td>黑糖薑茶</td><td class="num">9</td><td><span style="color:var(--a)">✓</span></td></tr>
+                  <tr style="background:#FDF6F5"><td class="rank">5</td><td style="font-family:var(--mono);font-size:11px">2024-01-05</td><td>—</td><td class="num" style="color:var(--risk)">−2</td><td><span style="color:var(--risk);font-size:10.5px">品名空白、數量須 &gt;0</span></td></tr>
+                </table>
+              </div>
+              <div style="display:flex;gap:7px;align-items:center">
+                <span class="btn">下載錯誤列 CSV</span>
+                <span style="font-size:10.5px;color:var(--ink-3)">修正後可單獨重傳</span>
+                <span class="btn pri" style="margin-left:auto"><span class="mk" style="width:14px;height:14px;font-size:9px;background:rgba(255,255,255,.3)">3</span> 匯入 38,164 列</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>欄位對應可調</b>系統自動猜測，猜錯的人工改。客戶的欄位名稱不會剛好等於系統欄位。</li>
+        <li><b>先驗證再寫入</b>永遠不會直接寫庫。部分失敗時成功列照樣進，失敗列可下載修正後重傳。</li>
+        <li><b>去重與個資把關</b>依內容雜湊去重；可識別個資欄位預設不匯入，明確提示只收去識別化資料。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>支援的資料類型</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">歷史銷售紀錄　·　商品評論<br>會員輪廓（客群區隔，去識別化）<br>品項主檔（批次建檔）</p>
+      <div class="div"></div>
+      <h4>檔案大小規則（v3.0 明確化）</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.8">≤2MB 且 ≤5,000 列　→　同步即時匯入<br>&gt;2MB 或 &gt;5,000 列　→　轉背景任務，完成後於通知區提示<br>&gt;50MB 或 &gt;200,000 列　→　直接拒收<br><span style="color:var(--b)">本例 38,412 列已超過同步門檻，實際會走背景任務</span></p>
+      <div class="div"></div>
+      <h4>匯入完成後的重算</h4>
+      <p style="font-size:11px;color:var(--ink-3)">只重算受影響品項的因子與扣分，<b>不觸發任何 Agent、不耗用 LLM 配額</b>。情境判定沿用最近一次結果，從未判定過的預設為常態補貨型並標示。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /imports/upload</div>
+          <div class="rgn">Step 1 上傳檔案</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /imports/{batchId}/preview</div>
+          <div class="rgn"><span class="mk">1</span>欄位對應卡＋<span class="mk" style="margin-left:2px">2</span>驗證結果卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /imports/{batchId}/confirm</div>
+          <div class="rgn"><span class="mk">3</span>「匯入 N 列」按鈕</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /imports?page=</div>
+          <div class="rgn">頁首「匯入紀錄」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /imports/{batchId}/errors/download</div>
+          <div class="rgn">「下載錯誤列 CSV」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /imports/{batchId}/status</div>
+          <div class="rgn">背景任務進度 <span class="tr">超過同步門檻時輪詢</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-09-1 ～ AC-09-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-11 風險示警中心 ══════════ -->
+<section class="screen" id="s11">
+  <div class="screen-head"><span class="sid">S-11</span><h2>風險示警中心</h2><span class="fr">FR-10</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">對應簡報「AI 趨勢與風險示警」。規則型判定由系統直接算，不交給 LLM，確保門檻明確可稽核。v3.0 對齊《開發規格書》：原稿的風險類型（負評率過高／毛利偏低／樣本不足／價格離群／客群不符，含一個「AI 補充」的物流風險）並非規格書定義的列舉值。v3.0 改用規格書 §FR-10-1 補齊的 9 種 <code>risk_type</code>，全數為規則觸發，不存在 AI 補充機制。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · risks</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a class="on" href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>風險示警中心</h3><div class="sub">最後偵測 08/12 03:35（每次評分後自動重跑）</div></div>
+            <div class="tools"><span class="sel">狀態：未處理</span><span class="sel">嚴重度：全部</span><span class="btn">風險規則設定</span></div>
+          </div>
+
+          <div style="display:flex;gap:9px;margin-bottom:13px">
+            <div class="kpi alert" style="flex:1"><div class="v" style="font-size:20px">3</div><div class="l">高　未處理</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px;color:var(--warn)">6</div><div class="l">中　未處理</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px;color:var(--c)">11</div><div class="l">低　未處理</div></div>
+            <div class="kpi" style="flex:1"><div class="v" style="font-size:20px;color:var(--ink-3)">24</div><div class="l">本月已處理</div></div>
+          </div>
+
+          <table>
+            <tr><th style="width:14px"></th><th>品項</th><th>風險類型 <span class="mini">risk_type</span></th><th>觸發值</th><th>嚴重度</th><th>影響</th><th>偵測時間</th><th>處理</th></tr>
+            <tr>
+              <td><span class="dot mid"></span></td><td class="name">進口氣泡水（箱）</td><td>評論風險 <span class="mini">REVIEW_RISK</span></td>
+              <td style="font-family:var(--mono);font-size:11px">負面 34%　&gt; 門檻 20%</td><td><span class="tag amber">中</span></td>
+              <td style="font-size:11px;color:var(--risk)">扣 8 分（&lt;20，未壓級）</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:35</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr style="background:#FDF6F5">
+              <td><span class="dot"></span></td><td class="name">草莓大福禮盒</td><td>熱度急墜 <span class="mini">HEAT_CRASH</span></td>
+              <td style="font-family:var(--mono);font-size:11px">slope_7d −38%　≤ 門檻 −40% 前緣</td><td><span class="tag red">高</span></td>
+              <td style="font-size:11px;color:var(--risk)">已上架品項熱度急墜</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 06:30</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr>
+              <td><span class="dot mid"></span></td><td class="name">手工黑糖薑茶磚</td><td>季節不匹配 <span class="mini">SEASON_MISMATCH</span></td>
+              <td style="font-family:var(--mono);font-size:11px">氣候適配百分位 18　&lt; 門檻 20</td><td><span class="tag amber">中</span></td>
+              <td style="font-size:11px;color:var(--risk)">已採納品項季節錯位</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:35</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr style="background:#FDF6F5">
+              <td><span class="dot"></span></td><td class="name">手工黑糖薑茶磚</td><td>扣分壓級 <span class="mini">PENALTY_CAP</span></td>
+              <td style="font-family:var(--mono);font-size:11px">扣分小計 22　≥ 門檻 20</td><td><span class="tag red">高</span></td>
+              <td style="font-size:11px;color:var(--risk)">分級鎖定最高 B（§FR-04）</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:35</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr>
+              <td><span class="dot mid"></span></td><td class="name">日式抹茶夾心餅乾</td><td>物流風險 <span class="mini">LOGISTICS_RISK</span></td>
+              <td style="font-size:11px;color:var(--ink-2)">夏季高溫易融化，扣 4 分 &gt; 0</td><td><span class="tag amber">中</span></td>
+              <td style="font-size:11px;color:var(--ink-3)">扣 4 分</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 04:02</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr>
+              <td></td><td class="name">泰式手標奶茶粉</td><td>低信心分數 <span class="mini">LOW_CONFIDENCE</span></td>
+              <td style="font-family:var(--mono);font-size:11px">信心度 38　&lt; 門檻 50</td><td><span class="tag">低</span></td>
+              <td style="font-size:11px;color:var(--ink-3)">分數僅供參考</td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:35</td>
+              <td><span class="btn">確認</span> <span class="btn gho">忽略</span></td>
+            </tr>
+            <tr style="color:var(--ink-3)">
+              <td></td><td class="name" style="color:var(--ink-3)">韓式泡菜罐</td><td>檔期窗即將關閉 <span class="mini">FESTIVAL_WINDOW_CLOSING</span></td>
+              <td style="font-family:var(--mono);font-size:11px">節慶窗權重 7 日內 1.0→0.5</td><td><span class="tag">低</span></td>
+              <td style="font-size:11px">尚未建立決策</td><td style="font-size:10.5px">08/11 06:30</td>
+              <td><span class="tag">已忽略</span></td>
+            </tr>
+          </table>
+
+          <div style="margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px 13px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><span class="mk">1</span><b style="font-size:12px">忽略此風險</b><span style="font-size:10.5px;color:var(--ink-3);margin-left:auto">韓式泡菜罐 · 檔期窗即將關閉</span></div>
+            <div class="inp" style="width:100%;padding:7px 9px;color:var(--ink)">本品項本季不排入節慶檔期，窗期關閉不影響既定計畫。</div>
+            <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+              <span style="font-size:10.5px;color:var(--ink-3)">忽略需填理由，並寫入稽核紀錄</span>
+              <span class="btn gho" style="margin-left:auto">取消</span><span class="btn pri">確認忽略</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>觸發值要寫出來</b>不只說「有風險」，而是「負面 34% 大於門檻 20%」，採購才判斷得出要不要理它。</li>
+        <li><b>九種示警全為規則型判定</b>不交給 LLM，門檻明確可稽核（v3.0 補齊，取代 v2.0 未定義觸發式的「AI 補充」機制，見下方風險類型表）。</li>
+        <li><b>同品項可疊多筆示警</b>如手工黑糖薑茶磚同時觸發季節不匹配與扣分壓級，各自獨立處理。</li>
+        <li><b>忽略要留理由</b>忽略後不再出現在預設清單，但可篩選查看，且進稽核紀錄。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>風險類型（v3.0 補齊，共 9 種）</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.9">REVIEW_RISK 評論風險　·　LOGISTICS_RISK 物流風險　·　INVENTORY_RISK 庫存風險<br>PENALTY_CAP 扣分壓級　·　HEAT_CRASH 熱度急墜　·　HEAT_SURGE 熱度異常竄升<br>SEASON_MISMATCH 季節不匹配　·　FESTIVAL_WINDOW_CLOSING 檔期窗即將關閉　·　LOW_CONFIDENCE 低信心分數<br><span style="color:var(--b)">「供應商異常」移出本階段範圍（無資料源可判定），非本清單項目</span></p>
+      <div class="div"></div>
+      <h4>門檻變更的生效方式</h4>
+      <p style="font-size:11px;color:var(--ink-3)">SYS_ADMIN 調整門檻後立即觸發背景全量扣分重算，重算期間畫面顯示上一版分數並標示「重算中」，完成後自動更新並重跑風險規則，不消耗 LLM 配額。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /risks?status=&amp;severity=</div>
+          <div class="rgn">主清單表格 <span class="tr">篩選時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">PATCH</span> /risks/{id}/acknowledge</div>
+          <div class="rgn">列尾「確認」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PATCH</span> /risks/{id}/ignore</div>
+          <div class="rgn"><span class="mk">1</span>忽略此風險卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /risks/rules</div>
+          <div class="rgn">頁首「風險規則設定」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /risks/rules/{code}</div>
+          <div class="rgn">風險規則設定頁 <span class="tr">觸發背景全量重算</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-10-1 ～ AC-10-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-12 決策與回饋閉環 ══════════ -->
+<section class="screen" id="s12">
+  <div class="screen-head"><span class="sid">S-12</span><h2>決策與回饋閉環</h2><span class="fr">FR-11</span><span class="chg mod">大改</span></div>
+  <p class="screen-desc">整套「越用越準」的基礎在這一頁。沒有結案回填就沒有標籤資料，S-19 的權重校準就完全不成立——這是營運端的承諾，不是技術問題。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · decisions</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a class="on" href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>W27　冷壓初榨橄欖油</h3><div class="sub"><span class="tag green">ADOPT 採納</span>　開團日 2026-07-06　·　結案日 2026-07-27　·　決策人：採購 陳</div></div>
+            <div class="tools"><span class="tag amber">結案未回填　逾 12 天</span></div>
+          </div>
+
+          <div class="step" style="margin-bottom:14px">
+            <span class="s">✓</span><span>建立決策</span><span class="line"></span>
+            <span class="s">✓</span><span>開團</span><span class="line"></span>
+            <span class="s">✓</span><span>結案</span><span class="line"></span>
+            <span class="s" style="background:var(--warn);border-color:var(--warn);color:#fff">4</span><span style="color:var(--ink)">回填結果</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+            <div class="card soft">
+              <h5><span class="mk">1</span>決策快照　自動產生</h5>
+              <table>
+                <tr><td class="mini">選品分數</td><td class="num">88</td><td class="mini">分級</td><td><span class="chip A">A</span></td></tr>
+                <tr><td class="mini">權重版本</td><td class="num">v3</td><td class="mini">情境判定</td><td><span class="tag teal">常態補貨</span></td></tr>
+                <tr><td class="mini">熱度斜率</td><td class="num">+18%</td><td class="mini">毛利率</td><td class="num">41%</td></tr>
+                <tr><td class="mini">轉換率</td><td class="num">3.8%</td><td class="mini">風險扣分</td><td class="num">0</td></tr>
+                <tr><td class="mini">AI 建議</td><td colspan="3" class="mini">ADOPT 採納　·　建議首批 250–350 組</td></tr>
+                <tr><td class="mini">決策 vs AI</td><td colspan="3"><span class="tag green">followed_ai ✓ 符合建議</span></td></tr>
+                <tr><td class="mini">來源可用性</td><td colspan="3" class="mini">Threads ✓　Trends ✓　IG 降級</td></tr>
+                <tr><td class="mini">當時分級門檻</td><td colspan="3" class="mini">常態補貨榜　A≥80／B 65–79（applied_thresholds）</td></tr>
+              </table>
+              <div class="mini" style="margin-top:7px">快照在建立決策當下鎖定，之後權重改版也不會變動。僅存來源可用性／實際合成權重／當時門檻三類無法還原的資訊，其餘由 score_id 回join。</div>
+            </div>
+
+            <div class="card">
+              <h5><span class="mk">2</span>結案回填　5 個欄位</h5>
+              <div class="col">
+                <div><div class="mini" style="margin-bottom:3px">實際銷量　<span style="color:var(--risk)">*</span></div><div class="inp" style="width:100%">412　組　<span class="mini">（預估 300）</span></div></div>
+                <div><div class="mini" style="margin-bottom:3px">售罄狀況　<span style="color:var(--risk)">*</span></div><div class="sel" style="width:100%">提前售罄</div></div>
+                <div><div class="mini" style="margin-bottom:3px">退貨／客訴率</div><div class="inp" style="width:100%">1.2%　<span class="mini">（可由訂單系統帶入）</span></div></div>
+                <div><div class="mini" style="margin-bottom:3px">實現毛利　<span style="color:var(--risk)">*</span></div><div class="inp" style="width:100%">39.4%　<span class="mini">（預估 41%）</span></div></div>
+                <div><div class="mini" style="margin-bottom:3px">事後註記</div><div class="sel" style="width:100%">爆得比預期快</div></div>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:10px"><span class="btn">稍後再填</span><span class="btn pri" style="flex:1;text-align:center">送出回填</span></div>
+            </div>
+          </div>
+
+          <div class="card soft" style="margin-top:13px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px">
+              <h5 style="margin:0"><span class="mk">3</span>預測準確度</h5>
+              <span class="sel">區間：近 12 週</span><span class="sel">類別：全部</span><span class="sel">決策者：全部</span>
+            </div>
+            <div class="grid3" style="margin-bottom:9px">
+              <div class="kpi" style="margin:0"><div class="v" style="font-size:21px">0.62</div><div class="l">分數與銷量相關係數</div></div>
+              <div class="kpi" style="margin:0"><div class="v" style="font-size:21px">71%</div><div class="l">A 級品項達標率</div></div>
+              <div class="kpi" style="margin:0"><div class="v" style="font-size:21px">38</div><div class="l">已回填樣本數</div></div>
+              <div class="kpi" style="margin:0"><div class="v" style="font-size:21px">9.4%</div><div class="l">情境判定覆寫率</div></div>
+              <div class="kpi" style="margin:0"><div class="v" style="font-size:21px">83%</div><div class="l">AI 建議採納率</div></div>
+            </div>
+            <div style="background:#FDF3E2;border:1px solid #F2E0C0;border-radius:6px;padding:8px 10px;font-size:11px;color:var(--b)">樣本數不足，本數據僅供觀察趨勢，不足以支持權重調整（門檻 CALIBRATION_MIN_SAMPLE = 200，此警示不可關閉）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>決策快照自動產生</b>不需人工填。快照鎖定當下的因子值、權重版本、情境判定與來源可用性。</li>
+        <li><b>回填只有 5 欄</b>刻意壓到最少。欄位一多就沒人填，沒人填整個校準機制就是空的。</li>
+        <li><b>準確度指標</b>樣本數放在最顯眼的位置，避免用 38 筆資料講出過度自信的結論。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>硬規則</h4>
+      <p style="font-size:11px;color:var(--ink-3)">決策必須綁定一筆主情境評分快照，無快照不可建立決策。未採納 AI 建議時理由必填。結案逾 7 天未回填者於 S-02 儀表板提示，逾期天數 = 今日 − 結案日 − 7。決策類型為 WATCH／REJECT 時不提供結案與回填入口（無開團概念）。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /products/{id}/decisions</div>
+          <div class="rgn">建立決策（僅 ADOPT 才進本頁完整流程）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /decisions/{id}/snapshot</div>
+          <div class="rgn"><span class="mk">1</span>決策快照卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /decisions/{id}/close</div>
+          <div class="rgn">標記結案 <span class="tr">寫入 campaign_end_date</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /decisions/{id}/result</div>
+          <div class="rgn"><span class="mk">2</span>結案回填卡「送出回填」</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /decisions/accuracy?from=&amp;to=&amp;categoryId=&amp;decidedBy=</div>
+          <div class="rgn"><span class="mk">3</span>預測準確度卡 <span class="tr">篩選時重打</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-11-1 ～ AC-11-8</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-13 報表中心 ══════════ -->
+<section class="screen" id="s13">
+  <div class="screen-head"><span class="sid">S-13</span><h2>報表中心</h2><span class="fr">FR-12</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">採購主管與會議上要用的產出。週選品建議報告是最常用的一份。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · reports</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a class="on" href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh"><div><h3>報表中心</h3><div class="sub">大型報表非同步產生，完成後於通知區提供下載</div></div></div>
+
+          <div class="grid3" style="margin-bottom:14px">
+            <div class="card"><h5><span class="mk">1</span>週選品建議</h5><p style="font-size:11px;color:var(--ink-2);line-height:1.7">四榜各 Top 10、AI 建議摘要、風險示警清單，固定分四榜呈現，不合併為單一排行。</p><div style="display:flex;gap:5px;margin-top:9px"><span class="btn">PDF</span></div></div>
+            <div class="card"><h5>品項評分明細</h5><p style="font-size:11px;color:var(--ink-2);line-height:1.7">全品項六因子原始值、百分位與加減分明細。</p><div style="display:flex;gap:5px;margin-top:9px"><span class="btn">XLSX</span></div></div>
+            <div class="card"><h5>決策準確度</h5><p style="font-size:11px;color:var(--ink-2);line-height:1.7">FR-11-3 的五項指標與趨勢圖。</p><div style="display:flex;gap:5px;margin-top:9px"><span class="btn">PDF</span></div></div>
+            <div class="card"><h5>尋源優先序</h5><p style="font-size:11px;color:var(--ink-2);line-height:1.7">B 軌候選清單與時效落差。</p><div style="display:flex;gap:5px;margin-top:9px"><span class="btn">XLSX</span></div></div>
+            <div class="card"><h5>權重校準紀錄</h5><p style="font-size:11px;color:var(--ink-2);line-height:1.7">歷次校準建議與核准結果。</p><div style="display:flex;gap:5px;margin-top:9px"><span class="btn">PDF</span></div></div>
+            <div class="card soft" style="border-style:dashed;display:flex;align-items:center;justify-content:center"><span style="font-size:11px;color:var(--ink-3)">自訂報表（後續擴充）</span></div>
+          </div>
+
+          <div class="card">
+            <h5><span class="mk">2</span>已產生報表</h5>
+            <table>
+              <tr><th>報表</th><th>條件</th><th>格式</th><th>大小</th><th>產生時間</th><th>狀態</th><th></th></tr>
+              <tr><td class="name">週選品建議</td><td style="color:var(--ink-3);font-size:11px">2026 W30 · 全類別</td><td>PDF</td><td class="num">1.4MB</td><td style="font-size:11px;color:var(--ink-3)">08/12 09:20</td><td><span class="tag green">完成</span></td><td><span class="btn">下載</span></td></tr>
+              <tr><td class="name">決策準確度</td><td style="color:var(--ink-3);font-size:11px">2026-01 ～ 2026-07</td><td>PDF</td><td class="num">820KB</td><td style="font-size:11px;color:var(--ink-3)">08/11 16:44</td><td><span class="tag green">完成</span></td><td><span class="btn">下載</span></td></tr>
+              <tr><td class="name">品項評分明細</td><td style="color:var(--ink-3);font-size:11px">128 品項 · 全類別</td><td>XLSX</td><td class="num">—</td><td style="font-size:11px;color:var(--ink-3)">08/12 10:31</td><td><span class="tag teal">產生中 68%</span></td><td><span class="btn gho">取消</span></td></tr>
+            </table>
+            <div style="font-size:10.5px;color:var(--ink-3);margin-top:9px">PDF 內嵌 Noto Sans TC 確保中文正常顯示；檔名含日期與篩選條件摘要；超過 5,000 列自動改為非同步產生；所有匯出動作寫入稽核紀錄。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>週報是主力產出</b>採購會議直接拿這份走，因此把它放在第一個位置。</li>
+        <li><b>大檔非同步</b>不讓使用者卡在等待畫面；產生中的報表可取消。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>技術</h4>
+      <p style="font-size:11px;color:var(--ink-3)">XLSX 使用 Apache POI；PDF 使用 OpenPDF / Flying Saucer，需內嵌中文字型。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記，無註記＝進頁自動載入</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /reports/generate</div>
+          <div class="rgn"><span class="mk">1</span>報表類型清單 <span class="tr">點選格式並送出時才呼叫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /reports/{id}/download</div>
+          <div class="rgn"><span class="mk">2</span>已產生報表列表 <span class="tr">點擊下載時才呼叫</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-12-1 / AC-12-2 / AC-12-3 / AC-12-4 / AC-12-5</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-14 系統設定 ══════════ -->
+<section class="screen" id="s14">
+  <div class="screen-head"><span class="sid">S-14</span><h2>系統設定</h2><span class="fr">FR-13</span><span class="chg mod">修正</span></div>
+  <p class="screen-desc">系統管理員專用。AI 模型別名、配額、排程與風險門檻都在這裡調，不需重新部署。v3.0：模型改為免費模型（邏輯別名對應）、費用控管改以每日請求數配額為主；稽核紀錄已拆出為獨立模組（見 S-21），本頁維持 SYS_ADMIN 專屬。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · admin</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a class="on" href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="tabs">
+            <a href="#s14">使用者管理</a><a class="on" href="#s14">AI 設定</a><a href="#s14">風險規則</a><a href="#s14">類別管理</a><a href="#s14">熱度來源</a><a href="#s14">節慶檔期</a>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="col">
+              <div class="card">
+                <h5><span class="mk">1</span>OpenRouter 連線</h5>
+                <div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">API Key</div>
+                <div class="inp" style="width:100%;padding:7px 9px;font-family:var(--mono);display:flex;justify-content:space-between"><span>••••••••••••••••4f2a</span><span style="color:var(--teal);font-size:10px">更換</span></div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin:5px 0 11px">以 AES-256 加密儲存，儲存後僅顯示末四碼，無法讀回明文。</div>
+
+                <div class="grid2" style="gap:9px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">邏輯別名 MODEL_ANALYSIS</div><div class="sel" style="width:100%;padding:6px 20px 6px 9px;color:var(--ink);font-size:11px">nemotron-3.5-lightning:free</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">邏輯別名 MODEL_REASONING（備援）</div><div class="sel" style="width:100%;padding:6px 20px 6px 9px;color:var(--ink);font-size:11px">free-models-router</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">邏輯別名 MODEL_BATCH（評論分類）</div><div class="sel" style="width:100%;padding:6px 20px 6px 9px;color:var(--ink);font-size:11px">gemini-2.0-flash-exp:free</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">併發上限</div><div class="inp" style="width:100%;padding:6px 9px;color:var(--ink)">5</div></div>
+                </div>
+                <div style="font-size:10.5px;color:var(--ink-3);margin-top:8px">邏輯別名 → 實際 model ID 為設定檔對應，免費模型隨時可能下架，換模型不需改程式碼。</div>
+                <div style="display:flex;gap:9px;align-items:center;margin-top:11px">
+                  <span style="font-size:11px;color:var(--ink-2)">opencode server</span>
+                  <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">http://localhost:4096</span>
+                  <span class="tag green" style="margin-left:auto">● 連線正常</span>
+                  <span class="btn">測試連線</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <h5><span class="mk r">2</span>配額控管</h5>
+                <div class="grid3" style="gap:9px">
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">A 軌批次池</div><div class="inp" style="width:100%;padding:6px 9px;color:var(--ink)">70%</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">B 軌探索池</div><div class="inp" style="width:100%;padding:6px 9px;color:var(--ink)">20%</div></div>
+                  <div><div style="font-size:11px;color:var(--ink-2);margin-bottom:3px">重試／校準池</div><div class="inp" style="width:100%;padding:6px 9px;color:var(--ink)">10%</div></div>
+                </div>
+                <div style="margin-top:10px"><div class="bar" style="height:9px"><i style="width:68%"></i></div></div>
+                <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);margin-top:5px"><span>今日 A 軌已用 476 / 700 次請求</span><span>達 100% 停止送出，保留待重跑清單</span></div>
+                <div style="display:flex;align-items:center;gap:9px;margin-top:9px;font-size:11px;color:var(--ink-2)">☑ 快取相同內容<div class="inp" style="width:36px;padding:3px 6px;display:inline-block;margin:0 2px">7</div>日內不重複呼叫、不佔配額　☑ 送出前移除個資與成本價</div>
+                <div style="margin-top:7px;font-size:10.5px;color:var(--ink-3)">費用為次要顯示：本月 $0.00（免費模型），欄位保留供未來改用付費模型時啟用。</div>
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="card">
+                <h5>排程</h5>
+                <table>
+                  <tr><th>排程</th><th>時間</th><th>狀態</th><th>上次執行</th></tr>
+                  <tr><td class="name" style="font-size:11.5px">Google Trends 更新</td><td style="font-family:var(--mono);font-size:10.5px">0 0 3 * * *</td><td><span class="tag green">啟用</span></td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:04 ✓</td></tr>
+                  <tr><td class="name" style="font-size:11.5px">全量重新評分</td><td style="font-family:var(--mono);font-size:10.5px">0 30 3 * * *</td><td><span class="tag green">啟用</span></td><td style="font-size:10.5px;color:var(--ink-3)">08/12 03:35 ✓</td></tr>
+                  <tr><td class="name" style="font-size:11.5px">週選品 AI 分析</td><td style="font-family:var(--mono);font-size:10.5px">0 0 6 * * MON</td><td><span class="tag green">啟用</span></td><td style="font-size:10.5px;color:var(--ink-3)">08/10 06:00 ✓</td></tr>
+                  <tr><td class="name" style="font-size:11.5px">風險示警信件</td><td style="font-family:var(--mono);font-size:10.5px">0 0 8 * * *</td><td><span class="tag green">啟用</span></td><td style="font-size:10.5px;color:var(--ink-3)">08/12 08:00 ✓</td></tr>
+                  <tr><td class="name" style="font-size:11.5px">回填提醒</td><td style="font-family:var(--mono);font-size:10.5px">0 0 9 * * MON</td><td><span class="tag">停用</span></td><td style="font-size:10.5px;color:var(--ink-3)">—</td></tr>
+                </table>
+              </div>
+
+              <div class="card soft" style="border-style:dashed">
+                <h5><span class="mk">3</span>稽核紀錄已獨立為 S-21</h5>
+                <div style="font-size:11px;color:var(--ink-2);line-height:1.8">v3.0 起稽核紀錄不再是系統設定的內部分頁，改為獨立路由 <span style="font-family:var(--mono)">/audit-logs</span>，供 BUYER_LEAD 與 SYS_ADMIN 存取——本模組（<span style="font-family:var(--mono)">/admin</span>）仍維持 SYS_ADMIN 專屬，兩者權限範圍不同，不能合併在同一頁。</div>
+                <a href="#s21" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-block;margin-top:7px">前往 S-21 稽核紀錄 →</a>
+              </div>
+
+              <div class="card soft" style="border-style:dashed">
+                <h5><span class="mk">4</span>熱度來源分頁 → 導向 S-16</h5>
+                <div style="font-size:11px;color:var(--ink-2);line-height:1.8">來源啟用／停用、合成權重調整、連線測試，本分頁不重複建置，改到 <span style="font-family:var(--mono)">S-16</span> 熱度來源狀態頁維護。</div>
+                <a href="#s16" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-block;margin-top:7px">前往 S-16 熱度來源狀態 →</a>
+              </div>
+
+              <div class="card soft" style="border-style:dashed">
+                <h5><span class="mk">5</span>節慶檔期分頁 → 導向 S-20</h5>
+                <div style="font-size:11px;color:var(--ink-2);line-height:1.8">節慶時間窗、品類前置天數與季節氣候基準，本分頁不重複建置，改到 <span style="font-family:var(--mono)">S-20</span> 節慶檔期維護頁編輯。</div>
+                <a href="#s20" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-block;margin-top:7px">前往 S-20 節慶檔期維護 →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>模型別名可換不必改碼</b>邏輯別名 → 實際 model ID 為設定檔對應，免費模型隨時可能下架，換模型不改程式碼。</li>
+        <li><b>配額是硬限制</b>三個預算池各自計算每日請求數，達 80% 於畫面警示、達 100% 停止送出並保留待重跑清單，避免免費模型額度提前耗盡。</li>
+        <li><b>稽核紀錄已拆出</b>本頁不再顯示稽核明細，改到 S-21 查詢，避免 BUYER_LEAD 需要進入 SYS_ADMIN 專屬模組才能查稽核。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>資料保護</h4>
+      <p style="font-size:11px;color:var(--ink-3)">送往 LLM 的內容不含會員個資、不含進貨成本價（僅送毛利率區間），避免商業機密外流。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記，無註記＝進頁自動載入</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET/POST/PUT/PATCH</span> /admin/users</div>
+          <div class="rgn">使用者管理分頁 <span class="tr">切換分頁重打，此草圖未展開內容</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET/PUT</span> /admin/ai-config</div>
+          <div class="rgn"><span class="mk">1</span>OpenRouter 連線與模型別名 <span class="tr">儲存時才寫入，執行期即生效不需重啟</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET/PUT</span> /ai/budgets</div>
+          <div class="rgn"><span class="mk r">2</span>配額控管卡</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET/PUT</span> /admin/schedules</div>
+          <div class="rgn">排程表</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /risks/rules</div>
+          <div class="rgn">風險規則分頁 <span class="tr">切換分頁重打，此草圖未展開內容</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /risks/rules/{code}</div>
+          <div class="rgn">風險規則分頁 <span class="tr">送出變更後依 §FR-10-3 觸發全量重算</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /categories · /audiences</div>
+          <div class="rgn">類別管理分頁 <span class="tr">切換分頁重打，此草圖未展開內容</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-13-1 / AC-13-2 / AC-13-3 / AC-13-4</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-15 人工熱度標記 ══════════ -->
+<section class="screen" id="s15">
+  <div class="screen-head"><span class="sid">S-15</span><h2>人工熱度標記</h2><span class="fr">FR-14-1</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">FB、TikTok、小紅書沒有合法的程式化管道，這一頁就是替代方案。採購本來就在滑這些平台，把他們的觀察結構化——零法律風險、零維運成本，而且累積出來的是自有資料。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · heat tagging</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a class="on" href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>我看到一個</h3><div class="sub">本週已標記 12 筆　·　平均耗時 24 秒</div></div>
+            <div class="tools"><span class="sel">我的標記</span><span class="btn">全部標記</span></div>
+          </div>
+
+          <div class="card" style="margin-bottom:13px">
+            <div class="col">
+              <div>
+                <div class="mini" style="margin-bottom:3px"><span class="mk">1</span>　貼上連結　<span style="color:var(--risk)">*</span></div>
+                <div style="display:flex;gap:7px;align-items:center">
+                  <div class="inp" style="flex:1">https://www.threads.net/@foodie_tw/post/C8x2...</div>
+                  <span class="tag teal">已辨識　Threads</span>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+                <div>
+                  <div class="mini" style="margin-bottom:3px"><span class="mk">2</span>　熱度等級　<span style="color:var(--risk)">*</span></div>
+                  <div style="display:flex;gap:4px">
+                    <span class="btn">1</span><span class="btn">2</span><span class="btn">3</span><span class="btn">4</span><span class="btn pri">5</span>
+                  </div>
+                  <div class="mini" style="margin-top:4px">1＝零星討論　⋯　5＝洗版等級</div>
+                </div>
+                <div>
+                  <div class="mini" style="margin-bottom:3px">關聯品項／關鍵字　<span style="color:var(--risk)">*</span></div>
+                  <div class="inp" style="width:100%">杜拜巧克力　<span class="tag" style="margin-left:4px">B 軌</span></div>
+                  <div class="mini" style="margin-top:4px">找不到就直接新建關鍵字，自動進 B 軌</div>
+                </div>
+              </div>
+              <div>
+                <div class="mini" style="margin-bottom:3px">備註　選填</div>
+                <div class="inp" style="width:100%;color:var(--ink-3)">留言區在問哪裡買得到</div>
+              </div>
+              <div style="display:flex;gap:7px;align-items:center">
+                <span class="mini">觀察時間　2026-08-14 09:12　自動帶入</span>
+                <span class="btn pri" style="margin-left:auto">送出標記</span>
+              </div>
+            </div>
+          </div>
+
+          <h5 style="font-size:12px;margin-bottom:8px"><span class="mk">3</span>近期標記</h5>
+          <table>
+            <tr><th>關聯</th><th style="width:74px">平台</th><th style="width:52px">等級</th><th style="width:76px">標記人</th><th style="width:80px">時間</th><th style="width:74px">現行權重</th></tr>
+            <tr><td class="name">杜拜巧克力</td><td><span class="tag">Threads</span></td><td class="num">5</td><td class="mini">採購 陳</td><td class="mini">今天</td><td class="num" style="color:var(--a)">100%</td></tr>
+            <tr><td class="name">杜拜巧克力</td><td><span class="tag">TikTok</span></td><td class="num">5</td><td class="mini">採購 王</td><td class="mini">3 天前</td><td class="num" style="color:var(--a)">100%</td></tr>
+            <tr><td class="name">開心果奶油醬</td><td><span class="tag">小紅書</span></td><td class="num">4</td><td class="mini">採購 陳</td><td class="mini">16 天前</td><td class="num" style="color:var(--b)">50%</td></tr>
+            <tr class="mini"><td class="name">冷萃氣泡茶</td><td><span class="tag">Facebook</span></td><td class="num">3</td><td>採購 王</td><td>34 天前</td><td class="num" style="color:var(--ink-3)">已失效</td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px">
+            <div class="card soft">
+              <h5><span class="mk">4</span>時間衰減</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">標記 14 天後權重減半、30 天後失效，避免舊標記污染當期分數。<br>同一品項的等級隨時間變化，即可算出人工觀察的熱度斜率。</div>
+            </div>
+            <div class="card soft">
+              <h5>多人標記聚合</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">同品項多筆標記以時間衰減權重加權平均，<b>相異標記人數本身是信心度指標</b>。<br>1 人信心係數 0.6、2 人 0.8、3 人以上 1.0（同一人多次標記只計一次）。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>只存連結與評級</b>不抓取頁面內容，避開重製與個資問題。</li>
+        <li><b>平台自動辨識</b>貼上連結即判定平台，少一個下拉選單就少一道摩擦。</li>
+        <li><b>近期標記列表</b>現行權重欄直接顯示衰減狀態，讓人知道舊標記已經不影響分數了。</li>
+        <li><b>時間衰減</b>沒有衰減機制，三個月前的爆款會一直把分數撐在高點。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>設計目標</h4>
+      <p style="font-size:11px;color:var(--ink-3)">30 秒內填完。欄位越少、入口越淺，累積量差距越大。這一頁的成敗完全取決於採購願不願意用。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記，無註記＝進頁自動載入</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /heat-tags/resolve-platform</div>
+          <div class="rgn"><span class="mk">1</span>貼上連結欄 <span class="tr">貼上連結即觸發，可手動覆寫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /heat-tags</div>
+          <div class="rgn"><span class="mk">2</span>熱度等級／關聯品項表單 <span class="tr">按下送出標記時才呼叫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /heat-tags?scope=mine&amp;days=30</div>
+          <div class="rgn"><span class="mk">3</span>近期標記列表 <span class="tr">切換「我的標記／全部標記」重打</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-14-1 / AC-14-2 / AC-14-3 / AC-14-7</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-16 熱度來源狀態 ══════════ -->
+<section class="screen" id="s16">
+  <div class="screen-head"><span class="sid">S-16</span><h2>熱度來源狀態</h2><span class="fr">FR-14-2</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">每個來源是一個 Adapter，帶可用性狀態。任一來源掛掉時權重自動重新分配、系統照常出分數並標示——優雅降級在這個專案是第一級的架構需求，不是事後補丁。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · heat sources</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a class="on" href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>熱度來源</h3><div class="sub">4 個已啟用　·　1 個降級中</div></div>
+            <div class="tools"><span class="btn">測試連線</span><span class="btn pri">新增來源</span></div>
+          </div>
+
+          <table>
+            <tr><th style="width:16px"></th><th>來源</th><th style="width:70px">類型</th><th style="width:64px">粒度</th><th style="width:88px">合成權重</th><th style="width:104px">額度用量</th><th style="width:90px">最後更新</th><th style="width:70px">狀態</th></tr>
+            <tr><td><span class="mk">1</span></td><td class="name">Threads 官方 API</td><td class="mini">REST 排程</td><td class="mini">關鍵字級</td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="max-width:44px"><i style="width:40%"></i></div><span class="num" style="font-size:11px">40%</span></div></td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="max-width:44px"><i style="width:31%"></i></div><span class="mini">683／2200</span></div></td><td class="mini">今日 06:00</td><td><span class="tag green">正常</span></td></tr>
+            <tr><td></td><td class="name">Google Trends</td><td class="mini">非官方</td><td class="mini">關鍵字級</td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="max-width:44px"><i style="width:25%"></i></div><span class="num" style="font-size:11px">25%</span></div></td><td class="mini">無明確上限</td><td class="mini">今日 06:00</td><td><span class="tag green">正常</span></td></tr>
+            <tr style="background:#FDFAF3"><td><span class="mk" style="background:var(--warn)">2</span></td><td class="name">Instagram Hashtag</td><td class="mini">Graph API</td><td class="mini">關鍵字級</td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar grey" style="max-width:44px"><i style="width:10%"></i></div><span class="num" style="font-size:11px">10%</span></div></td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="max-width:44px"><i style="width:87%;background:var(--warn)"></i></div><span class="mini">26／30 週</span></div></td><td class="mini">08-11</td><td><span class="tag amber">降級</span></td></tr>
+            <tr><td></td><td class="name">人工標記</td><td class="mini">內部</td><td class="mini">混合（依標記）</td><td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="max-width:44px"><i style="width:25%"></i></div><span class="num" style="font-size:11px">25%</span></div></td><td class="mini">不適用</td><td class="mini">今日 09:12</td><td><span class="tag green">正常</span></td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+            <div class="card">
+              <h5><span class="mk">3</span>降級行為</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                來源不可用時：<br>
+                · 該來源合成權重歸零，其餘來源按比例重新正規化<br>
+                · 品項分數照常產生，UI 標示「本次未含 Instagram 資料」<br>
+                · 不阻斷評分流程，不影響排行產出
+              </div>
+              <div class="calc" style="margin-top:9px;font-size:10.5px">
+                <span>降級後</span><span class="op">→</span><span>Threads 44.4%　Trends 27.8%　人工 27.8%</span>
+              </div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">4</span>不採用的來源</h5>
+              <table>
+                <tr><td class="name">Facebook</td><td class="mini">CrowdTangle 已關閉，替代品僅開放學術／非營利</td></tr>
+                <tr><td class="name">TikTok</td><td class="mini">Research API 排除商業使用者，台灣不在資格地區</td></tr>
+                <tr><td class="name">小紅書</td><td class="mini">無公開 API，第三方平台條款禁止轉供第三方</td></tr>
+              </table>
+              <div class="mini" style="margin-top:7px;color:var(--risk)">以上三者一律改由 S-15 人工標記涵蓋。系統不建置爬蟲。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>Adapter 化</b>每個來源實作同一組介面：fetch／getAvailability／getSourceMeta。新增來源不動評分邏輯。</li>
+        <li><b>額度視覺化</b>IG 每帳號 7 日限 30 個標籤，快用完要提前知道，而不是掃描失敗才發現。</li>
+        <li><b>降級行為明示</b>權重怎麼重分配寫在畫面上，交付後客戶端自己看得懂。</li>
+        <li><b>不採用來源也列出</b>寫進系統畫面而非只寫在文件裡，避免日後被反覆追問「為什麼不抓 FB」。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>權限</h4>
+      <p style="font-size:11px;color:var(--ink-3)">僅 SYS_ADMIN 可調整合成權重與啟用狀態。合成權重變更會觸發下一輪重新評分。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /heat-sources</div>
+          <div class="rgn"><span class="mk">1</span>來源列表（含粒度／額度／可用性）</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /heat-sources/{id}</div>
+          <div class="rgn">表格列 — 調整合成權重／啟用停用 <span class="tr">調整或啟用停用時送出</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /heat-sources/{id}/test</div>
+          <div class="rgn">頁首「測試連線」 <span class="tr">按下才送出，不寫入資料庫</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-14-4 / AC-14-5 / AC-14-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-17 尋源探索 ══════════ -->
+<section class="screen" id="s17">
+  <div class="screen-head"><span class="sid">S-17</span><h2>尋源探索（B 軌）</h2><span class="fr">FR-16</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">B 軌的入口。這裡問的不是「要不要進、進多少」，而是「值不值得去找貨源」——沒有毛利率、沒有歷史轉換率，硬套 A 軌公式只會讓所有品項因為資料缺失沉底。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · sourcing scout</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a class="on" href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>尋源探索</h3><div class="sub">本月已用 18／50 次　·　AI 探索為獨立預算池</div></div>
+            <div class="tools"><a href="#s18" class="btn">尋源優先序</a></div>
+          </div>
+
+          <div style="display:flex;gap:7px;align-items:center;margin-bottom:14px">
+            <span class="mk">1</span>
+            <div class="inp" style="flex:1">杜拜巧克力</div>
+            <span class="sel">品類：零食</span>
+            <span class="btn pri">開始探索</span>
+          </div>
+
+          <div class="ai" style="margin-bottom:13px">
+            <div class="ai-head"><div class="t"><span class="mk">2</span>✦ 探索報告</div><div class="m">SourcingScoutAgent · 32 秒</div></div>
+            <div style="font-size:11.5px;color:var(--ink-2);line-height:1.85">
+              「杜拜巧克力」在台灣社群自 6 月中開始明顯竄升，Threads 討論量 30 日成長逾 11 倍，目前處於<b>高原期第 3 週</b>。討論集中在開心果餡與脆絲口感，多數貼文在詢問通路與價格，顯示需求尚未被充分滿足。
+            </div>
+            <div class="ai-sec">機會訊號</div>
+            <ul>
+              <li>✓ 留言區大量「哪裡買」詢問，通路缺口明顯 <em>Threads 186 則</em></li>
+              <li>✓ 已有台灣代工廠推出類似產品，尋源難度中等 <em>3 家可接洽</em></li>
+            </ul>
+            <div class="ai-sec r">風險訊號</div>
+            <ul>
+              <li>⚠ 高原期已 3 週，估計剩餘壽命 4–7 週 <em>時效壓力</em></li>
+              <li>⚠ 同類產品進入者增加，價格可能快速下探 <em>28 則比價貼文</em></li>
+            </ul>
+            <div class="ai-foot"><span>AI 探索結果為調查輔助，實際尋源可行性須由採購確認</span><span>重新探索</span></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card">
+              <h5><span class="mk">3</span>時效落差評估</h5>
+              <table>
+                <tr><td class="mini">熱度階段</td><td><span class="tag amber">高原期 W3</span></td></tr>
+                <tr><td class="mini">預估剩餘壽命</td><td class="num">35 天</td></tr>
+                <tr><td class="mini">品類前置期　零食（國產）</td><td class="num">21 天</td></tr>
+                <tr style="background:#FDFAF3"><td class="mini"><b>時效落差</b></td><td><span class="gap-warn">＋14 天　高風險，需加速尋源</span></td></tr>
+              </table>
+              <div class="mini" style="margin-top:7px">前置期可由採購覆寫。若已知供應商可即時出貨，改填實際天數。恰為 14 天時落在「高風險」區間，非「可行」——邊界不重疊。</div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">4</span>否決規則</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.95">
+                <div><span class="gap-ok">&gt; +14 天</span>　可行，正常排序</div>
+                <div><span class="gap-warn">0 ～ +14 天</span>　高風險，標示「需加速尋源」</div>
+                <div><span class="gap-bad">&lt; 0 天</span>　直接淘汰，不論熱度多高</div>
+              </div>
+              <div class="mini" style="margin-top:8px">時效落差是<b>否決條件</b>而非加權因子——寫成扣分的話，高熱度還是會把它蓋過去。</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:7px;margin-top:13px;justify-content:flex-end">
+            <span class="btn">存為觀察</span><span class="btn pri">加入尋源優先序</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>對話式而非批次</b>B 軌是低頻、探索性的查詢，事先不知道要查幾層，適合走 MCP＋LLM；A 軌批次評分則走 REST 直連。</li>
+        <li><b>時效落差</b>B 軌最容易翻車的不是判斷錯熱度，而是熱度還在但你來不及。</li>
+        <li><b>否決而非扣分</b>來不及就是不能做，不該被高熱度分數蓋過去。</li>
+        <li><b>MCP 工具限定白名單</b>SourcingScoutAgent 只能經 opencode 呼叫 <code>MCP_ALLOWED_TOOLS</code> 內的工具，不建置任何網路爬蟲（同附錄 C 結論）。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>MCP 工具白名單</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.9"><code>heat.query</code>／<code>heat.manual_tags</code>／<code>catalog.lookup</code> 系統自有資料　·　<code>trends.official</code>／<code>threads.search</code> 官方 API（同 A 軌憑證與額度）　·　<code>vendor.dataset</code> 付費第三方（選配，須合約確認）<br>白名單外呼叫一律於 client 層被拒並寫入 <code>audit_log</code>；opencode 或 MCP 不可用時停用本功能，A 軌不受影響。</p>
+      <div class="div"></div>
+      <h4>成本控管</h4>
+      <p style="font-size:11px;color:var(--ink-3)">B 軌 MCP 呼叫使用獨立預算池，避免探索性查詢排擠 A 軌每日批次。達上限時停用探索但不影響 A 軌評分。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">POST</span> /sourcing/scout</div>
+          <div class="rgn"><span class="mk">1</span>關鍵字／品類輸入＋開始探索 <span class="tr">按下送出，產出 2 探索報告與 3 時效落差評估</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /sourcing/candidates/{productId}</div>
+          <div class="rgn">開啟已存的觀察／候選紀錄 <span class="tr">僅於查看既有紀錄時呼叫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /sourcing/candidates</div>
+          <div class="rgn">底部「存為觀察／加入尋源優先序」 <span class="tr">按下才送出</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-16-1 / AC-16-3 / AC-16-4 / AC-16-7</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-18 尋源優先序 ══════════ -->
+<section class="screen" id="s18">
+  <div class="screen-head"><span class="sid">S-18</span><h2>尋源優先序（B 軌）</h2><span class="fr">FR-16-2</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">B 軌不出「選品分數」，出的是尋源優先序。成案之後才轉入 A 軌，開始用完整因子評分。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · sourcing queue</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a class="on" href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>尋源優先序</h3><div class="sub">5 個進行中　·　2 個已淘汰　·　1 個已成案</div></div>
+            <div class="tools"><span class="sel">狀態：全部</span><a href="#s17" class="btn pri">＋ 新增探索</a></div>
+          </div>
+
+          <table>
+            <tr><th style="width:22px"><span class="mk">1</span></th><th>關鍵字</th><th style="width:88px">熱度階段</th><th style="width:64px">剩餘壽命</th><th style="width:58px">前置期</th><th style="width:80px">時效落差</th><th style="width:86px">狀態</th></tr>
+            <tr style="background:#FDFAF3"><td class="rank">01</td><td class="name">泰式椰子脆片</td><td><span class="tag amber">高原期 W5</span></td><td class="num">51 天</td><td class="num">45 天</td><td><span class="gap-warn">＋6 天</span></td><td><span class="tag amber">需加速</span></td></tr>
+            <tr><td class="rank">02</td><td class="name">杜拜巧克力（代工）</td><td><span class="tag amber">高原期 W3</span></td><td class="num">35 天</td><td class="num">21 天</td><td><span class="gap-warn">＋14 天</span></td><td><span class="tag green">已成案</span></td></tr>
+            <tr><td class="rank">03</td><td class="name">開心果奶油醬</td><td><span class="tag teal">上升期</span></td><td class="num">56 天</td><td class="num">35 天</td><td><span class="gap-ok">＋21 天</span></td><td><span class="tag green">尋源中</span></td></tr>
+            <tr><td class="rank">04</td><td class="name">韓式黑糖麻糬</td><td><span class="tag teal">上升期</span></td><td class="num">62 天</td><td class="num">30 天</td><td><span class="gap-ok">＋32 天</span></td><td><span class="tag">待評估</span></td></tr>
+            <tr class="mini" style="background:#FDF6F5"><td class="rank">—</td><td class="name">冷萃氣泡茶</td><td><span class="tag red">衰退期</span></td><td class="num">17 天</td><td class="num">21 天</td><td><span class="gap-bad">−4 天</span></td><td><span class="tag red">已淘汰</span></td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+            <div class="card soft">
+              <h5><span class="mk">2</span>成案後轉入 A 軌</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                找到供應商並取得報價後，品項的 track_type 由 B 改為 A，開始套用完整因子（毛利、轉換率、風險扣分）評分。<br>
+                探索期間累積的熱度資料會一併帶入，不需重抓。
+              </div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">3</span>為什麼不給分數</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                B 軌沒有毛利率、沒有歷史轉換率、沒有自家評論。硬算一個「選品分數」會誤導——那個數字只反映熱度，卻長得跟 A 軌的綜合分數一樣。<br>
+                因此 B 軌只排優先序，不出分數。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>時效落差是主排序依據</b>不是熱度。熱度最高的品項如果來不及，排序上沒有意義。表格以升冪排列，落差最小（最急）者在最上方。</li>
+        <li><b>已淘汰仍保留可見</b>灰底顯示，排除於主排序之外。下次同樣關鍵字再出現時，採購知道上次為什麼放棄。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>硬規則</h4>
+      <p style="font-size:11px;color:var(--ink-3)">時效落差 &lt; 0 者自動標記淘汰，不可加入尋源清單。0 ～ 14 天（含兩端）為高風險，須標示「需加速尋源」；恰為 14 天不算可行。採購可手動覆寫前置期後重新計算。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /sourcing/candidates?status=</div>
+          <div class="rgn"><span class="mk">1</span>主表格 <span class="tr">切換狀態篩選時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /sourcing/candidates/{productId}/lead-time</div>
+          <div class="rgn">表格內「前置期」覆寫 <span class="tr">改值送出後重算時效落差</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /sourcing/candidates/{productId}/promote</div>
+          <div class="rgn"><span class="mk">2</span>成案後轉入 A 軌 <span class="tr">按下成案時送出</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-16-2 / AC-16-4 / AC-16-5 / AC-16-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-19 權重校準審核 ══════════ -->
+<section class="screen" id="s19">
+  <div class="screen-head"><span class="sid">S-19</span><h2>權重校準審核</h2><span class="fr">FR-15</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">「AI 越用越準」在這一頁兌現，但兌現的方式是：統計決定數字，AI 負責解釋與提出假設，人負責核准。學習成果沉澱成看得見的權重版本，不是黑盒子。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · calibration</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a class="on" href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>2026 Q3 校準建議</h3><div class="sub">樣本 38 筆　·　產生於 2026-08-01　·　狀態：待審核</div></div>
+            <div class="tools"><span class="btn">駁回</span><span class="btn">部分採納</span><span class="btn pri">核准並建立 v4</span></div>
+          </div>
+
+          <div style="background:#FDF3E2;border:1px solid #F2E0C0;border-radius:8px;padding:9px 12px;margin-bottom:13px;font-size:11.5px;color:var(--b);display:flex;gap:8px;align-items:flex-start">
+            <span class="mk" style="background:var(--b);flex:none">!</span>
+            <div><b>樣本數不足</b>　目前 38 筆，統計上建議累積至 200 筆以上再進行權重調整。本次建議僅供參考，不建議直接核准。</div>
+          </div>
+
+          <h5 style="font-size:12px;margin-bottom:8px"><span class="mk">1</span>因子預測力　迴歸分析</h5>
+          <table>
+            <tr><th>因子</th><th style="width:88px">與銷量相關性</th><th style="width:20%">相關強度</th><th style="width:64px">現行權重</th><th style="width:64px">建議權重</th><th style="width:52px">差異</th></tr>
+            <tr><td class="name">熱度斜率（話題爆款型）</td><td class="num">0.71</td><td><div class="bar"><i style="width:71%"></i></div></td><td class="num">50%</td><td class="num">57%</td><td class="num" style="color:var(--a)">＋7</td></tr>
+            <tr><td class="name">毛利率（常態補貨型）</td><td class="num">0.44</td><td><div class="bar"><i style="width:44%"></i></div></td><td class="num">30%</td><td class="num">25%</td><td class="num" style="color:var(--risk)">−5</td></tr>
+            <tr><td class="name">歷史轉換率</td><td class="num">0.58</td><td><div class="bar"><i style="width:58%"></i></div></td><td class="num">30%</td><td class="num">33%</td><td class="num" style="color:var(--a)">＋3</td></tr>
+            <tr><td class="name">價格帶適配度</td><td class="num">0.51</td><td><div class="bar"><i style="width:51%"></i></div></td><td class="num">12%</td><td class="num">12%</td><td class="mini">持平</td></tr>
+            <tr><td class="name">節慶時間窗</td><td class="num">0.29</td><td><div class="bar grey"><i style="width:29%"></i></div></td><td class="num">30%</td><td class="num">30%</td><td class="mini">樣本不足</td></tr>
+            <tr><td class="name">季節氣候適配（季節導向型）</td><td class="num">0.35</td><td><div class="bar grey"><i style="width:35%"></i></div></td><td class="num">30%</td><td class="num">30%</td><td class="mini">樣本不足</td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:12px;margin-top:13px">
+            <div class="ai">
+              <div class="ai-head"><div class="t">✦ AI 解讀</div><div class="m">WeightCalibrationAgent · 季度</div></div>
+              <div style="font-size:11.5px;color:var(--ink-2);line-height:1.85">
+                熱度斜率在食品類的預測力被目前權重低估，尤其在售罄速度這個指標上表現突出。建議話題爆款型的熱度權重自 50% 調升至 57%，其餘因子等比例調降以維持合計 100%。
+              </div>
+              <div class="ai-sec r">需要注意</div>
+              <ul>
+                <li>⚠ AI 判定為爆款但採購覆寫為常態的案例 12 筆，集中在沖泡飲類 <em>建議檢視判定規則</em></li>
+                <li>⚠ 節慶時間窗樣本僅 6 筆，尚無法評估 <em>下季再議</em></li>
+              </ul>
+              <div class="ai-foot"><span>校準建議需經 BUYER_LEAD 核准後才會生效</span><span>查看完整報告</span></div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">2</span>回測驗證</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9;margin-bottom:9px">用同一批歷史資料，比較不同權重版本的預測表現：</div>
+              <table>
+                <tr><th>權重版本</th><th style="width:64px">相關係數</th><th style="width:64px">A 級達標</th></tr>
+                <tr><td class="mini">平權（各 20%）</td><td class="num">0.41</td><td class="num">58%</td></tr>
+                <tr><td class="mini">v3（現行）</td><td class="num">0.62</td><td class="num">71%</td></tr>
+                <tr style="background:#F4F9F6"><td class="mini"><b>v4（建議）</b></td><td class="num" style="color:var(--a)">0.68</td><td class="num" style="color:var(--a)">76%</td></tr>
+              </table>
+              <div class="mini" style="margin-top:7px">專題期間可交付的是機制與回測驗證，不是已完成校準的模型——正式線上校準需累積約 200 筆帶結果標記的開團案例，依回填執行率約需 7 個月至逾一年。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>樣本數警示置頂</b>38 筆不足以調權重。把限制講在最顯眼的地方，避免系統講出過度自信的結論。</li>
+        <li><b>統計在前，AI 在後</b>數字由迴歸產生，AI 只負責翻譯成人話與提出假設。這個分工要在畫面上看得出來。</li>
+        <li><b>回測比較</b>平權／現行／建議三者並列，讓「校準有沒有效」變成可驗證的問題。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>審核行為</h4>
+      <p style="font-size:11px;color:var(--ink-3)">核准後產生 weight_version 草稿（S-09），需再指定生效日期。部分採納時可逐項勾選要接受哪些調整。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /calibration/reports/latest</div>
+          <div class="rgn"><span class="mk">1</span>因子預測力 迴歸分析</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /calibration/reports?page=</div>
+          <div class="rgn">歷史校準報告版本切換 <span class="tr">切換報告版本時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /calibration/backtest</div>
+          <div class="rgn"><span class="mk">2</span>回測驗證</div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> /calibration/reports/{id}/approve</div>
+          <div class="rgn">頂部「駁回／部分採納／核准並建立 v4」 <span class="tr">按下三按鈕之一時送出，body 含 action，部分採納時另含逐項勾選清單</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-15-1 ～ AC-15-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-20 節慶檔期維護 ══════════ -->
+<section class="screen" id="s20">
+  <div class="screen-head"><span class="sid">S-20</span><h2>節慶檔期維護</h2><span class="fr">FR-17</span><span class="chg new">新增</span></div>
+  <p class="screen-desc">節慶不是一個固定的加分欄位，而是時間窗函數。月餅在七月分數要高（備貨期），在十月要歸零——這一頁維護的就是那個窗的形狀。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · festivals</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a class="on" href="#s14"><b></b>設定</a>
+          <a href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>節慶檔期</h3><div class="sub">2026 年度　·　12 個檔期　·　含農曆換算</div></div>
+            <div class="tools"><span class="sel">年度：2026</span><span class="btn pri">新增檔期</span></div>
+          </div>
+
+          <div class="card" style="margin-bottom:13px;padding:14px 13px 10px">
+            <h5><span class="mk">1</span>時間窗示意　中秋節（2026-09-25）· 零食類前置 21 天</h5>
+            <svg viewBox="0 0 620 96" style="width:100%;height:auto">
+              <line x1="0" y1="66" x2="620" y2="66" stroke="#DCE3E9"/>
+              <rect x="0" y="52" width="180" height="14" fill="#EAEFF3"/>
+              <rect x="180" y="26" width="200" height="40" fill="#1E7A9E" opacity=".8"/>
+              <rect x="380" y="46" width="120" height="20" fill="#1E7A9E" opacity=".38"/>
+              <rect x="500" y="60" width="120" height="6" fill="#EAEFF3"/>
+              <line x1="500" y1="14" x2="500" y2="72" stroke="#C0392B" stroke-width="1.4" stroke-dasharray="4 3"/>
+              <text x="90" y="82" text-anchor="middle" font-size="9.5" fill="#8A9AA6" font-family="Noto Sans TC, sans-serif">太早　0.0</text>
+              <text x="280" y="82" text-anchor="middle" font-size="9.5" fill="#155F7C" font-family="Noto Sans TC, sans-serif">黃金備貨期　1.0</text>
+              <text x="440" y="82" text-anchor="middle" font-size="9.5" fill="#4A5A67" font-family="Noto Sans TC, sans-serif">補單期　0.5</text>
+              <text x="560" y="82" text-anchor="middle" font-size="9.5" fill="#8A9AA6" font-family="Noto Sans TC, sans-serif">已過　0.0</text>
+              <text x="500" y="10" text-anchor="middle" font-size="9.5" fill="#C0392B" font-family="Noto Sans TC, sans-serif">節慶日</text>
+              <text x="280" y="20" text-anchor="middle" font-size="9" fill="#8A9AA6" font-family="Noto Sans TC, sans-serif">前置 21 天 ＋ 30 天窗口</text>
+            </svg>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:12px">
+            <div>
+              <h5 style="font-size:12px;margin-bottom:8px"><span class="mk">2</span>年度檔期</h5>
+              <table>
+                <tr><th>檔期</th><th style="width:92px">日期</th><th style="width:56px">曆別</th><th style="width:74px">關聯品類</th><th style="width:56px">狀態</th></tr>
+                <tr style="background:#F2F8FB"><td class="name">中秋節</td><td class="mini">2026-09-25</td><td><span class="tag">農曆</span></td><td class="mini">8 類</td><td><span class="tag teal">窗內</span></td></tr>
+                <tr><td class="name">萬聖節</td><td class="mini">2026-10-31</td><td><span class="tag">國曆</span></td><td class="mini">4 類</td><td><span class="tag">未開始</span></td></tr>
+                <tr><td class="name">雙 11</td><td class="mini">2026-11-11</td><td><span class="tag">國曆</span></td><td class="mini">全品類</td><td><span class="tag">未開始</span></td></tr>
+                <tr><td class="name">聖誕節</td><td class="mini">2026-12-25</td><td><span class="tag">國曆</span></td><td class="mini">6 類</td><td><span class="tag">未開始</span></td></tr>
+                <tr class="mini"><td class="name">父親節</td><td>2026-08-08</td><td><span class="tag">國曆</span></td><td>5 類</td><td><span class="tag">已過</span></td></tr>
+              </table>
+            </div>
+            <div>
+              <div class="card soft" style="margin-bottom:11px">
+                <h5><span class="mk">3</span>品類前置天數</h5>
+                <table>
+                  <tr><td class="mini">食品（進口）</td><td class="num">45 天</td></tr>
+                  <tr><td class="mini">食品（國產）</td><td class="num">21 天</td></tr>
+                  <tr><td class="mini">日用品</td><td class="num">30 天</td></tr>
+                  <tr><td class="mini">美妝</td><td class="num">35 天</td></tr>
+                </table>
+                <div class="mini" style="margin-top:6px">同時作為 B 軌時效落差計算的輸入。</div>
+              </div>
+              <div class="card soft">
+                <h5><span class="mk">4</span>品項×節慶關聯度</h5>
+                <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                  初期由採購人工建立，之後可由 AI 提出建議、人審核後採納。<br>
+                  <span class="mini">例：抹茶夾心餅乾 × 中秋　關聯度 0.7（伴手禮情境）</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px;padding:14px 13px">
+            <h5><span class="mk">5</span>品類氣候基準　適溫區間 &amp; TOLERANCE</h5>
+            <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px">
+              <table>
+                <tr><th>品類</th><th style="width:76px">適溫下限</th><th style="width:76px">適溫上限</th><th style="width:76px">TOLERANCE</th></tr>
+                <tr><td class="mini">零食</td><td class="num">18°C</td><td class="num">26°C</td><td class="num">12°C</td></tr>
+                <tr><td class="mini">飲品</td><td class="num">20°C</td><td class="num">30°C</td><td class="num">12°C</td></tr>
+                <tr><td class="mini">保暖用品</td><td class="num">−5°C</td><td class="num">15°C</td><td class="num">12°C</td></tr>
+              </table>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">
+                品項未填適溫區間時沿用品類預設；兩者皆無則該因子標為無資料，不扣分，權重分攤給其餘因子。<br><br>
+                <b>僅歷史同期氣候統計（月均溫）進評分</b>；未來 7–14 天的短期天氣預報只用於下方「開團時機提醒」通知，<b>不進 CLIMATE 分數</b>。
+              </div>
+            </div>
+            <div class="mini" style="margin-top:9px">黃金案例：抹茶夾心餅乾（適溫 18–26°C）· 8 月台北月均溫 29.4°C · distance = 3.4 · fit = 1 − 3.4/12 = 0.717 · 零食類同品類百分位 44。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>時間窗視覺化</b>四段權重直接畫出來，比一堆數字好懂。維護的人看得到自己在改什麼。</li>
+        <li><b>農曆換算</b>中秋、端午、農曆年每年國曆日期不同，系統須自動換算而非人工逐年輸入。</li>
+        <li><b>前置天數共用</b>同一份資料同時供 A 軌節慶因子與 B 軌時效落差使用，只維護一次。</li>
+        <li><b>關聯度先人工後 AI</b>初期資料量小，人工建反而快；累積後再讓 AI 提建議。</li>
+        <li><b>氣候用途二分</b>歷史氣候統計進評分，短期天氣預報只做開團時機提醒，兩者不可混用（AC-17-4）。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>權限</h4>
+      <p style="font-size:11px;color:var(--ink-3)">BUYER_LEAD／DATA_ADMIN／SYS_ADMIN 可維護節慶檔期、前置天數與品類氣候基準（權限矩陣第 20 列）；品項×節慶關聯度另開放 BUYER 調整（第 21 列，四角色皆可）。變更後於下一輪評分生效。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /festivals?year=</div>
+          <div class="rgn"><span class="mk">1</span><span class="mk">2</span>時間窗示意 &amp; 年度檔期 <span class="tr">切換年度時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">POST</span> / <span class="v">PUT</span> / <span class="v">DELETE</span> /festivals</div>
+          <div class="rgn">「新增檔期」與列表內編輯 <span class="tr">僅於送出時呼叫</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /categories/{id}/lead-time</div>
+          <div class="rgn"><span class="mk">3</span>品類前置天數</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /products/{id}/festival-affinity</div>
+          <div class="rgn"><span class="mk">4</span>品項×節慶關聯度</div>
+        </div>
+        <div class="api">
+          <div><span class="v">PUT</span> /categories/{id}/climate-profile</div>
+          <div class="rgn"><span class="mk">5</span>品類氣候基準</div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /climate-normals?region=</div>
+          <div class="rgn"><span class="mk">5</span>品類氣候基準 <span class="tr">載入歷史月均溫參考值</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-17-1 ～ AC-17-6</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ S-21 稽核紀錄 ══════════ -->
+<section class="screen" id="s21">
+  <div class="screen-head"><span class="sid">S-21</span><h2>稽核紀錄</h2><span class="fr">FR-18</span><span class="chg new">v3.0 新增</span></div>
+  <p class="screen-desc">v3.0 新增模組，自 §FR-13 系統設定拆出。v2.0 把稽核紀錄放在系統設定之下，卻同時要求 BUYER_LEAD 可看（§2.1）與僅 SYS_ADMIN 可進系統設定模組（AC-13-3）——兩者互相矛盾。v3.0 拆為獨立路由 <span style="font-family:var(--mono)">/audit-logs</span>，解決此問題。</p>
+  <div class="screen-body">
+    <div class="frame">
+      <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · audit-logs</span></div>
+      <div class="app">
+        <div class="nav">
+          <div class="brand">莊敬選品</div>
+          <a href="#s02"><b></b>儀表板</a>
+          <a href="#s03"><b></b>品項管理</a>
+          <a href="#s05"><b></b>選品排行</a>
+          <a href="#s07"><b></b>趨勢分析</a>
+          <a href="#s15"><b></b>熱度標記</a>
+          <a href="#s17"><b></b>尋源探索</a>
+          <a href="#s08"><b></b>AI 任務</a>
+          <a href="#s09"><b></b>權重設定</a>
+          <a href="#s10"><b></b>資料匯入</a>
+          <a href="#s11"><b></b>風險示警</a>
+          <a href="#s12"><b></b>決策紀錄</a>
+          <a href="#s13"><b></b>報表</a>
+          <a href="#s14"><b></b>設定</a>
+          <a class="on" href="#s21"><b></b>稽核紀錄</a>
+        </div>
+        <div class="main">
+          <div class="mh">
+            <div><h3>稽核紀錄</h3><div class="sub">保留 1 年　·　共 1,842 筆</div></div>
+            <div class="tools"><span class="sel">時間區間：近 7 天</span><span class="sel">操作者：全部</span><span class="sel">動作類型：全部</span><span class="sel">實體類型：全部</span><span class="btn">匯出 XLSX</span></div>
+          </div>
+
+          <h5 style="font-size:12px;margin-bottom:8px"><span class="mk">1</span>稽核紀錄清單</h5>
+          <table>
+            <tr><th style="width:118px">時間</th><th style="width:70px">操作者</th><th>動作</th><th style="width:96px">實體類型</th><th style="width:76px">實體 ID</th><th>變更前 → 後</th><th style="width:84px">來源 IP</th></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-12 10:22:04</td><td class="mini">lead01</td><td class="mini">核准權重版本生效</td><td><span class="tag teal">WEIGHT_VERSION</span></td><td class="mini">v3</td><td class="mini">v3（草稿）→ v3（生效中）</td><td class="mini">10.20.4.11</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-12 09:41:37</td><td class="mini">buyer01</td><td class="mini">建立決策 · 日式抹茶夾心餅乾</td><td><span class="tag">DECISION</span></td><td class="mini">DEC-10432</td><td class="mini">— → 採納，首批 300 組</td><td class="mini">10.20.4.22</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-12 08:55:12</td><td class="mini">buyer02</td><td class="mini">忽略風險示警 · 韓式泡菜罐 · 價格離群</td><td><span class="tag red">RISK_ALERT</span></td><td class="mini">RISK-8821</td><td class="mini">UNRESOLVED → IGNORED（理由：高單價進口品）</td><td class="mini">10.20.4.31</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-12 06:12:50</td><td class="mini">system</td><td class="mini">Instagram 來源可用性變更</td><td><span class="tag amber">HEAT_SOURCE</span></td><td class="mini">INSTAGRAM</td><td class="mini">AVAILABLE → UNAVAILABLE（額度用盡）</td><td class="mini">—</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-11 17:10:03</td><td class="mini">admin</td><td class="mini">更新模型別名 MODEL_ANALYSIS</td><td><span class="tag">MODEL_ALIAS</span></td><td class="mini">MODEL_ANALYSIS</td><td class="mini">gpt-oss-20b:free → nemotron-3.5-lightning:free</td><td class="mini">10.20.1.5</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-11 09:30:00</td><td class="mini">lead01</td><td class="mini">建立權重版本草稿 v4</td><td><span class="tag teal">WEIGHT_VERSION</span></td><td class="mini">v4</td><td class="mini">— → 草稿（來自 S-19 校準建議）</td><td class="mini">10.20.4.11</td></tr>
+            <tr><td style="font-family:var(--mono);font-size:10.5px">2026-08-10 15:02:41</td><td class="mini">data01</td><td class="mini">品項軟刪除 · 過期試銷組合包</td><td><span class="tag">PRODUCT</span></td><td class="mini">ITEM-3390</td><td class="mini">ACTIVE → deleted_at 2026-08-10</td><td class="mini">10.20.2.9</td></tr>
+          </table>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+            <div class="card soft">
+              <h5><span class="mk">2</span>須寫入稽核的動作</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.95">
+                權限（使用者建立／停用、角色指派）　·　評分規則（權重版本、分級門檻、風險門檻）<br>
+                熱度（來源啟用／停用、合成權重、可用性轉變）　·　決策（建立、覆核、結案、回填）<br>
+                情境（人工覆寫，含理由）　·　風險（忽略，含理由）　·　校準（核准／部分採納／駁回）<br>
+                資料（匯入、報表匯出、品項軟刪除）　·　AI 設定（模型別名、預算池上限）
+              </div>
+            </div>
+            <div class="card soft">
+              <h5><span class="mk">3</span>存取限制</h5>
+              <div style="font-size:11px;color:var(--ink-2);line-height:1.9">僅 <b>BUYER_LEAD</b> 與 <b>SYS_ADMIN</b> 可存取本頁，其餘角色呼叫回 403。稽核紀錄<b>不可由任何 API 修改或刪除</b>，匯出動作本身也會產生一筆稽核紀錄。</div>
+              <div class="mini" style="margin-top:7px">保留 1 年，備份策略（每日／週／月）涵蓋整段保留期（§3.4）。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h4>畫面重點</h4>
+      <ol>
+        <li><b>獨立於系統設定</b>不必是 SYS_ADMIN 才能查稽核，BUYER_LEAD 也能看，對應 §2.1 權限矩陣第 25 列。</li>
+        <li><b>前後值並列</b>每筆紀錄顯示變更前後值，而不只是一句「改了什麼」，出問題時可直接比對。</li>
+        <li><b>不可竄改</b>稽核紀錄只能寫入與查詢，沒有更新或刪除 API，確保紀錄本身可信。</li>
+      </ol>
+      <div class="div"></div>
+      <h4>解決的矛盾</h4>
+      <p style="font-size:11px;color:var(--ink-3)">v2.0：§2.1 給 BUYER_LEAD 檢視稽核紀錄的權限，但 AC-13-3 要求「僅 SYS_ADMIN 可存取系統設定模組」，兩者互斥。v3.0 拆出獨立路由後，權限矩陣與路由守衛回到一致。</p>
+      <div class="div"></div>
+      <h4>主要 API　<span style="font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">— 編號對應截圖標記</span></h4>
+      <div class="apilist">
+        <div class="api">
+          <div><span class="v">GET</span> /audit-logs?page=&amp;from=&amp;to=&amp;userId=&amp;action=&amp;entityType=</div>
+          <div class="rgn"><span class="mk">1</span>稽核紀錄清單 <span class="tr">切換篩選條件或分頁時重打</span></div>
+        </div>
+        <div class="api">
+          <div><span class="v">GET</span> /audit-logs/export</div>
+          <div class="rgn">「匯出 XLSX」按鈕 <span class="tr">按下匯出時呼叫，本動作本身亦寫入一筆稽核紀錄</span></div>
+        </div>
+      </div>
+      <div class="div"></div>
+      <h4>驗收</h4>
+      <div class="ac">AC-18-1 / AC-18-2 / AC-18-3 / AC-18-4</div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════ 畫面關聯圖 ══════════ -->
+<section class="screen" id="flow">
+  <div class="screen-head"><span class="sid">流程</span><h2>畫面之間怎麼走</h2><span class="chg mod">大改</span></div>
+  <p class="screen-desc">迴路有兩層：外圈是每週的選品決策，內圈是每季的權重校準；所有寫入動作另外匯入 S-21 稽核紀錄。系統的價值不在單一畫面，而在這兩條迴路能不能持續轉起來。</p>
+  <div class="card" style="padding:22px">
+    <svg viewBox="0 0 920 420" style="width:100%;height:auto" font-family="Noto Sans TC, sans-serif">
+      <defs>
+        <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8A9AA6"/></marker>
+        <marker id="arg" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1E7A4D"/></marker>
+        <marker id="art" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1E7A9E"/></marker>
+      </defs>
+
+      <text x="14" y="18" font-size="10.5" fill="#8A9AA6" letter-spacing="1">熱度資料層　每日</text>
+      <g font-size="11" fill="#16232E">
+        <g><rect x="10" y="28" width="146" height="46" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="83" y="47" text-anchor="middle" font-weight="700">S-07 趨勢分析</text>
+          <text x="83" y="63" text-anchor="middle" font-size="9.5" fill="#8A9AA6">Threads · Trends · IG</text></g>
+        <g><rect x="10" y="86" width="146" height="46" rx="8" fill="#E9F3F8" stroke="#CFE3ED"/>
+          <text x="83" y="105" text-anchor="middle" font-weight="700" fill="#12556F">S-15 人工標記</text>
+          <text x="83" y="121" text-anchor="middle" font-size="9.5" fill="#6E96A9">FB · TikTok · 小紅書</text></g>
+        <g><rect x="10" y="144" width="146" height="42" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="83" y="163" text-anchor="middle" font-weight="700">S-16 來源狀態</text>
+          <text x="83" y="178" text-anchor="middle" font-size="9.5" fill="#8A9AA6">降級不中斷</text></g>
+        <g><rect x="10" y="230" width="146" height="46" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="83" y="249" text-anchor="middle" font-weight="700">S-10 資料匯入</text>
+          <text x="83" y="265" text-anchor="middle" font-size="9.5" fill="#8A9AA6">銷售 · 評論 · 會員</text></g>
+        <g><rect x="10" y="288" width="146" height="42" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="83" y="307" text-anchor="middle" font-weight="700">S-20 節慶檔期</text>
+          <text x="83" y="322" text-anchor="middle" font-size="9.5" fill="#8A9AA6">時間窗 · 前置天數</text></g>
+
+        <g><rect x="212" y="70" width="152" height="86" rx="8" fill="#123A56"/>
+          <text x="288" y="95" text-anchor="middle" font-weight="700" fill="#fff">評分引擎</text>
+          <text x="288" y="112" text-anchor="middle" font-size="9.5" fill="#8FC4DC">加分項　依情境加權</text>
+          <text x="288" y="126" text-anchor="middle" font-size="9.5" fill="#8FC4DC">扣分項　固定生效</text>
+          <text x="288" y="143" text-anchor="middle" font-size="9.5" fill="#8FC4DC">同品類百分位正規化</text></g>
+        <g><rect x="212" y="172" width="152" height="46" rx="8" fill="#1E7A9E"/>
+          <text x="288" y="191" text-anchor="middle" font-weight="700" fill="#fff">S-09 情境權重組</text>
+          <text x="288" y="207" text-anchor="middle" font-size="9.5" fill="#D8EAF2">AI 選組 · 人可覆寫</text></g>
+        <g><rect x="212" y="288" width="152" height="42" rx="8" fill="#1E7A9E"/>
+          <text x="288" y="307" text-anchor="middle" font-weight="700" fill="#fff">S-08 AI 任務</text>
+          <text x="288" y="322" text-anchor="middle" font-size="9.5" fill="#D8EAF2">賣點 · 風險 · 建議</text></g>
+
+        <text x="420" y="18" font-size="10.5" fill="#8A9AA6" letter-spacing="1">A 軌　每週</text>
+        <g><rect x="420" y="28" width="150" height="60" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="495" y="48" text-anchor="middle" font-weight="700">S-05 分軌分組排行</text>
+          <text x="495" y="64" text-anchor="middle" font-size="9.5" fill="#8A9AA6">爆款 / 檔期 / 補貨</text>
+          <text x="495" y="78" text-anchor="middle" font-size="9.5" fill="#8A9AA6">各榜獨立 A/B/C</text></g>
+        <g><rect x="420" y="102" width="150" height="46" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="495" y="121" text-anchor="middle" font-weight="700">S-06 品項詳情</text>
+          <text x="495" y="137" text-anchor="middle" font-size="9.5" fill="#8A9AA6">因子透明 · 情境可覆寫</text></g>
+        <g><rect x="420" y="162" width="150" height="42" rx="8" fill="#FBE9E7" stroke="#F3CFCB"/>
+          <text x="495" y="181" text-anchor="middle" font-weight="700" fill="#C0392B">S-11 風險示警</text>
+          <text x="495" y="196" text-anchor="middle" font-size="9.5" fill="#B4736C">扣分 ≥20 強制進入</text></g>
+
+        <text x="420" y="248" font-size="10.5" fill="#8A9AA6" letter-spacing="1">B 軌　隨需</text>
+        <g><rect x="420" y="258" width="150" height="46" rx="8" fill="#E9F3F8" stroke="#CFE3ED"/>
+          <text x="495" y="277" text-anchor="middle" font-weight="700" fill="#12556F">S-17 尋源探索</text>
+          <text x="495" y="293" text-anchor="middle" font-size="9.5" fill="#6E96A9">MCP · 對話式</text></g>
+        <g><rect x="420" y="318" width="150" height="46" rx="8" fill="#E9F3F8" stroke="#CFE3ED"/>
+          <text x="495" y="337" text-anchor="middle" font-weight="700" fill="#12556F">S-18 尋源優先序</text>
+          <text x="495" y="353" text-anchor="middle" font-size="9.5" fill="#6E96A9">時效落差為否決條件</text></g>
+
+        <g><rect x="626" y="86" width="150" height="66" rx="8" fill="#E4F3EB" stroke="#C9E6D6"/>
+          <text x="701" y="110" text-anchor="middle" font-weight="700" fill="#1E7A4D">人工決策</text>
+          <text x="701" y="126" text-anchor="middle" font-size="9.5" fill="#5B8A72">採納 / 觀察 / 淘汰</text>
+          <text x="701" y="140" text-anchor="middle" font-size="9.5" fill="#5B8A72">綁定決策快照</text></g>
+        <g><rect x="626" y="168" width="150" height="42" rx="8" fill="#F4F6F8" stroke="#DCE3E9"/>
+          <text x="701" y="187" text-anchor="middle" font-weight="700">S-13 報表</text>
+          <text x="701" y="202" text-anchor="middle" font-size="9.5" fill="#8A9AA6">週選品建議報告</text></g>
+
+        <g><rect x="812" y="86" width="98" height="66" rx="8" fill="#123A56"/>
+          <text x="861" y="110" text-anchor="middle" font-weight="700" fill="#fff">S-12 回饋</text>
+          <text x="861" y="126" text-anchor="middle" font-size="9.5" fill="#8FC4DC">結案回填</text>
+          <text x="861" y="140" text-anchor="middle" font-size="9.5" fill="#8FC4DC">5 個欄位</text></g>
+        <g><rect x="812" y="288" width="98" height="60" rx="8" fill="#1E7A4D"/>
+          <text x="861" y="311" text-anchor="middle" font-weight="700" fill="#fff">S-19 校準</text>
+          <text x="861" y="326" text-anchor="middle" font-size="9.5" fill="#CDE8DA">統計＋AI</text>
+          <text x="861" y="339" text-anchor="middle" font-size="9.5" fill="#CDE8DA">人審核</text></g>
+        <g><rect x="812" y="198" width="98" height="54" rx="8" fill="#4A5A67"/>
+          <text x="861" y="220" text-anchor="middle" font-weight="700" fill="#fff">S-21 稽核</text>
+          <text x="861" y="235" text-anchor="middle" font-size="9.5" fill="#D6DCE0">所有寫入操作</text>
+          <text x="861" y="247" text-anchor="middle" font-size="9.5" fill="#D6DCE0">保留 1 年</text></g>
+      </g>
+
+      <g stroke="#8A9AA6" stroke-width="1.3" fill="none" marker-end="url(#ar2)">
+        <path d="M156,51 L184,51 L184,100 L208,100"/>
+        <path d="M156,109 L184,109 L184,106 L208,106"/>
+        <path d="M156,165 L184,165 L184,118 L208,118"/>
+        <path d="M156,253 L184,253 L184,130 L208,130"/>
+        <path d="M156,309 L184,309 L184,140 L208,140"/>
+        <path d="M288,172 L288,160"/>
+        <path d="M364,100 L392,100 L392,58 L416,58"/>
+        <path d="M364,118 L392,118 L392,125 L416,125"/>
+        <path d="M364,140 L392,140 L392,183 L416,183"/>
+        <path d="M288,288 L288,222"/>
+        <path d="M570,58 L598,58 L598,112 L622,112"/>
+        <path d="M570,125 L598,125 L598,119 L622,119"/>
+        <path d="M570,183 L598,183 L598,126 L622,126"/>
+        <path d="M701,152 L701,164"/>
+        <path d="M776,119 L808,119"/>
+      </g>
+      <g stroke="#1E7A9E" stroke-width="1.3" fill="none" marker-end="url(#art)">
+        <path d="M495,304 L495,314"/>
+        <path d="M570,330 L596,330 L596,240 L495,240 L495,208" stroke-dasharray="5 4"/>
+      </g>
+      <text x="620" y="236" font-size="9.5" fill="#1E7A9E">成案後轉入 A 軌</text>
+
+      <g stroke="#1E7A4D" stroke-width="1.6" fill="none" stroke-dasharray="5 4">
+        <path d="M861,152 L861,284" marker-end="url(#arg)"/>
+        <path d="M812,318 L288,318 L288,226" marker-end="url(#arg)"/>
+      </g>
+      <text x="550" y="382" text-anchor="middle" font-size="10.5" fill="#1E7A4D">每季：回填結果 → 統計迴歸 → AI 解讀 → 人審核 → 新權重版本生效</text>
+      <text x="550" y="400" text-anchor="middle" font-size="9.5" fill="#8A9AA6">學習成果沉澱成看得見的權重版本，不是黑盒子</text>
+    </svg>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<footer class="doc-foot">
+  畫面功能示意圖 v3.0　·　莊敬生活百貨 × 團購產業 AI 採購選品策略系統　·　搭配《開發規格書 v3.0》使用
+</footer>
+
+</body>
+</html>

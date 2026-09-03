@@ -1,6 +1,7 @@
 package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.DecisionType;
+import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.DecisionRecord;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -17,31 +18,47 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface DecisionRecordRepository extends JpaRepository<DecisionRecord, Long> {
 
-    @EntityGraph(attributePaths = {"product", "score", "decidedBy"})
-    Page<DecisionRecord> findByDecidedAtBetween(Instant from, Instant to, Pageable pageable);
+  @EntityGraph(attributePaths = { "product", "score", "decidedBy" })
+  Page<DecisionRecord> findByDecidedAtBetween(Instant from, Instant to, Pageable pageable);
 
-    List<DecisionRecord> findByProductIdOrderByDecidedAtDesc(Long productId);
+  List<DecisionRecord> findByProductIdOrderByDecidedAtDesc(Long productId);
 
-    @EntityGraph(attributePaths = {"product"})
-    Page<DecisionRecord> findByDecision(DecisionType decision, Pageable pageable);
+  @EntityGraph(attributePaths = { "product" })
+  Page<DecisionRecord> findByDecision(DecisionType decision, Pageable pageable);
 
-    /**
-     * AC-11-3：結案滿 7 天仍未回填 campaign_result 者，於儀表板待辦區提示。
-     * 用 left join + is null 而非 not exists，讓查詢計畫可以走 hash anti-join。
-     */
-    @Query("""
-            select d from DecisionRecord d
-            left join CampaignResult r on r.decision = d
-            where d.decision = com.example.ssds.core.domain.DecisionType.ADOPT
-              and r.id is null
-              and d.expectedListDate is not null
-              and d.expectedListDate <= :cutoff
-            order by d.expectedListDate
-            """)
-    List<DecisionRecord> findPendingFeedback(@Param("cutoff") LocalDate cutoff);
+
+
+@Query("""
+          SELECT dr FROM DecisionRecord dr
+          JOIN FETCH dr.product p
+          WHERE dr.decision = :decision
+            AND dr.campaignEndDate IS NOT NULL
+            AND dr.campaignEndDate <= :cutoff
+            AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
+            AND p.deletedAt IS NULL
+          ORDER BY dr.campaignEndDate ASC
+          """)
+List<DecisionRecord> findOverdueCampaigns(
+           @Param("decision") DecisionType decision,
+           @Param("cutoff") LocalDate cutoff);
+
+@Query("""
+          SELECT COUNT(dr) FROM DecisionRecord dr
+          JOIN dr.product p
+          WHERE dr.decision = :decision
+            AND dr.campaignEndDate IS NOT NULL
+            AND dr.campaignEndDate <= :cutoff
+            AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
+            AND p.deletedAt IS NULL
+            AND p.trackType = :trackType
+          """)
+long countOverdueCampaigns(
+           @Param("decision") DecisionType decision,
+           @Param("cutoff") LocalDate cutoff,
+           @Param("trackType") TrackType trackType);
 
     /** FR-11-3：情境判定覆寫率與 AI 採納率的分母。 */
     long countByDecidedAtBetween(Instant from, Instant to);
 
-    long countByFollowedAiFalseAndDecidedAtBetween(Instant from, Instant to);
+  long countByFollowedAiFalseAndDecidedAtBetween(Instant from, Instant to);
 }

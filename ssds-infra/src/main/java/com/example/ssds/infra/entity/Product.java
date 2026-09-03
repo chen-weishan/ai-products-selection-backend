@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
@@ -77,7 +78,7 @@ public class Product extends BaseAuditEntity {
     @Column(name = "listed_at")
     private LocalDate listedAt;
 
-    // ---- v2.0 新增欄位（§7.2 既有資料表變更）----
+// ---- v2.0 新增欄位（§7.2 既有資料表變更）----
 
     @Enumerated(EnumType.STRING)
     @Column(name = "track_type", nullable = false, length = 8)
@@ -96,6 +97,10 @@ public class Product extends BaseAuditEntity {
     /** 效期天數，inventory_risk 扣分的判定輸入。 */
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
+
+    /** 軟刪除時間（§7.2.2）。非 NULL 者不出現在任何清單、排行、評分批次與報表； */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
