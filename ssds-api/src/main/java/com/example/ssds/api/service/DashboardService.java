@@ -13,6 +13,7 @@ import com.example.ssds.api.dto.RankingItemDto;
 import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.Severity;
+import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.DecisionRecord;
 import com.example.ssds.infra.entity.ProductScore;
@@ -42,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -67,21 +69,24 @@ public class DashboardService {
         /** §8.2 GET /dashboard/summary */
         public DashboardKpiResponseDto getKpi(String period, String track) {
                 TrackType trackType = "B".equals(track) ? TrackType.B : TrackType.A;
-                long totalCandidates = productRepository.countByTrackType(trackType);
+                long totalCandidates = productRepository.countByTrackTypeAndDeletedAtIsNull(trackType);
+                LocalDate today = LocalDate.now(DISPLAY_ZONE);
+                LocalDate cutoff = today.minusDays(7);
+                long overdueCount = decisionRecordRepository.countOverdueCampaigns(DecisionType.ADOPT, cutoff, trackType);
 
                 KpiDto kpi = new KpiDto(
                                 totalCandidates,
-                                productScoreRepository.countAGradeByPeriod(period),
-                                riskAlertRepository.countByStatusAndSeverity(AlertStatus.OPEN, Severity.HIGH),
-                                getOverdueCampaigns().size());
+                                productScoreRepository.countAGradeByPeriod(period, trackType),
+                                riskAlertRepository.countByStatusAndSeverity(AlertStatus.OPEN, Severity.HIGH, trackType),
+                                overdueCount);
 
-                boolean scoringExecuted = productScoreRepository.existsByPeriodAndActiveTrue(period);
+                boolean scoringExecuted = productScoreRepository.existsByPeriodAndActiveTrue(period, trackType);
 
                 return new DashboardKpiResponseDto(kpi, scoringExecuted);
         }
 
-        /** §8.2 GET /dashboard/rankings */
-        public DashboardRankingsResponseDto getRankings(String period, String track, String scene, Integer limit) {
+/** §8.2 GET /dashboard/rankings */
+        public DashboardRankingsResponseDto getRankings(String period, String track, SceneType scene, Integer limit) {
                 int rankingLimit = limit != null ? limit : RANKING_LIMIT;
                 TrackType trackType = "B".equals(track) ? TrackType.B : TrackType.A;
 
@@ -90,36 +95,41 @@ public class DashboardService {
                 List<ProductScore> restockScores = List.of();
                 List<ProductScore> seasonalScores = List.of();
 
-                if (trackType == TrackType.A) {
-                        Pageable topN = PageRequest.of(0, rankingLimit);
+                Pageable topN = PageRequest.of(0, rankingLimit);
 
-                        if (scene == null || "VIRAL".equals(scene)) {
-                                viralScores = productScoreRepository.findTopByPeriodAndSceneType(period, "VIRAL", topN);
-                        }
-                        if (scene == null || "FESTIVAL".equals(scene)) {
-                                festivalScores = productScoreRepository.findTopByPeriodAndSceneType(period, "FESTIVAL",
-                                                topN);
-                        }
-                        if (scene == null || "REPLENISHMENT".equals(scene)) {
-                                restockScores = productScoreRepository.findTopByPeriodAndSceneType(period,
-                                                "REPLENISHMENT", topN);
-                        }
-                        if (scene == null || "SEASONAL".equals(scene)) {
-                                seasonalScores = productScoreRepository.findTopByPeriodAndSceneType(period, "SEASONAL",
-                                                topN);
-                        }
+                if (scene == null || SceneType.VIRAL.equals(scene)) {
+                        viralScores = productScoreRepository.findTopByPeriodAndSceneType(period, SceneType.VIRAL.name(), trackType, topN);
                 }
-
-                Map<Long, SceneClassificationLog> latestLogs = loadLatestClassificationLogs(
-                                List.of(viralScores, festivalScores, restockScores, seasonalScores));
-
-                // FR-02: 風險指示 - 取得所有排行品項的最高嚴重度風險
-                Set<Long> allProductIds = new HashSet<>();
-                for (List<ProductScore> board : List.of(viralScores, festivalScores, restockScores, seasonalScores)) {
-                        board.forEach(s -> allProductIds.add(s.getProduct().getId()));
+                if (scene == null || SceneType.FESTIVAL.equals(scene)) {
+                        festivalScores = productScoreRepository.findTopByPeriodAndSceneType(period, SceneType.FESTIVAL.name(), trackType, topN);
                 }
-                Map<Long, Severity> riskMap = allProductIds.isEmpty() ? Map.of()
-                                : riskAlertRepository.findMaxSeverityByProductIds(new ArrayList<>(allProductIds));
+                if (scene == null || SceneType.REPLENISHMENT.equals(scene)) {
+                        restockScores = productScoreRepository.findTopByPeriodAndSceneType(period, SceneType.REPLENISHMENT.name(), trackType, topN);
+                }
+if (scene == null || SceneType.SEASONAL.equals(scene)) {
+                         seasonalScores = productScoreRepository.findTopByPeriodAndSceneType(period, SceneType.SEASONAL.name(), trackType, topN);
+                 }
+
+                 Map<Long, SceneClassificationLog> latestLogs = loadLatestClassificationLogs(
+                         List.of(viralScores, festivalScores, restockScores, seasonalScores));
+
+                 // FR-02: 風險指示 - 取得所有排行品項的最高嚴重度風險
+                 Set<Long> allProductIds = new HashSet<>();
+                 for (List<ProductScore> board : List.of(viralScores, festivalScores, restockScores, seasonalScores)) {
+                         board.forEach(s -> allProductIds.add(s.getProduct().getId()));
+                 }
+                 Map<Long, Severity> riskMap = allProductIds.isEmpty() ? Map.of()
+                         : riskAlertRepository.findTopSeverityRankByProductIds(new ArrayList<>(allProductIds)).stream()
+                                 .collect(Collectors.toMap(
+                                         row -> (Long) row[0],
+                                         row -> {
+                                                 int rank = ((Number) row[1]).intValue();
+                                                 return switch (rank) {
+                                                         case 1 -> Severity.HIGH;
+                                                         case 2 -> Severity.MEDIUM;
+                                                         default -> Severity.LOW;
+                                                 };
+                                         }));
 
                 return new DashboardRankingsResponseDto(
                                 toRankingItems(viralScores, latestLogs, riskMap),
@@ -192,8 +202,8 @@ public class DashboardService {
                                 && log.isOverridden()
                                 && log.getFinalSceneType() == score.getSceneType();
 
-                Severity severity = riskMap.get(score.getProduct().getId());
-                String riskLevel = severity == null ? "NONE" : severity.name();
+Severity severity = riskMap.get(score.getProduct().getId());
+                 String riskLevel = severity == null || severity == Severity.LOW ? "NONE" : severity.name();
 
                 return new RankingItemDto(
                                 score.getProduct().getId(),
@@ -221,8 +231,9 @@ public class DashboardService {
                 return latest;
         }
 
-        private List<OverdueCampaignDto> getOverdueCampaigns() {
-                LocalDate cutoff = LocalDate.now().minusDays(7);
+private List<OverdueCampaignDto> getOverdueCampaigns() {
+                LocalDate today = LocalDate.now(DISPLAY_ZONE);
+                LocalDate cutoff = today.minusDays(7);
                 List<DecisionRecord> overdue = decisionRecordRepository.findOverdueCampaigns(
                                 DecisionType.ADOPT,
                                 cutoff);
@@ -231,7 +242,7 @@ public class DashboardService {
                                                 dr.getProduct().getId(),
                                                 dr.getProduct().getName(),
                                                 dr.getCampaignEndDate(),
-                                                ChronoUnit.DAYS.between(dr.getCampaignEndDate(), LocalDate.now()) - 7))
+                                                ChronoUnit.DAYS.between(dr.getCampaignEndDate(), today) - 7))
                                 .toList();
         }
 

@@ -2,6 +2,7 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.Severity;
+import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.RiskAlert;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,14 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
 
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);
 
-    /** 儀表板的高風險計數。 */
-    long countByStatusAndSeverity(AlertStatus status, Severity severity);
+/** 儀表板的高風險計數。 */
+        @Query("""
+                SELECT COUNT(r) FROM RiskAlert r
+                WHERE r.status = :status AND r.severity = :severity
+                  AND r.product.trackType = :trackType
+                  AND r.product.deletedAt IS NULL
+                """)
+        long countByStatusAndSeverity(AlertStatus status, Severity severity, @Param("trackType") TrackType trackType);
 
     boolean existsByProductIdAndRiskTypeAndStatus(
             Long productId, String riskType, AlertStatus status);
@@ -46,10 +53,14 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
      * 回傳 Map<productId, severity>，僅包含 status = OPEN 的風險。
      */
     @Query("""
-            SELECT r.product.id, MAX(r.severity)
+            SELECT r.product.id,
+                   MIN(CASE r.severity
+                           WHEN com.example.ssds.core.domain.Severity.HIGH   THEN 1
+                           WHEN com.example.ssds.core.domain.Severity.MEDIUM THEN 2
+                           ELSE 3 END)
             FROM RiskAlert r
             WHERE r.product.id IN :productIds AND r.status = com.example.ssds.core.domain.AlertStatus.OPEN
             GROUP BY r.product.id
             """)
-    Map<Long, Severity> findMaxSeverityByProductIds(@Param("productIds") List<Long> productIds);
+    List<Object[]> findTopSeverityRankByProductIds(@Param("productIds") List<Long> productIds);
 }

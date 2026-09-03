@@ -57,21 +57,23 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
 
   List<SourcingCandidate> findByHeatStage(HeatStage heatStage);
 
-  /**
-   * FR-02 儀表板 B 軌摘要。AC-16-2／AC-02-7：以時效落差升冪為主排序，
-   * 落差最小者最急迫；null（壽命尚未推估）排最後，避免誤導優先序。
-   *
-   * <p>
-   * 已淘汰者<b>不過濾</b> —— FR-02 明定「已淘汰者灰底顯示」，
-   * 前端依 product.sourcingStatus 標灰。筆數由呼叫端以 Pageable 控制
-   * （§8.2 sourcing-summary 預設 limit=3）。
-   */
-  @EntityGraph(attributePaths = { "product" })
-  @Query("""
-      select c from SourcingCandidate c
-      where c.product.trackType = 'B'
-      order by c.timeGapDays asc nulls last, c.id asc
-      """)
-  List<SourcingCandidate> findDashboardSummaryCandidates(Pageable pageable);
+/**
+     * FR-02 儀表板 B 軌摘要。AC-16-2／AC-02-7：以時效落差升冪為主排序，
+     * 落差最小者最急迫；null（壽命尚未推估）排最後，避免誤導優先序。
+     *
+     * <p>
+     * 已淘汰者<b>不過濾</b> —— FR-02 明定「已淘汰者灰底顯示」，
+     * 前端依 product.sourcingStatus 標灰。筆數由呼叫端以 Pageable 控制
+     * (§8.2 sourcing-summary 預設 limit=3）。
+     */
+    @EntityGraph(attributePaths = { "product" })
+    @Query("""
+         select c from SourcingCandidate c
+         where c.product.trackType = 'B'
+           and c.product.deletedAt IS NULL
+           and c.stageWeeks IS NULL
+         order by c.timeGapDays asc nulls last, c.id asc
+         """)
+    List<SourcingCandidate> findDashboardSummaryCandidates(Pageable pageable);
 
 }

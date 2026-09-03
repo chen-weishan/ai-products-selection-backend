@@ -7,6 +7,7 @@ import com.example.ssds.api.dto.DashboardRankingsResponseDto;
 import com.example.ssds.api.dto.DashboardSourcingSummaryResponseDto;
 import com.example.ssds.api.dto.DashboardTodosResponseDto;
 import com.example.ssds.api.service.DashboardService;
+import com.example.ssds.core.domain.SceneType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 
+@Validated
 @RestController
 @RequestMapping("/dashboard")
 @RequiredArgsConstructor
@@ -33,7 +39,7 @@ public class DashboardController {
         /** §8.2 GET /dashboard/summary - KPI 四項 */
         @GetMapping("/summary")
         public ApiResponse<DashboardKpiResponseDto> getSummary(
-                        @RequestParam(required = false) String period,
+                        @RequestParam(required = false) @Pattern(regexp = "\\d{4}W\\d{2}", message = "period 格式須為 2026W30") String period,
                         @RequestParam(required = false, defaultValue = "A") String track) {
                 if (period == null) {
                         period = getCurrentWeek();
@@ -44,10 +50,10 @@ public class DashboardController {
         /** §8.2 GET /dashboard/rankings - 四榜排行（scene 省略時回傳四榜各 limit 筆） */
         @GetMapping("/rankings")
         public ApiResponse<DashboardRankingsResponseDto> getRankings(
-                        @RequestParam(required = false) String period,
+                        @RequestParam(required = false) @Pattern(regexp = "\\d{4}W\\d{2}", message = "period 格式須為 2026W30") String period,
                         @RequestParam(required = false, defaultValue = "A") String track,
-                        @RequestParam(required = false) String scene,
-                        @RequestParam(required = false) Integer limit) {
+                        @RequestParam(required = false) SceneType scene,
+                        @RequestParam(required = false, defaultValue = "5") @Min(1) @Max(50) Integer limit) {
                 if (period == null) {
                         period = getCurrentWeek();
                 }
@@ -57,7 +63,7 @@ public class DashboardController {
         /** §8.2 GET /dashboard/sourcing-summary - B 軌摘要（依時效落差升冪） */
         @GetMapping("/sourcing-summary")
         public ApiResponse<DashboardSourcingSummaryResponseDto> getSourcingSummary(
-                        @RequestParam(required = false, defaultValue = "3") Integer limit) {
+                        @RequestParam(required = false, defaultValue = "3") @Min(1) @Max(50) Integer limit) {
                 return ApiResponse.success(dashboardService.getSourcingSummary(limit));
         }
 

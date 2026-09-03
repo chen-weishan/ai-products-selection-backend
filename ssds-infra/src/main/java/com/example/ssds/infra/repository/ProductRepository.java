@@ -94,4 +94,10 @@ public interface ProductRepository
         List<Long> findProductIdsByImportBatch(@Param("batchId") Long batchId);
 
         long countByTrackType(TrackType trackType);
+
+        /**
+         * FR-02 KPI 候選品項總數（軌別），不含軟刪除品項。
+         */
+        @Query("select count(p) from Product p where p.trackType = :trackType and p.deletedAt IS NULL")
+        long countByTrackTypeAndDeletedAtIsNull(@Param("trackType") TrackType trackType);
 }
