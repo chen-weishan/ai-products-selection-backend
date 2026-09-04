@@ -83,8 +83,7 @@ public class SourcingCandidate extends BaseAuditEntity {
     @Column(name = "scout_report", columnDefinition = "text")
     private String scoutReport;
 
-    @Column(name = "scouted_at")
-    private java.time.Instant scoutedAt;
+
 
     /**
      * 依 §5.8 重算時效落差，並在落差為負時強制標記淘汰（AC-16-4）。

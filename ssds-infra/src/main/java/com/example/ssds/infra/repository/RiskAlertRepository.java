@@ -34,13 +34,13 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);
 
 /** 儀表板的高風險計數。 */
-        @Query("""
-                SELECT COUNT(r) FROM RiskAlert r
-                WHERE r.status = :status AND r.severity = :severity
-                  AND r.product.trackType = :trackType
-                  AND r.product.deletedAt IS NULL
-                """)
-        long countByStatusAndSeverity(AlertStatus status, Severity severity, @Param("trackType") TrackType trackType);
+     @Query("""
+             SELECT COUNT(r) FROM RiskAlert r
+             WHERE r.status <> AlertStatus.IGNORED AND r.severity = :severity
+               AND r.product.trackType = :trackType
+               AND r.product.deletedAt IS NULL
+             """)
+     long countByStatusAndSeverity(AlertStatus status, Severity severity, @Param("trackType") TrackType trackType);
 
     boolean existsByProductIdAndRiskTypeAndStatus(
             Long productId, String riskType, AlertStatus status);

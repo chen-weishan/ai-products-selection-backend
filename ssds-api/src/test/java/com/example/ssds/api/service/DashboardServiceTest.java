@@ -91,7 +91,7 @@ private static final ZoneId DISPLAY_ZONE = ZoneId.of("Asia/Taipei");
         // Use unique calculatedAt to avoid uk_score unique constraint violation
         ProductScore score = ProductScore.builder()
                 .product(product)
-                .weightVersion(weightVersionRepository.findByVersionNo("TEST-1.0").orElseThrow())
+                .weightVersion(weightVersion)
                 .period(period)
                 .sceneType(sceneType)
                 .grade(grade)
@@ -165,17 +165,7 @@ private RiskAlert createRiskAlert(Product product, Severity severity) {
         return sourcingCandidateRepository.save(sc);
     }
 
-    // Helper to create SceneClassificationLog
-    private SceneClassificationLog createSceneClassificationLog(Product product, SceneType aiSceneType, SceneType finalSceneType) {
-        SceneClassificationLog log = SceneClassificationLog.builder()
-                .product(product)
-                .aiSceneType(aiSceneType)
-                .finalSceneType(finalSceneType)
-                .aiConfidence(BigDecimal.valueOf(0.9))
-                .createdAt(Instant.now())
-                .build();
-        return sceneClassificationLogRepository.save(log);
-    }
+
 
 // ---------- Test AC-02-6: A級主推品項數不重複計數 ----------
     @Test
@@ -207,8 +197,9 @@ private RiskAlert createRiskAlert(Product product, Severity severity) {
         Grade gradeA = Grade.A;
 
         // Same product appears in both VIRAL (primary) and SEASONAL (secondary) with A grade
-        ProductScore score1 = createProductScore(testProductA, period, viral, gradeA, new BigDecimal("80"), true);
-        WeightVersion weightVersion = weightVersionRepository.findByVersionNo("TEST-1.0").orElseThrow();
+ProductScore score1 = createProductScore(testProductA, period, viral, gradeA, new BigDecimal("80"), true);
+         productScoreRepository.save(score1);
+         WeightVersion weightVersion = weightVersionRepository.findByVersionNo("TEST-1.0").orElseThrow();
         ProductScore score2 = ProductScore.builder()
                 .product(testProductA)
                 .weightVersion(weightVersion)
@@ -320,13 +311,13 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
         dr = decisionRecordRepository.save(dr);
 
         // Debug: check repository directly
-        List<DecisionRecord> overdueFromRepo = decisionRecordRepository.findOverdueCampaigns(DecisionType.ADOPT, cutoff);
+        List<DecisionRecord> overdueFromRepo = decisionRecordRepository.findOverdueCampaigns(DecisionType.ADOPT, cutoff, TrackType.A);
         System.out.println("Repository overdue count: " + overdueFromRepo.size());
         for (DecisionRecord odr : overdueFromRepo) {
             System.out.println("  DecisionRecord ID: " + odr.getId() + ", productId: " + odr.getProduct().getId() + ", campaignEndDate: " + odr.getCampaignEndDate() + ", result null? " + (odr.getResult() == null));
         }
 
-        DashboardTodosResponseDto todos = dashboardService.getTodos();
+        DashboardTodosResponseDto todos = dashboardService.getTodos(TrackType.A);
            List<OverdueCampaignDto> list = todos.overdueCampaigns();
            System.out.println("Overdue campaign list size: " + list.size());
            final Long productId = product.getId();
@@ -373,7 +364,7 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
         ProductScore score = createProductScore(product, period, scene, Grade.A, new BigDecimal("90"), true);
         productScoreRepository.save(score);
 
-        DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, "A", scene, 5);
+        DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, TrackType.A, scene, 5);
         List<RankingItemDto> viral = rankings.viral();
         assertFalse(viral.isEmpty());
         RankingItemDto item = viral.get(0);
@@ -408,7 +399,7 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
         // New snapshot: is_active = true, higher score should win
         ProductScore newScore = createProductScore(product, period, scene, gradeA, new BigDecimal("85"), true);
 
-DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, "A", scene, 5);
+DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, TrackType.A, scene, 5);
 List<RankingItemDto> viral = rankings.viral();
          assertEquals(1, viral.size(), "Only one snapshot should appear in ranking");
          RankingItemDto item = viral.get(0);
@@ -442,7 +433,7 @@ List<RankingItemDto> viral = rankings.viral();
         ProductScore score = createProductScore(product, period, scene, Grade.A, new BigDecimal("90"), true);
         productScoreRepository.save(score);
 
-        DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, "A", scene, 5);
+        DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, TrackType.A, scene, 5);
           List<RankingItemDto> viral = rankings.viral();
           assertFalse(viral.isEmpty());
           RankingItemDto item = viral.get(0);

@@ -29,33 +29,35 @@ public interface DecisionRecordRepository extends JpaRepository<DecisionRecord, 
 
 
 @Query("""
-          SELECT dr FROM DecisionRecord dr
-          JOIN FETCH dr.product p
-          WHERE dr.decision = :decision
-            AND dr.campaignEndDate IS NOT NULL
-            AND dr.campaignEndDate <= :cutoff
-            AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
-            AND p.deletedAt IS NULL
-          ORDER BY dr.campaignEndDate ASC
-          """)
-List<DecisionRecord> findOverdueCampaigns(
-           @Param("decision") DecisionType decision,
-           @Param("cutoff") LocalDate cutoff);
+           SELECT dr FROM DecisionRecord dr
+           JOIN FETCH dr.product p
+           WHERE dr.decision = :decision
+             AND dr.campaignEndDate IS NOT NULL
+             AND dr.campaignEndDate < :cutoff
+             AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
+             AND p.deletedAt IS NULL
+             AND p.trackType = :trackType
+           ORDER BY dr.campaignEndDate ASC
+           """)
+ List<DecisionRecord> findOverdueCampaigns(
+            @Param("decision") DecisionType decision,
+            @Param("cutoff") LocalDate cutoff,
+            @Param("trackType") TrackType trackType);
 
 @Query("""
-          SELECT COUNT(dr) FROM DecisionRecord dr
-          JOIN dr.product p
-          WHERE dr.decision = :decision
-            AND dr.campaignEndDate IS NOT NULL
-            AND dr.campaignEndDate <= :cutoff
-            AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
-            AND p.deletedAt IS NULL
-            AND p.trackType = :trackType
-          """)
-long countOverdueCampaigns(
-           @Param("decision") DecisionType decision,
-           @Param("cutoff") LocalDate cutoff,
-           @Param("trackType") TrackType trackType);
+           SELECT COUNT(dr) FROM DecisionRecord dr
+           JOIN dr.product p
+           WHERE dr.decision = :decision
+             AND dr.campaignEndDate IS NOT NULL
+             AND dr.campaignEndDate < :cutoff
+             AND NOT EXISTS (SELECT cr FROM CampaignResult cr WHERE cr.decision = dr)
+             AND p.deletedAt IS NULL
+             AND p.trackType = :trackType
+           """)
+ long countOverdueCampaigns(
+            @Param("decision") DecisionType decision,
+            @Param("cutoff") LocalDate cutoff,
+            @Param("trackType") TrackType trackType);
 
     /** FR-11-3：情境判定覆寫率與 AI 採納率的分母。 */
     long countByDecidedAtBetween(Instant from, Instant to);

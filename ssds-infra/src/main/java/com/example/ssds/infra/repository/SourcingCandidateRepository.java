@@ -66,14 +66,14 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      * 前端依 product.sourcingStatus 標灰。筆數由呼叫端以 Pageable 控制
      * (§8.2 sourcing-summary 預設 limit=3）。
      */
-    @EntityGraph(attributePaths = { "product" })
-    @Query("""
-         select c from SourcingCandidate c
-         where c.product.trackType = 'B'
-           and c.product.deletedAt IS NULL
-           and c.stageWeeks IS NULL
-         order by c.timeGapDays asc nulls last, c.id asc
-         """)
+@EntityGraph(attributePaths = { "product" })
+     @Query("""
+          select c from SourcingCandidate c
+          where c.product.trackType = 'B'
+            and c.product.deletedAt IS NULL
+            and c.product.sourcingStatus in (SOURCING, URGENT, REJECTED)
+          order by c.timeGapDays asc nulls last, c.id asc
+          """)
     List<SourcingCandidate> findDashboardSummaryCandidates(Pageable pageable);
 
 }

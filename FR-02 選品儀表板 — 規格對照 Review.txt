@@ -1,0 +1,36 @@
+FR-02 問題清單：
+
+#: 1 🔴
+檔案名稱: ssds-infra/.../repository/SourcingCandidateRepository.java:74（findDashboardSummaryCandidates）
+規格書內容: FR-02 顯示內容「B 軌摘要：尋源中候選 Top 3，依時效落差升冪排序；已淘汰者灰底顯示」／AC-02-7
+問題: 查詢多一條 and c.stageWeeks IS NULL。stage_weeks 是「已處於該熱度階段的週數」（§5.8、§7.2.9 stage_weeks TINYINT
+NULL），與儀表板摘要無關。凡已記錄階段週數的候選整個從 B 軌摘要消失。測試未抓到，因測資 stageWeeks 全為 null
+建議修改方式: 刪除 and c.stageWeeks IS NULL。另補狀態條件：只取尋源中相關狀態＋保留 REJECTED，例如 and c.product.sourcingStatus in (SOURCING, URGENT,
+REJECTED)（PENDING 為「待評估」不屬尋源中）。測試加一筆 stageWeeks = 2 的候選，斷言它仍上榜
+────────────────────────────────────────
+#: 2 🟡
+檔案名稱: ssds-api/.../controller/DashboardController.java（track 參數）、ssds-api/.../service/DashboardService.java（getKpi、getRankings）
+規格書內容: §8.1 錯誤代碼「400 VALIDATION_FAILED 欄位驗證失敗」；§8.2 ?track=A
+問題: "B".equals(track) ? TrackType.B : TrackType.A。傳 track=X 或 track=b 不報錯，靜默回 A 軌資料
+建議修改方式: 參數型別改 TrackType（enum binding），非法值自然拋 MethodArgumentTypeMismatchException，GlobalExceptionHandler:59 已對應 400
+VALIDATION_FAILED。Service 兩處三元運算式一併移除
+────────────────────────────────────────
+#: 3 🟡
+檔案名稱: ssds-api/.../service/DashboardService.java（getTodos /
+getOverdueCampaigns）、ssds-infra/.../repository/DecisionRecordRepository.java（findOverdueCampaigns vs countOverdueCampaigns）
+規格書內容: FR-02 KPI 卡片「結案未回填數」與「待回填結案」區塊，同一畫面同一軌別
+問題: countOverdueCampaigns 有 p.trackType = :trackType，findOverdueCampaigns 沒有。KPI 數字與待回填清單筆數會對不起來
+建議修改方式: 統一口徑。建議 /dashboard/todos 比照 /summary 加 track 參數，findOverdueCampaigns 補 and p.trackType = :trackType，Service 兩處傳同一個
+TrackType
+────────────────────────────────────────
+#: 4 🟡
+檔案名稱: ssds-api/.../service/DashboardService.java（getKpi）、ssds-infra/.../repository/RiskAlertRepository.java（countByStatusAndSeverity）
+規格書內容: FR-02 KPI 卡片「高風險示警數」；AC-10-2「已 IGNORED 的示警不再出現於預設清單」
+問題: 只計 status = OPEN。ACKNOWLEDGED（已確認但未處理完）被排除，KPI 低估。規格只把 IGNORED 排除在預設之外
+建議修改方式: 改為 r.status <> AlertStatus.IGNORED and r.severity = HIGH；
+────────────────────────────────────────
+#: 5 🟢
+檔案名稱: ssds-infra/.../repository/DecisionRecordRepository.java（findOverdueCampaigns、countOverdueCampaigns）
+規格書內容: FR-02「結案逾 7 天未回填」；§FR-11「結案日 + 7 日仍未回填者，逾期天數 = 今日 − 結案日 − 7」
+問題: 條件 campaignEndDate <= :cutoff（cutoff = today − 7）使「剛好滿 7 天」入列，overdueDays = 0。「逾 7 天」應為嚴格大於
+建議修改方式: 兩支查詢改 campaignEndDate < :cutoff；DashboardServiceTest.testAC02_5_OverdueCampaigns 補一筆 endDate = today−7 的邊界案例，斷言不入列
