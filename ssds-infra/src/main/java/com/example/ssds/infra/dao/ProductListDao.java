@@ -1,5 +1,6 @@
 package com.example.ssds.infra.dao;
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -96,6 +97,8 @@ public class ProductListDao {
                        p.track_type,
                        p.sourcing_status,
                        p.status,
+                       p.last_scoring_status,
+                       p.last_scoring_attempted_at,
                        EXISTS (
                            SELECT 1
                            FROM risk_alert risk
@@ -259,6 +262,12 @@ public class ProductListDao {
 
         String gradeValue = resultSet.getString("grade");
         String sourcingStatusValue = resultSet.getString("sourcing_status");
+        String lastScoringStatusValue = resultSet.getString("last_scoring_status");
+
+        OffsetDateTime lastScoringAttemptedAt = resultSet.getObject(
+                "last_scoring_attempted_at",
+                OffsetDateTime.class
+        );
 
         OffsetDateTime updatedAt = resultSet.getObject(
                 "updated_at",
@@ -295,6 +304,12 @@ public class ProductListDao {
                 ProductStatus.valueOf(
                         resultSet.getString("status")
                 ),
+                lastScoringStatusValue == null
+                        ? null
+                        : LastScoringStatus.valueOf(lastScoringStatusValue),
+                lastScoringAttemptedAt == null
+                        ? null
+                        : lastScoringAttemptedAt.toInstant(),
                 resultSet.getBoolean("has_risk"),
                 updatedAt.toInstant()
         );

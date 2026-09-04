@@ -79,7 +79,6 @@ public class ProductSourcingCandidateService {
                 () -> clearSignal(candidate, product)
         );
 
-        candidate.recalculateTimeGap();
         candidateRepository.saveAndFlush(candidate);
     }
 
@@ -88,19 +87,21 @@ public class ProductSourcingCandidateService {
             SourcingHeatSignal signal,
             Map<Long, TrendKeyword> keywordsById
     ) {
-        candidate.setKeyword(keywordsById.get(signal.keywordId()));
-        candidate.setHeatStage(signal.heatStage());
-        candidate.setStageWeeks(signal.stageWeeks());
-        candidate.setEstimatedLifespanDays(signal.estimatedLifespanDays());
+        TrendKeyword drivingKeyword = keywordsById.get(signal.keywordId());
+        candidate.setDrivingKeyword(drivingKeyword);
+        if (candidate.getKeyword() == null) {
+            candidate.setKeyword(drivingKeyword);
+        }
+        candidate.recalculateTimeGap(signal.estimatedLifespanDays());
     }
 
     private void clearSignal(SourcingCandidate candidate, Product product) {
-        candidate.setKeyword(product.getKeywords().stream()
-                .min(Comparator.comparing(TrendKeyword::getId))
-                .orElse(null));
-        candidate.setHeatStage(null);
-        candidate.setStageWeeks(null);
-        candidate.setEstimatedLifespanDays(null);
-        candidate.setTimeGapDays(null);
+        if (candidate.getKeyword() == null) {
+            candidate.setKeyword(product.getKeywords().stream()
+                    .min(Comparator.comparing(TrendKeyword::getId))
+                    .orElse(null));
+        }
+        candidate.setDrivingKeyword(null);
+        candidate.recalculateTimeGap(null);
     }
 }

@@ -8,6 +8,8 @@ import com.example.ssds.api.product.dto.ProductBatchAnalyzeRequest;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeResponse;
 import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
 import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
+import com.example.ssds.api.product.dto.ProductBatchQueueScoreRequest;
+import com.example.ssds.api.product.dto.ProductBatchQueueScoreResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
@@ -20,6 +22,7 @@ import com.example.ssds.api.product.dto.ProductUpdateResponse;
 import com.example.ssds.api.product.service.ProductCommandService;
 import com.example.ssds.api.product.service.ProductAnalysisQueueService;
 import com.example.ssds.api.product.service.ProductQueryService;
+import com.example.ssds.api.product.service.ProductScoringBatchService;
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -57,15 +60,18 @@ public class ProductController {
     private final ProductQueryService productQueryService;
     private final ProductCommandService productCommandService;
     private final ProductAnalysisQueueService productAnalysisQueueService;
+    private final ProductScoringBatchService productScoringBatchService;
 
     public ProductController(
             ProductQueryService productQueryService,
             ProductCommandService productCommandService,
-            ProductAnalysisQueueService productAnalysisQueueService
+            ProductAnalysisQueueService productAnalysisQueueService,
+            ProductScoringBatchService productScoringBatchService
     ) {
         this.productQueryService = productQueryService;
         this.productCommandService = productCommandService;
         this.productAnalysisQueueService = productAnalysisQueueService;
+        this.productScoringBatchService = productScoringBatchService;
     }
 
     @GetMapping
@@ -176,7 +182,7 @@ public class ProductController {
     }
 
     /** FR-03-1 批次停用；整批驗證成功後才執行軟刪除。 */
-    @PatchMapping("/batch/disable")
+    @PatchMapping("/batch/status")
     @PreAuthorize("hasAnyRole('BUYER_LEAD', 'SYS_ADMIN')")
     public ApiResponse<ProductBatchDisableResponse> disableBatch(
             @Valid @RequestBody ProductBatchDisableRequest request,
@@ -199,6 +205,19 @@ public class ProductController {
     ) {
         return ApiResponse.success(productAnalysisQueueService.enqueue(
                 request,
+                authentication.getName()
+        ));
+    }
+
+    /** FR-03-1 批次加入評分佇列；不符合條件的品項會略過並以 warning 回報。 */
+    @PostMapping("/batch/queue-score")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<ProductBatchQueueScoreResponse> queueScoreBatch(
+            @Valid @RequestBody ProductBatchQueueScoreRequest request,
+            Authentication authentication
+    ) {
+        return ApiResponse.success(productScoringBatchService.enqueueByIds(
+                request.productIds(),
                 authentication.getName()
         ));
     }

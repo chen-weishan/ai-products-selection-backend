@@ -55,7 +55,7 @@ public class ProductFallbackScoringService {
         WeightVersion version = weightVersionRepository.findByIsCurrentTrue()
                 .orElseThrow(() -> new IllegalStateException("目前沒有生效中的權重版本"));
         var margin = marginStatisticsDao.findPercentile(product.getId(), product.getCategory().getId())
-                .orElseThrow(() -> new IllegalStateException("品項沒有可用的毛利率，無法評分"));
+                .orElseThrow(() -> new InsufficientDataException("品項沒有可用的毛利率，無法評分"));
 
         BigDecimal bonus = margin.normalizedValue().setScale(2, RoundingMode.HALF_UP);
         BigDecimal logisticsPenalty = logisticsPenalty(product);

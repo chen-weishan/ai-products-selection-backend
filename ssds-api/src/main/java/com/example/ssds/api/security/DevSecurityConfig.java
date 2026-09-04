@@ -22,7 +22,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
+import org.springframework.beans.factory.annotation.Qualifier;
 /**
  * 僅供本機開發與 Postman 測試使用的 Security 設定。
  *
@@ -36,6 +36,7 @@ public class DevSecurityConfig {
     @Bean
     SecurityFilterChain devSecurityFilterChain(
             HttpSecurity http,
+            @Qualifier("devCorsConfigurationSource")
             CorsConfigurationSource devCorsConfigurationSource
     ) throws Exception {
         return http

@@ -15,6 +15,7 @@ import com.example.ssds.api.product.dto.ProductSearchRequest;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.LogisticsCondition;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -140,6 +141,8 @@ class ProductQueryServiceTest {
                 TrackType.B,
                 SourcingStatus.SOURCING,
                 ProductStatus.EVALUATING,
+                LastScoringStatus.INSUFFICIENT_DATA,
+                Instant.parse("2026-08-20T01:00:00Z"),
                 false,
                 Instant.parse("2026-08-21T01:00:00Z")
         );
@@ -171,6 +174,11 @@ class ProductQueryServiceTest {
         assertNull(response.latestScore());
         assertNull(response.grade());
         assertEquals(21, response.timeGapDays());
+        assertEquals(LastScoringStatus.INSUFFICIENT_DATA, response.lastScoringStatus());
+        assertEquals(
+                Instant.parse("2026-08-20T01:00:00Z"),
+                response.lastScoringAttemptedAt()
+        );
     }
 
     @Test

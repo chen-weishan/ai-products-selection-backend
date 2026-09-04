@@ -1,5 +1,6 @@
 package com.example.ssds.infra.entity;
 
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -107,6 +108,15 @@ public class Product extends BaseAuditEntity {
     /** 效期天數，inventory_risk 扣分的判定輸入。 */
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
+
+    /** 最近一次已完成評分嘗試的技術結果；與採購狀態分開維護。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_scoring_status", length = 32)
+    private LastScoringStatus lastScoringStatus;
+
+    /** 最近一次已完成評分嘗試時間（UTC）。 */
+    @Column(name = "last_scoring_attempted_at")
+    private Instant lastScoringAttemptedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")

@@ -1,8 +1,11 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.infra.entity.AiTaskItem;
+import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.AiTaskItemRepository;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +32,15 @@ public class FullAnalysisItemProcessor {
         if (item.getProduct() == null || !item.getProduct().isScorable()) {
             throw new IllegalStateException("FULL_ANALYSIS 僅支援 A 軌品項");
         }
-        scoringService.score(item.getProduct());
+        Product product = item.getProduct();
+        try {
+            scoringService.score(product);
+            product.setLastScoringStatus(LastScoringStatus.SCORED);
+            product.setLastScoringAttemptedAt(Instant.now());
+        } catch (InsufficientDataException error) {
+            product.setLastScoringStatus(LastScoringStatus.INSUFFICIENT_DATA);
+            product.setLastScoringAttemptedAt(Instant.now());
+        }
         item.setStatus(TaskItemStatus.SUCCEEDED);
         item.setErrorMessage(null);
         item.setDurationMs(elapsedMillis(started));

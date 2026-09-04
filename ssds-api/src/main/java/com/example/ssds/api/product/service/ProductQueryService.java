@@ -265,6 +265,8 @@ public class ProductQueryService {
                 row.trackType(),
                 row.sourcingStatus(),
                 row.status(),
+                row.lastScoringStatus(),
+                row.lastScoringAttemptedAt(),
                 row.hasRisk(),
                 row.updatedAt()
         );

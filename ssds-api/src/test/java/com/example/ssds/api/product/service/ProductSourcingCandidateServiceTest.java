@@ -74,6 +74,7 @@ class ProductSourcingCandidateServiceTest {
         assertEquals(5, captor.getValue().getTimeGapDays());
         assertEquals(SourcingStatus.URGENT, product.getSourcingStatus());
         assertEquals(keyword, captor.getValue().getKeyword());
+        assertEquals(keyword, captor.getValue().getDrivingKeyword());
     }
 
     @Test
@@ -116,9 +117,7 @@ class ProductSourcingCandidateServiceTest {
                 .product(product)
                 .keyword(TrendKeyword.builder().id(9L).keyword("舊關鍵字").build())
                 .category(category)
-                .heatStage(HeatStage.RISING)
-                .stageWeeks((short) 2)
-                .estimatedLifespanDays(56)
+                .drivingKeyword(TrendKeyword.builder().id(9L).keyword("舊關鍵字").build())
                 .leadTimeDays(20)
                 .timeGapDays(36)
                 .build();
@@ -134,11 +133,10 @@ class ProductSourcingCandidateServiceTest {
 
         service.synchronize(product);
 
-        assertEquals(newKeyword, existing.getKeyword());
-        assertNull(existing.getHeatStage());
-        assertNull(existing.getStageWeeks());
-        assertNull(existing.getEstimatedLifespanDays());
+        assertEquals(9L, existing.getKeyword().getId());
+        assertNull(existing.getDrivingKeyword());
         assertNull(existing.getTimeGapDays());
+        assertEquals(SourcingStatus.PENDING, product.getSourcingStatus());
         verify(candidateRepository).saveAndFlush(existing);
     }
 

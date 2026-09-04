@@ -1,6 +1,7 @@
 package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -26,6 +27,8 @@ public record ProductListItemResponse(
         TrackType trackType,
         SourcingStatus sourcingStatus,
         ProductStatus status,
+        LastScoringStatus lastScoringStatus,
+        Instant lastScoringAttemptedAt,
         boolean hasRisk,
         Instant updatedAt
 ) {
