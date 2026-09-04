@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -39,7 +40,7 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
            where c.product.sourcingStatus = :status
            order by c.timeGapDays asc nulls last
            """)
-    List<SourcingCandidate> findByProductSourcingStatus(SourcingStatus status);
+    List<SourcingCandidate> findByProductSourcingStatus(@Param("status") SourcingStatus status);
 
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
