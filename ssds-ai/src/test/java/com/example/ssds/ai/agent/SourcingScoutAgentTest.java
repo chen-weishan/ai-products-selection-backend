@@ -17,6 +17,34 @@ import org.springframework.web.client.ResourceAccessException;
 
 class SourcingScoutAgentTest {
     @Test
+    void globalLimitStopsBeforeBTrackBudgetAndHttpClient() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        GlobalAiRateLimiter rateLimiter = mock(GlobalAiRateLimiter.class);
+        doThrow(new AiRateLimitException("limited", null)).when(rateLimiter).acquire();
+        SourcingScoutAgent agent = new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                rateLimiter,
+                "fake/primary",
+                "",
+                0,
+                3,
+                millis -> {});
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
+
+        verify(rateLimiter).acquire();
+        verifyNoInteractions(budget, client);
+    }
+
+    @Test
     void connectorQuotaStopsWithoutRetryOrModelFallback() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);

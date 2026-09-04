@@ -23,6 +23,7 @@ public class SourcingScoutAgent {
     private final List<String> models;
     private final int retryMax;
     private final TrackBSourcingBudget budget;
+    private final GlobalAiRateLimiter rateLimiter;
     private final RetrySleeper retrySleeper;
     private final Cache<CacheKey, SourcingScoutResult> cache;
 
@@ -30,12 +31,12 @@ public class SourcingScoutAgent {
     public SourcingScoutAgent(
             MistralSourcingClient client, SourcingScoutPromptFactory promptFactory,
             SourcingScoutResponseParser parser, ObjectMapper mapper,
-            TrackBSourcingBudget budget,
+            TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
             @Value("${mistral.model-reasoning-primary:mistral-medium-3-5}") String primary,
             @Value("${mistral.model-reasoning-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbacks,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days-sourcing:3}") long cacheDays) {
-        this(client, promptFactory, parser, mapper, budget, primary, fallbacks,
+        this(client, promptFactory, parser, mapper, budget, rateLimiter, primary, fallbacks,
                 retryMax, cacheDays, Thread::sleep);
     }
 
@@ -44,7 +45,18 @@ public class SourcingScoutAgent {
             SourcingScoutResponseParser parser, ObjectMapper mapper,
             TrackBSourcingBudget budget, String primary, String fallbacks,
             int retryMax, long cacheDays, RetrySleeper retrySleeper) {
+        this(client, promptFactory, parser, mapper, budget, GlobalAiRateLimiter.unrestrictedForTests(),
+                primary, fallbacks, retryMax, cacheDays, retrySleeper);
+    }
+
+    SourcingScoutAgent(
+            MistralSourcingClient client, SourcingScoutPromptFactory promptFactory,
+            SourcingScoutResponseParser parser, ObjectMapper mapper,
+            TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
+            String primary, String fallbacks,
+            int retryMax, long cacheDays, RetrySleeper retrySleeper) {
         this.client = client; this.promptFactory = promptFactory; this.parser = parser; this.mapper = mapper; this.budget = budget;
+        this.rateLimiter = rateLimiter;
         this.models = parseModels(primary, fallbacks); this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
         this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays)).maximumSize(10_000).build();
@@ -67,6 +79,7 @@ public class SourcingScoutAgent {
                 String prompt = promptFactory.systemPrompt()
                         + (retryInstruction == null ? "" : "\n\n" + retryInstruction)
                         + "\n\nINPUT_JSON:\n" + promptFactory.userPrompt(input);
+                rateLimiter.acquire();
                 budget.acquire(requests > 0);
                 requests++;
                 ScoutClientResponse response = client.complete(model, prompt);
