@@ -106,6 +106,14 @@ public class Product extends BaseAuditEntity {
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
 
+    /** 軟刪除品項不得進入清單、排程或冪等重用範圍。 */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
+
     /**
      * 關聯關鍵字。join table 只有兩個外鍵、無自身屬性，故用 {@code @ManyToMany}。
      * 一個品項可綁多個關鍵字，熱度取合成值（§5.3.2）。
