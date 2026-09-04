@@ -1,6 +1,5 @@
 package com.example.ssds.infra.repository;
 
-import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import java.util.List;
@@ -50,6 +49,4 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      * 可為 null 也可能與 product_keyword 的現況不一致，不要拿來當即時關聯。
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
-
-    List<SourcingCandidate> findByHeatStage(HeatStage heatStage);
 }
