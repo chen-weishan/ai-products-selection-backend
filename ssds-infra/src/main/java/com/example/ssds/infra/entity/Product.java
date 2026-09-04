@@ -1,5 +1,6 @@
 package com.example.ssds.infra.entity;
 
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -7,11 +8,13 @@ import com.example.ssds.core.domain.TrackType;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
+import org.hibernate.annotations.SQLRestriction;
 
 /**
  * 品項主檔（規格書 §7.2 product）。
@@ -28,6 +31,7 @@ import lombok.*;
 @AllArgsConstructor
 @Entity
 @Table(name = "product")
+@SQLRestriction("deleted_at IS NULL")
 public class Product extends BaseAuditEntity {
 
     @Id
@@ -94,14 +98,31 @@ public class Product extends BaseAuditEntity {
     @Column(name = "logistics_condition", length = 100)
     private String logisticsCondition;
 
+    /** 品項適溫區間；未填時由評分引擎沿用品類預設（FR-17-2）。 */
+    @Column(name = "ideal_temp_min", precision = 4, scale = 1)
+    private BigDecimal idealTempMin;
+
+    @Column(name = "ideal_temp_max", precision = 4, scale = 1)
+    private BigDecimal idealTempMax;
+
     /** 效期天數，inventory_risk 扣分的判定輸入。 */
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
+
+    /** 最近一次已完成評分嘗試的技術結果；與採購狀態分開維護。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_scoring_status", length = 32)
+    private LastScoringStatus lastScoringStatus;
+
+    /** 最近一次已完成評分嘗試時間（UTC）。 */
+    @Column(name = "last_scoring_attempted_at")
+    private Instant lastScoringAttemptedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
 
+    /** FR-03-2 軟刪除；非 null 的品項由 SQLRestriction 自動排除。 */
     /** 軟刪除品項不得進入清單、排程或冪等重用範圍。 */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -157,6 +178,11 @@ public class Product extends BaseAuditEntity {
             return true;
         }
         return suggestedPrice.compareTo(cost) > 0;
+    }
+
+    public void softDelete(AppUser actor) {
+        this.deletedAt = Instant.now();
+        this.deletedBy = actor;
     }
 
     @PrePersist

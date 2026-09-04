@@ -13,6 +13,7 @@ springDependencyManagement = "1.1.7"
 springdoc = "3.1.0"
 shedlock = "7.8.0"
 commonsMath = "3.6.1"
+commonsCsv = "1.14.1"
 # Resilience4j 不在 Spring Boot BOM 管理範圍內
 resilience4j = "2.4.0"
 # Testcontainers 不在 Spring Boot BOM 管理範圍內（已實測 Boot 4.1.0 無法解析）
@@ -58,6 +59,7 @@ lombok       = { module = "org.projectlombok:lombok" }
 caffeine     = { module = "com.github.ben-manes.caffeine:caffeine" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
+commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commonsCsv" }
 
 # --- 需自行指定版本者 ---
 springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
