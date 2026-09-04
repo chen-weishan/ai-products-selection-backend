@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -30,5 +31,5 @@ public interface CampaignSnapshotRepository extends JpaRepository<CampaignSnapsh
            select s from CampaignSnapshot s
            where s.decision.score.sceneType = :sceneType
            """)
-    List<CampaignSnapshot> findBySceneType(SceneType sceneType);
+    List<CampaignSnapshot> findBySceneType(@Param("sceneType") SceneType sceneType);
 }

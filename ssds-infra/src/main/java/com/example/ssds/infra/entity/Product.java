@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
@@ -112,6 +113,7 @@ public class Product extends BaseAuditEntity {
     private AppUser createdBy;
 
     /** FR-03-2 軟刪除；非 null 的品項由 SQLRestriction 自動排除。 */
+    /** 軟刪除品項不得進入清單、排程或冪等重用範圍。 */
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
