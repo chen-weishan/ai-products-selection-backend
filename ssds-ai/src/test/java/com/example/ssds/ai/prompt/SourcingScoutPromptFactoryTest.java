@@ -13,7 +13,7 @@ class SourcingScoutPromptFactoryTest {
     void requestsOnePublicSearchAndDefinesNonBlankFallback() {
         String prompt = factory.systemPrompt();
         assertAll(
-                () -> assertEquals("scout-v5", SourcingScoutPromptFactory.PROMPT_VERSION),
+                () -> assertEquals("scout-v6", SourcingScoutPromptFactory.PROMPT_VERSION),
                 () -> assertTrue(prompt.contains("搜尋 Connector")),
                 () -> assertTrue(prompt.contains("完成一次有效搜尋後即停止")),
                 () -> assertFalse(prompt.contains("Google Trends")),
@@ -23,6 +23,7 @@ class SourcingScoutPromptFactoryTest {
                 () -> assertFalse(prompt.contains("露天")),
                 () -> assertFalse(prompt.contains("Instagram")),
                 () -> assertTrue(prompt.contains(SourcingScoutPromptFactory.INSUFFICIENT_REPORT)),
+                () -> assertTrue(prompt.contains("不得輸出 heatStage")),
                 () -> assertTrue(prompt.contains("不得留下任何空欄位")));
     }
 

@@ -11,7 +11,7 @@ public class WeightCalibrationController {
     private final WeightCalibrationService service;
     public WeightCalibrationController(WeightCalibrationService service){this.service=service;}
     @PostMapping("/{reportId}/interpretation")
-    public ApiResponse<WeightCalibrationResponse> interpret(@PathVariable Long reportId,
+    public ApiResponse<WeightCalibrationResponse> interpret(@PathVariable("reportId") Long reportId,
             @Valid @RequestBody WeightCalibrationInterpretRequest request){
         return ApiResponse.success(service.interpret(reportId,request));
     }

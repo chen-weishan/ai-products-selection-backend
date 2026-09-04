@@ -25,12 +25,12 @@ public class AiTaskController {
     }
 
     @GetMapping("/{taskId}")
-    public ApiResponse<AiTaskResponse> get(@PathVariable Long taskId) {
+    public ApiResponse<AiTaskResponse> get(@PathVariable("taskId") Long taskId) {
         return ApiResponse.success(service.get(taskId));
     }
 
     @GetMapping("/{taskId}/items")
-    public ApiResponse<List<AiTaskItemResponse>> items(@PathVariable Long taskId) {
+    public ApiResponse<List<AiTaskItemResponse>> items(@PathVariable("taskId") Long taskId) {
         return ApiResponse.success(service.items(taskId));
     }
 }

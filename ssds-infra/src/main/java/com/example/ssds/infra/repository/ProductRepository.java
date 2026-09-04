@@ -76,6 +76,20 @@ public interface ProductRepository
     @EntityGraph(attributePaths = {"category"})
     List<Product> findByTrackTypeAndSourcingStatus(TrackType trackType, SourcingStatus sourcingStatus);
 
+    /** FR-16-2：探索以（關鍵字、品類）冪等重用未刪除且尚未成案的 B 軌品項。 */
+    @EntityGraph(attributePaths = {"category", "keywords"})
+    @Query("""
+            select distinct p from Product p join p.keywords k
+            where k.id = :keywordId
+              and p.category.id = :categoryId
+              and p.trackType = com.example.ssds.core.domain.TrackType.B
+              and p.sourcingStatus <> com.example.ssds.core.domain.SourcingStatus.PROMOTED
+              and p.deletedAt is null
+            """)
+    Optional<Product> findReusableSourcingProduct(
+            @Param("keywordId") Long keywordId,
+            @Param("categoryId") Long categoryId);
+
     /** §5.3.1 判斷同品類樣本數是否達 10 筆，未達則退回全品類百分位並降低信心度。 */
     long countByCategoryIdAndTrackType(Long categoryId, TrackType trackType);
 

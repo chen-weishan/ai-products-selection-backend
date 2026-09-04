@@ -15,7 +15,8 @@ public class SceneClassificationController {
 
     /** S-06 情境判定橫幅讀取最新結果。 */
     @GetMapping("/latest")
-    public ApiResponse<SceneClassificationResponse> latest(@PathVariable Long productId) {
+    public ApiResponse<SceneClassificationResponse> latest(
+            @PathVariable("productId") Long productId) {
         return ApiResponse.success(service.latest(productId));
     }
 }

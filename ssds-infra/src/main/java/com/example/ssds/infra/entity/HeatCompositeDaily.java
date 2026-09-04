@@ -1,6 +1,7 @@
 package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.HeatStage;
+import com.example.ssds.core.domain.HeatValueSource;
 import com.example.ssds.infra.entity.id.HeatCompositeDailyId;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -46,6 +47,16 @@ public class HeatCompositeDaily {
 
     @Column(name = "estimated_lifespan_days")
     private Integer estimatedLifespanDays;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stage_source", nullable = false, length = 8)
+    @Builder.Default
+    private HeatValueSource stageSource = HeatValueSource.RULE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifespan_source", nullable = false, length = 8)
+    @Builder.Default
+    private HeatValueSource lifespanSource = HeatValueSource.RULE;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "applied_weights", nullable = false, columnDefinition = "jsonb")

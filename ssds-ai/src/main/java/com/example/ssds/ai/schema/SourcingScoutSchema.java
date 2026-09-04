@@ -18,10 +18,8 @@ public final class SourcingScoutSchema {
                 .put("pattern", ".*\\S.*");
         array(properties, "opportunitySignals");
         array(properties, "riskSignals");
-        properties.putObject("heatStage").put("type", "string")
-                .putArray("enum").add("RISING").add("PLATEAU").add("DECLINING");
         root.putArray("required").add("report").add("opportunitySignals")
-                .add("riskSignals").add("heatStage");
+                .add("riskSignals");
         return root;
     }
 

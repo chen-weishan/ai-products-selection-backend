@@ -8,6 +8,7 @@ import com.example.ssds.ai.agent.TrendInterpreterAgent;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
+import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
@@ -27,6 +28,8 @@ class TrendInterpretationServiceTest {
         TrendInterpretationRepository interpretationRepository =
                 mock(TrendInterpretationRepository.class);
         TrendInterpreterAgent agent = mock(TrendInterpreterAgent.class);
+        SourcingTimeGapRecalculationService timeGapService =
+                mock(SourcingTimeGapRecalculationService.class);
         TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
         LocalDate latestDate = LocalDate.of(2026, 8, 26);
         List<HeatCompositeDaily> composites = new ArrayList<>();
@@ -83,7 +86,8 @@ class TrendInterpretationServiceTest {
                 interpretationRepository,
                 new PromptSanitizer(),
                 agent,
-                new ObjectMapper().findAndRegisterModules());
+                new ObjectMapper().findAndRegisterModules(),
+                timeGapService);
 
         var response = service.interpret(31L, false);
 
@@ -103,6 +107,8 @@ class TrendInterpretationServiceTest {
         assertTrue(input.allowedOutputs().contains(
                 new TrendInterpreterInput.AllowedOutput(HeatStage.RISING, 4, 56)));
         assertEquals(56, latest.getEstimatedLifespanDays());
+        assertEquals(HeatValueSource.AGENT, latest.getStageSource());
+        assertEquals(HeatValueSource.AGENT, latest.getLifespanSource());
 
         ArgumentCaptor<TrendInterpretation> historyCaptor =
                 ArgumentCaptor.forClass(TrendInterpretation.class);
@@ -110,6 +116,7 @@ class TrendInterpretationServiceTest {
         assertEquals("trend-v1", historyCaptor.getValue().getPromptVersion());
         assertTrue(historyCaptor.getValue().getInputSnapshot().contains("compositeSeries"));
         assertEquals("MODEL_NUMERIC", response.modelAlias());
+        verify(timeGapService).recalculateAffectedByKeyword(31L);
     }
 
     private static HeatReading reading(

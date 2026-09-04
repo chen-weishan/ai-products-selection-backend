@@ -17,7 +17,7 @@ public class SourcingScoutController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(service.start(request)));
     }
     @GetMapping("/candidates/{productId}/report")
-    public ApiResponse<SourcingScoutResponse> latest(@PathVariable Long productId) {
+    public ApiResponse<SourcingScoutResponse> latest(@PathVariable("productId") Long productId) {
         return ApiResponse.success(service.latest(productId));
     }
 }

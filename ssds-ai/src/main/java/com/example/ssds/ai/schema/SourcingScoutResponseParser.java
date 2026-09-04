@@ -1,7 +1,6 @@
 package com.example.ssds.ai.schema;
 
 import com.example.ssds.ai.model.SourcingScoutOutput;
-import com.example.ssds.core.domain.HeatStage;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import java.io.IOException;
@@ -11,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SourcingScoutResponseParser {
     private static final Set<String> FIELDS = Set.of(
-            "report", "opportunitySignals", "riskSignals", "heatStage");
+            "report", "opportunitySignals", "riskSignals");
     private final ObjectMapper mapper;
     public SourcingScoutResponseParser(ObjectMapper mapper) { this.mapper = mapper; }
 
@@ -25,12 +24,7 @@ public class SourcingScoutResponseParser {
             String report = report(root);
             List<String> opportunities = strings(root, "opportunitySignals");
             List<String> risks = strings(root, "riskSignals");
-            HeatStage stage;
-            try { stage = HeatStage.valueOf(text(root, "heatStage")); }
-            catch (IllegalArgumentException exception) {
-                throw new AiSchemaValidationException("未知 heatStage 列舉", exception);
-            }
-            return new SourcingScoutOutput(report, opportunities, risks, stage);
+            return new SourcingScoutOutput(report, opportunities, risks);
         } catch (AiSchemaValidationException exception) { throw exception; }
         catch (JsonProcessingException | IllegalArgumentException exception) {
             throw invalidSchema(raw, exception);

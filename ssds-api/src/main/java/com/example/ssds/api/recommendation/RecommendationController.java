@@ -14,7 +14,8 @@ public class RecommendationController {
     }
 
     @GetMapping("/latest")
-    public ApiResponse<RecommendationResponse> latest(@PathVariable Long productId) {
+    public ApiResponse<RecommendationResponse> latest(
+            @PathVariable("productId") Long productId) {
         return ApiResponse.success(service.latest(productId));
     }
 }

@@ -5,6 +5,7 @@ import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.*;
 import com.example.ssds.api.common.error.*;
 import com.example.ssds.api.trend.dto.TrendInterpretationResponse;
+import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
@@ -32,6 +33,7 @@ public class TrendInterpretationService {
     private final PromptSanitizer promptSanitizer;
     private final TrendInterpreterAgent agent;
     private final ObjectMapper objectMapper;
+    private final SourcingTimeGapRecalculationService sourcingTimeGapRecalculationService;
 
     public TrendInterpretationService(
             TrendKeywordRepository keywordRepository,
@@ -40,7 +42,8 @@ public class TrendInterpretationService {
             TrendInterpretationRepository interpretationRepository,
             PromptSanitizer promptSanitizer,
             TrendInterpreterAgent agent,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            SourcingTimeGapRecalculationService sourcingTimeGapRecalculationService) {
         this.keywordRepository = keywordRepository;
         this.compositeRepository = compositeRepository;
         this.readingRepository = readingRepository;
@@ -48,6 +51,7 @@ public class TrendInterpretationService {
         this.promptSanitizer = promptSanitizer;
         this.agent = agent;
         this.objectMapper = objectMapper;
+        this.sourcingTimeGapRecalculationService = sourcingTimeGapRecalculationService;
     }
 
     @Transactional
@@ -70,6 +74,7 @@ public class TrendInterpretationService {
         Instant generatedAt = Instant.now();
         applyOutput(latest, result.output());
         persistHistory(keyword, input, result, generatedAt);
+        sourcingTimeGapRecalculationService.recalculateAffectedByKeyword(keywordId);
         log.info(
                 "TrendInterpreter completed: keywordId={}, promptVersion={}, modelAlias=MODEL_NUMERIC, fallback={}, cacheHit={}",
                 keywordId, result.promptVersion(), result.fallbackApplied(), result.cacheHit());
@@ -205,6 +210,8 @@ public class TrendInterpretationService {
         latest.setStage(output.stage());
         latest.setStageWeeks((short) output.stageWeeks());
         latest.setEstimatedLifespanDays(output.estimatedLifespanDays());
+        latest.setStageSource(HeatValueSource.AGENT);
+        latest.setLifespanSource(HeatValueSource.AGENT);
         compositeRepository.save(latest);
     }
 

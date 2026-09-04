@@ -1,12 +1,12 @@
 package com.example.ssds.infra.repository;
 
-import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -40,14 +40,14 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
            where c.product.sourcingStatus = :status
            order by c.timeGapDays asc nulls last
            """)
-    List<SourcingCandidate> findByProductSourcingStatus(SourcingStatus status);
+    List<SourcingCandidate> findByProductSourcingStatus(@Param("status") SourcingStatus status);
 
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
 
-    @EntityGraph(attributePaths = {"product", "product.category", "keyword", "category", "trendInterpretation"})
+    @EntityGraph(attributePaths = {"product", "product.category", "product.keywords", "keyword", "category", "drivingKeyword", "trendInterpretation"})
     @Query("select c from SourcingCandidate c where c.product.id = :productId")
-    Optional<SourcingCandidate> findDetailedByProductId(Long productId);
+    Optional<SourcingCandidate> findDetailedByProductId(@Param("productId") Long productId);
 
     /**
      * 依來源關鍵字查。keyword_id 是「當初從哪個關鍵字挖出來」的歷史紀錄，
@@ -55,5 +55,29 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
 
-    List<SourcingCandidate> findByHeatStage(HeatStage heatStage);
+    /** §5.8 每日重算範圍；REJECTED 是終態，PROMOTED 已轉 A 軌。 */
+    @EntityGraph(attributePaths = {"product", "product.keywords", "drivingKeyword"})
+    @Query("""
+           select distinct c from SourcingCandidate c
+           where c.product.trackType = com.example.ssds.core.domain.TrackType.B
+             and c.product.sourcingStatus not in (
+                 com.example.ssds.core.domain.SourcingStatus.PROMOTED,
+                 com.example.ssds.core.domain.SourcingStatus.REJECTED)
+             and c.product.deletedAt is null
+           """)
+    List<SourcingCandidate> findEligibleForTimeGapRecalculation();
+
+    /** Agent 5 覆寫某關鍵字後，重算所有與該關鍵字關聯的可變動 B 軌候選。 */
+    @EntityGraph(attributePaths = {"product", "product.keywords", "drivingKeyword"})
+    @Query("""
+           select distinct c from SourcingCandidate c join c.product.keywords k
+           where k.id = :keywordId
+             and c.product.trackType = com.example.ssds.core.domain.TrackType.B
+             and c.product.sourcingStatus not in (
+                 com.example.ssds.core.domain.SourcingStatus.PROMOTED,
+                 com.example.ssds.core.domain.SourcingStatus.REJECTED)
+             and c.product.deletedAt is null
+           """)
+    List<SourcingCandidate> findEligibleForTimeGapRecalculationByKeywordId(
+            @Param("keywordId") Long keywordId);
 }

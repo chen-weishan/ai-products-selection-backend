@@ -14,7 +14,8 @@ public class ProductInsightController {
     }
 
     @GetMapping("/latest")
-    public ApiResponse<ProductInsightResponse> latest(@PathVariable Long productId) {
+    public ApiResponse<ProductInsightResponse> latest(
+            @PathVariable("productId") Long productId) {
         return ApiResponse.success(service.latest(productId));
     }
 }

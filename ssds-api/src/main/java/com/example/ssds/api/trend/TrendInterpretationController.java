@@ -17,8 +17,8 @@ public class TrendInterpretationController {
 
     @PostMapping
     public ApiResponse<TrendInterpretationResponse> interpret(
-            @PathVariable Long keywordId,
-            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+            @PathVariable("keywordId") Long keywordId,
+            @RequestParam(name = "forceRefresh", defaultValue = "false") boolean forceRefresh) {
         AiBudgetExecutionContext.begin(AiTaskType.BudgetPool.RETRY);
         try {
             return ApiResponse.success(service.interpret(keywordId, forceRefresh));
@@ -28,7 +28,8 @@ public class TrendInterpretationController {
     }
 
     @GetMapping("/latest")
-    public ApiResponse<TrendInterpretationResponse> latest(@PathVariable Long keywordId) {
+    public ApiResponse<TrendInterpretationResponse> latest(
+            @PathVariable("keywordId") Long keywordId) {
         return ApiResponse.success(service.latest(keywordId));
     }
 }

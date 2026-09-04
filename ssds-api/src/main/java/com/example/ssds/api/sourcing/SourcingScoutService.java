@@ -14,7 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.LinkedHashSet;
-import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,18 +24,18 @@ public class SourcingScoutService {
     private static final Logger log = LoggerFactory.getLogger(SourcingScoutService.class);
     private final CategoryRepository categories; private final CategoryLeadTimeRepository leadTimes;
     private final TrendKeywordRepository keywords; private final ProductRepository products;
-    private final SourcingCandidateRepository candidates; private final TrendInterpretationRepository trends;
+    private final SourcingCandidateRepository candidates;
     private final HeatCompositeDailyRepository heatComposites;
     private final AiTaskService tasks; private final PromptSanitizer sanitizer;
     private final SourcingScoutAgent agent; private final ObjectMapper mapper;
 
     public SourcingScoutService(CategoryRepository categories, CategoryLeadTimeRepository leadTimes,
             TrendKeywordRepository keywords, ProductRepository products, SourcingCandidateRepository candidates,
-            TrendInterpretationRepository trends, HeatCompositeDailyRepository heatComposites,
+            HeatCompositeDailyRepository heatComposites,
             AiTaskService tasks, PromptSanitizer sanitizer,
             SourcingScoutAgent agent, ObjectMapper mapper) {
         this.categories=categories; this.leadTimes=leadTimes; this.keywords=keywords; this.products=products;
-        this.candidates=candidates; this.trends=trends; this.heatComposites=heatComposites;
+        this.candidates=candidates; this.heatComposites=heatComposites;
         this.tasks=tasks; this.sanitizer=sanitizer;
         this.agent=agent; this.mapper=mapper;
     }
@@ -47,18 +47,23 @@ public class SourcingScoutService {
         CategoryLeadTime leadTime = leadTimes.findById(category.getId()).orElseThrow(() ->
                 new BusinessException(ErrorCode.VALIDATION_FAILED, "此品類尚未設定尋源前置天數"));
         String normalized = request.keyword().strip();
-        TrendKeyword keyword = keywords.findByKeyword(normalized).orElseGet(() ->
-                keywords.save(TrendKeyword.builder().keyword(normalized).build()));
-        SourcingCandidate candidate = candidates.findByKeywordId(keyword.getId()).stream()
-                .filter(value -> value.getCategory() != null && value.getCategory().getId().equals(category.getId()))
-                .findFirst().orElseGet(() -> createCandidate(normalized, category, leadTime, keyword));
+        TrendKeyword keyword = keywords.findByKeyword(normalized).orElseGet(() -> keywords.save(
+                TrendKeyword.builder().keyword(normalized).enabled(true).build()));
+        Product product = products.findReusableSourcingProduct(keyword.getId(), category.getId())
+                .orElseGet(() -> createProduct(normalized, category, keyword));
+        SourcingCandidate candidate = candidates.findByProductId(product.getId())
+                .orElseGet(() -> createCandidate(product, category, leadTime, keyword));
         return tasks.createSourcingScout(candidate.getProduct(), request.forceRefresh());
     }
 
-    private SourcingCandidate createCandidate(String name, Category category, CategoryLeadTime leadTime, TrendKeyword keyword) {
-        Product product = products.save(Product.builder().name(name).category(category).trackType(TrackType.B)
+    private Product createProduct(String name, Category category, TrendKeyword keyword) {
+        return products.save(Product.builder().name(name).category(category).trackType(TrackType.B)
                 .status(ProductStatus.DRAFT).sourcingStatus(SourcingStatus.PENDING)
                 .keywords(new LinkedHashSet<>(java.util.Set.of(keyword))).build());
+    }
+
+    private SourcingCandidate createCandidate(
+            Product product, Category category, CategoryLeadTime leadTime, TrendKeyword keyword) {
         return candidates.save(SourcingCandidate.builder().product(product).keyword(keyword).category(category)
                 .leadTimeDays(leadTime.getLeadTimeDays()).build());
     }
@@ -73,41 +78,23 @@ public class SourcingScoutService {
         candidate.setScoutReport(result.output().report());
         candidate.setOpportunitySignals(write(result.output().opportunitySignals()));
         candidate.setRiskSignals(write(result.output().riskSignals()));
-        Long keywordId = candidate.getKeyword().getId();
-        heatComposites.findFirstByKeywordIdOrderByStatDateDesc(keywordId).ifPresentOrElse(composite -> {
-            candidate.setHeatStage(composite.getStage());
-            candidate.setStageWeeks(composite.getStageWeeks());
-            candidate.setEstimatedLifespanDays(composite.getEstimatedLifespanDays() == null
-                    ? lifespan(composite.getStage(), composite.getStageWeeks())
-                    : composite.getEstimatedLifespanDays());
-        }, () -> {
-            candidate.setHeatStage(result.output().heatStage()); candidate.setStageWeeks((short)1);
-            candidate.setEstimatedLifespanDays(lifespan(result.output().heatStage(), 1));
-        });
-        candidate.setTrendInterpretation(trends.findByKeywordIdAndCurrentTrue(keywordId)
-                .filter(trend -> matches(candidate, trend))
-                .orElse(null));
         candidate.setModel(result.model()); candidate.setPromptVersion(result.promptVersion());
-        candidate.setReportGeneratedAt(now); candidate.setScoutedAt(now); candidate.recalculateTimeGap();
-        if (candidate.getProduct().getSourcingStatus() == SourcingStatus.PENDING
-                && candidate.getTimeGapDays() != null && candidate.getTimeGapDays() > SourcingCandidate.FEASIBLE_GAP_DAYS)
-            candidate.getProduct().setSourcingStatus(SourcingStatus.SOURCING);
+        candidate.setReportGeneratedAt(now); candidate.setScoutedAt(now);
         candidates.save(candidate);
         log.info("SourcingScout completed: productId={}, promptVersion={}, modelAlias=MODEL_REASONING, cacheHit={}",
                 productId, result.promptVersion(), result.cacheHit());
-        return SourcingScoutResponse.from(candidate, mapper);
+        return response(candidate);
     }
-    @Transactional(readOnly=true) public SourcingScoutResponse latest(Long productId) { return SourcingScoutResponse.from(load(productId), mapper); }
+    @Transactional(readOnly=true) public SourcingScoutResponse latest(Long productId) { return response(load(productId)); }
     private SourcingCandidate load(Long id) { return candidates.findDetailedByProductId(id).orElseThrow(() ->
             new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的尋源候選")); }
     private String write(Object value) { try { return mapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new IllegalStateException("無法序列化尋源訊號", e); } }
-    private static boolean matches(SourcingCandidate candidate, TrendInterpretation trend) {
-        return candidate.getHeatStage() == trend.getHeatStage()
-                && Objects.equals(candidate.getStageWeeks(), trend.getStageWeeks())
-                && Objects.equals(candidate.getEstimatedLifespanDays(), trend.getEstimatedLifespanDays());
+    private SourcingScoutResponse response(SourcingCandidate candidate) {
+        Optional<HeatCompositeDaily> composite = candidate.getDrivingKeyword() == null
+                ? Optional.empty()
+                : heatComposites.findFirstByKeywordIdOrderByStatDateDesc(
+                        candidate.getDrivingKeyword().getId());
+        return SourcingScoutResponse.from(candidate, composite.orElse(null), mapper);
     }
-    private static int lifespan(HeatStage stage, int stageWeeks) { return switch(stage) {
-        case RISING -> 56; case PLATEAU -> stageWeeks <= 2 ? 42 : 35; case DECLINING -> 17;
-    }; }
 }

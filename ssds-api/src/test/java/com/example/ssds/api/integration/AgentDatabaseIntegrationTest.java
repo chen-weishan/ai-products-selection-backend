@@ -36,6 +36,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,8 +123,8 @@ class AgentDatabaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Agent 6: latest heat_composite_daily is authoritative over history and model output")
-    void agent6UsesLatestCompositeWithoutConflictingTrendOverride() {
+    @DisplayName("Agent 6: only stores its report and cannot overwrite time-gap authority fields")
+    void agent6DoesNotOverwriteDrivingKeywordOrTimeGap() {
         Category category = categories.save(Category.builder().name("測試品類").build());
         TrendKeyword keyword = keywords.save(TrendKeyword.builder().keyword("DB整合測試關鍵字").build());
         Product product = products.save(Product.builder()
@@ -131,6 +133,7 @@ class AgentDatabaseIntegrationTest {
                 .trackType(TrackType.B)
                 .status(ProductStatus.DRAFT)
                 .sourcingStatus(SourcingStatus.PENDING)
+                .keywords(new LinkedHashSet<>(Set.of(keyword)))
                 .build());
 
         heatComposites.save(HeatCompositeDaily.builder()
@@ -169,14 +172,16 @@ class AgentDatabaseIntegrationTest {
                 .keyword(keyword)
                 .category(category)
                 .leadTimeDays(20)
+                .drivingKeyword(keyword)
+                .timeGapDays(15)
                 .trendInterpretation(conflictingTrend)
                 .build());
         entityManager.clear();
 
         when(sourcingScoutAgent.scout(any(), eq(false))).thenReturn(new SourcingScoutResult(
                 new SourcingScoutOutput(
-                        "探索報告內容", List.of("機會訊號"), List.of("風險訊號"), HeatStage.DECLINING),
-                false, "scout-test-model", "scout-v5", 10, 5, 1));
+                        "探索報告內容必須至少二十個字元以符合驗證", List.of("機會訊號"), List.of("風險訊號")),
+                false, "scout-test-model", "scout-v6", 10, 5, 1));
 
         sourcingScoutService.scout(product.getId(), false);
         entityManager.flush();
@@ -184,11 +189,9 @@ class AgentDatabaseIntegrationTest {
 
         SourcingCandidate reloaded = candidates.findDetailedByProductId(product.getId()).orElseThrow();
         assertAll(
-                () -> assertEquals(HeatStage.PLATEAU, reloaded.getHeatStage()),
-                () -> assertEquals((short) 4, reloaded.getStageWeeks()),
-                () -> assertEquals(35, reloaded.getEstimatedLifespanDays()),
+                () -> assertEquals(keyword.getId(), reloaded.getDrivingKeyword().getId()),
                 () -> assertEquals(15, reloaded.getTimeGapDays()),
-                () -> assertEquals(SourcingStatus.SOURCING, reloaded.getProduct().getSourcingStatus()),
-                () -> assertNull(reloaded.getTrendInterpretation()));
+                () -> assertEquals(SourcingStatus.PENDING, reloaded.getProduct().getSourcingStatus()),
+                () -> assertEquals(conflictingTrend.getId(), reloaded.getTrendInterpretation().getId()));
     }
 }

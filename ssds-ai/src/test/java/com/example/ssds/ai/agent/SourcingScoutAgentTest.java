@@ -58,8 +58,7 @@ class SourcingScoutAgentTest {
                         """
                         {"report":"Google Trends 可驗證頁面顯示此關鍵字目前熱度大致持平，仍需持續觀察後續變化。",
                          "opportunitySignals":["熱度維持穩定"],
-                         "riskSignals":["單一來源資訊有限"],
-                         "heatStage":"PLATEAU"}
+                         "riskSignals":["單一來源資訊有限"]}
                         """,
                 "fake/third", 100, 30, true, true));
         SourcingScoutAgent agent = new SourcingScoutAgent(

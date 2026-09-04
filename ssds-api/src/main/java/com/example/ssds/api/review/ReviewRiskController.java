@@ -14,7 +14,8 @@ public class ReviewRiskController {
     }
 
     @GetMapping("/latest")
-    public ApiResponse<ReviewRiskResponse> latest(@PathVariable Long productId) {
+    public ApiResponse<ReviewRiskResponse> latest(
+            @PathVariable("productId") Long productId) {
         return ApiResponse.success(service.latest(productId));
     }
 }

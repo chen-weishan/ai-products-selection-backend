@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SourcingScoutPromptFactory {
-    public static final String PROMPT_VERSION = "scout-v5";
+    public static final String PROMPT_VERSION = "scout-v6";
     public static final String INSUFFICIENT_REPORT =
             "資料不足：本次已執行網路搜尋，但可驗證來源不足，無法形成可靠的尋源探索結論。";
     private final ObjectMapper objectMapper;
@@ -27,18 +27,18 @@ public class SourcingScoutPromptFactory {
 
                 輸出規則：
                 - 只能輸出一個合法 JSON object，不得輸出 Markdown、前言、結尾或 JSON 外文字。
-                - 根物件必須且只能包含 report、opportunitySignals、riskSignals、heatStage。
+                - 根物件必須且只能包含 report、opportunitySignals、riskSignals。
                 - report 是以本次搜尋資料形成的繁體中文探索報告，長度須為 20 至 3000 個字元，不得為空或只有空白。
                 - report 必須說明實際取得的來源類型、市場觀察與資料限制。
                 - opportunitySignals、riskSignals 各為 1 至 5 條非空字串。
-                - heatStage 只能是 RISING、PLATEAU、DECLINING。
-                - 輸出前須確認 report、opportunitySignals、riskSignals、heatStage 全部存在且非空；不要輸出檢查過程。
+                - 不得輸出 heatStage、stageWeeks、estimatedLifespanDays 或 timeGapDays；這些值由每日規則式作業負責。
+                - 輸出前須確認 report、opportunitySignals、riskSignals 全部存在且非空；不要輸出檢查過程。
 
                 限制條款：
                 - 只能根據 INPUT_JSON 與本次搜尋結果作答，不得依模型記憶補充事實。
                 - 若本次搜尋結果不足以形成可驗證結論，report 必須固定輸出：
                   「資料不足：本次已執行網路搜尋，但可驗證來源不足，無法形成可靠的尋源探索結論。」
-                  此時 opportunitySignals 與 riskSignals 均輸出 ["資料不足"]，heatStage 輸出 PLATEAU；不得留下任何空欄位。
+                  此時 opportunitySignals 與 riskSignals 均輸出 ["資料不足"]；不得留下任何空欄位。
                 - 不得產生 INPUT_JSON 或本次搜尋內容中不存在的具體數字。
                 - 不得對特定品牌或供應商作出評價性斷言。
                 """;
@@ -55,7 +55,7 @@ public class SourcingScoutPromptFactory {
                     修正要求：上一次缺少搜尋 Connector 執行證據。請先完成一次有效搜尋，再產生完整 JSON。
                     """;
             default -> """
-                    修正要求：上一次輸出未通過 JSON Schema。請重新產生包含全部四個欄位的完整 JSON，不得輸出額外文字。
+                    修正要求：上一次輸出未通過 JSON Schema。請重新產生包含全部三個欄位的完整 JSON，不得輸出額外文字。
                     """;
         };
     }

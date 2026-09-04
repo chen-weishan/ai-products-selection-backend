@@ -1,6 +1,5 @@
 package com.example.ssds.infra.entity;
 
-import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.SourcingStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -57,17 +56,13 @@ public class SourcingCandidate extends BaseAuditEntity {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "heat_stage", length = 16)
-    private HeatStage heatStage;
-
-    /** 停留於目前階段的週數。高原期第 3 週起壽命推估由 42 天降為 35 天。 */
-    @Column(name = "stage_weeks")
-    private Short stageWeeks;
-
-    /** §5.8 初始經驗值：上升期 56、高原期 1–2 週 42、高原期 3 週以上 35、衰退期 17。 */
-    @Column(name = "estimated_lifespan_days")
-    private Integer estimatedLifespanDays;
+    /**
+     * §5.3.3 多關鍵字取最大 trend_raw 後的生效關鍵字。
+     * 階段與壽命不在候選表留快照，皆即時讀取這個關鍵字的每日合成列。
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "driving_keyword_id")
+    private TrendKeyword drivingKeyword;
 
     /** 預設取 category_lead_time，採購可覆寫（FR-16-2）。 */
     @Column(name = "lead_time_days", nullable = false)
@@ -115,13 +110,16 @@ public class SourcingCandidate extends BaseAuditEntity {
      * 依 §5.8 重算時效落差，並在落差為負時強制標記淘汰（AC-16-4）。
      * 落差 0～14 天標記為需加速尋源。
      *
-     * <p>狀態寫在 {@code product.sourcingStatus} 上：v3.0 §7.2.9 明訂狀態
-     * 不重複於本表。壽命尚未推估（estimatedLifespanDays 為 null）時
-     * 落差算不出來，維持 null 而不是填 0——0 的意思是「剛好來得及」。
+     * <p>狀態寫在 {@code product.sourcingStatus} 上：v3.0.1 §7.2.9 明訂狀態
+     * 不重複於本表。壽命尚未產生時落差維持 null，而不是填 0。
      */
-    public void recalculateTimeGap() {
+    public void recalculateTimeGap(Integer estimatedLifespanDays) {
         if (estimatedLifespanDays == null) {
             this.timeGapDays = null;
+            if (product != null && product.getSourcingStatus() != SourcingStatus.REJECTED
+                    && product.getSourcingStatus() != SourcingStatus.PROMOTED) {
+                product.setSourcingStatus(SourcingStatus.PENDING);
+            }
             return;
         }
         this.timeGapDays = estimatedLifespanDays - leadTimeDays;
@@ -130,15 +128,10 @@ public class SourcingCandidate extends BaseAuditEntity {
         }
         if (timeGapDays < 0) {
             product.setSourcingStatus(SourcingStatus.REJECTED);
-        } else if (timeGapDays <= FEASIBLE_GAP_DAYS
-                && product.getSourcingStatus() == SourcingStatus.PENDING) {
+        } else if (timeGapDays <= FEASIBLE_GAP_DAYS) {
             product.setSourcingStatus(SourcingStatus.URGENT);
+        } else {
+            product.setSourcingStatus(SourcingStatus.SOURCING);
         }
-    }
-
-    @PrePersist
-    @PreUpdate
-    void syncTimeGap() {
-        recalculateTimeGap();
     }
 }
