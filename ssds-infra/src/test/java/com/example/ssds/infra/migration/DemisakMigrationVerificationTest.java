@@ -90,6 +90,53 @@ class DemisakMigrationVerificationTest {
                 """).size(), "V903 的尋源候選未全部轉為 V22 的權威資料流");
     }
 
+    @Test
+    @DisplayName("Demisak：既有 V903 假資料可 out-of-order 套用 V22")
+    void v22MigratesExistingV903SeedOutOfOrder() {
+        Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/migration")
+                .target("21")
+                .load()
+                .migrate();
+
+        // 模擬共用開發庫：正式 migration 目前只到 V21，但 V899～V907
+        // 的 dev-only 假資料已經存在。
+        Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/dev")
+                .target("907")
+                .outOfOrder(true)
+                .validateOnMigrate(false)
+                .load()
+                .migrate();
+
+        Flyway v22 = Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/migration")
+                .target("22")
+                .outOfOrder(true)
+                .validateOnMigrate(false)
+                .load();
+
+        assertTrue(v22.migrate().success, "V22 out-of-order 套用失敗");
+        assertEquals(List.of("22"), queryStrings("""
+                SELECT version
+                FROM flyway_schema_history
+                WHERE version = '22' AND success
+                """));
+        assertEquals(List.of("driving_keyword_id", "time_gap_days"), queryStrings("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'sourcing_candidate'
+                  AND column_name IN (
+                      'driving_keyword_id', 'time_gap_days',
+                      'heat_stage', 'stage_weeks', 'estimated_lifespan_days')
+                ORDER BY column_name
+                """));
+    }
+
     private List<String> queryStrings(String sql) {
         List<String> rows = new ArrayList<>();
         try (Connection conn = DriverManager.getConnection(

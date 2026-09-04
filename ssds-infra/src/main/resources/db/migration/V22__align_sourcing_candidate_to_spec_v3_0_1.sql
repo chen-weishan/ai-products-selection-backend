@@ -20,6 +20,11 @@ ALTER TABLE sourcing_candidate
 COMMENT ON COLUMN sourcing_candidate.driving_keyword_id IS
     '§5.3.3 多關鍵字 trend_raw 取最大值後的生效關鍵字；由 §5.8 每日規則式重算更新';
 
+-- 下方重算改以 heat_composite_daily 的壽命為準，已不再保證等於即將移除的
+-- sourcing_candidate.estimated_lifespan_days；必須在更新資料前先拆除舊約束。
+ALTER TABLE sourcing_candidate
+    DROP CONSTRAINT IF EXISTS ck_sourcing_gap;
+
 -- 既有候選不可留下「有落差但不知道由哪支曲線算出」的半套狀態。
 -- 依與每日作業相同的規則做一次部署時重算：至少七筆、取最新列、
 -- trend_raw = 0.7*slope_7d + 0.3*slope_30d，並以 keyword_id 打破平手。
@@ -69,10 +74,6 @@ WHERE sc.product_id = p.id
   AND p.track_type = 'B'
   AND p.sourcing_status NOT IN ('PROMOTED', 'REJECTED')
   AND p.deleted_at IS NULL;
-
--- 舊約束直接引用 estimated_lifespan_days，必須先移除。
-ALTER TABLE sourcing_candidate
-    DROP CONSTRAINT IF EXISTS ck_sourcing_gap;
 
 -- v3.0.1 明文移除探索當下的熱度快照；唯一權威來源為逐日合成表。
 ALTER TABLE sourcing_candidate
