@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
@@ -100,6 +101,14 @@ public class Product extends BaseAuditEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
+
+    /** 軟刪除品項不得進入清單、排程或冪等重用範圍。 */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
 
     /**
      * 關聯關鍵字。join table 只有兩個外鍵、無自身屬性，故用 {@code @ManyToMany}。
