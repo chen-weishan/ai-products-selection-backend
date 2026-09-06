@@ -162,7 +162,9 @@ public class WeightVersionCommandService {
 
             // 先檢查單值域再檢查加總：負權重可以被另一個超過 1 的權重抵銷掉，
             // 只驗加總會讓 (-0.5, 1.5) 這種組合通過，最後撞 DB 的
-            // ck_weight_profile（weight >= 0 AND weight <= 1）變成 500。
+            // weight_profile_weight_check（weight >= 0 AND weight <= 1）變成 500。
+            // 約束名是 V1 的 inline CHECK 由 PostgreSQL 自動命名，
+            // 與 ck_weight_profile_factor_code／ck_weight_profile_scene 是不同的三條。
             for (Map.Entry<FactorCode, BigDecimal> entry : group.weights().entrySet()) {
                 BigDecimal weight = entry.getValue();
                 if (weight.compareTo(BigDecimal.ZERO) < 0 || weight.compareTo(BigDecimal.ONE) > 0) {
