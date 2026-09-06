@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,9 @@ public class WeightVersionCommandService {
      */
     private static final Long TEMP_APPROVER_ID = 2L;
 
+    /** 分數值域上限（§5.5 加分小計上限 100；DB 端為 ck_grade_threshold_range）。 */
+    private static final BigDecimal GRADE_MAX = new BigDecimal("100");
+
     @Transactional
     public WeightVersionDetailResponse create(CreateWeightVersionRequest request) {
 
@@ -58,25 +62,7 @@ public class WeightVersionCommandService {
         WeightVersion newVersion = new WeightVersion();
         WeightVersion version = applyRequest(newVersion, request);
 
-        List<GradeThreshold> thresholds = new ArrayList<>();
-
-        for (SceneGroupRequest group : request.sceneGroups()) {
-            for (Map.Entry<FactorCode, BigDecimal> entry : group.weights().entrySet()) {
-                WeightProfile profile = new WeightProfile();
-                profile.setVersion(version);
-                profile.setSceneType(group.sceneType());
-                profile.setFactorCode(entry.getKey());
-                profile.setWeight(entry.getValue());
-                version.getProfiles().add(profile);
-            }
-
-            GradeThreshold threshold = new GradeThreshold();
-            threshold.setVersion(version);
-            threshold.setSceneType(group.sceneType());
-            threshold.setGradeAMin(group.gradeAMin());
-            threshold.setGradeBMin(group.gradeBMin());
-            thresholds.add(threshold);
-        }
+        List<GradeThreshold> thresholds = applySceneGroups(version, request);
 
         weightVersionRepository.save(version);
         gradeThresholdRepository.saveAll(thresholds);
@@ -100,28 +86,7 @@ public class WeightVersionCommandService {
         version.getProfiles().clear();
         weightVersionRepository.flush(); // 先把 DELETE 送出，否則下面的 INSERT 會撞 uk_weight_profile
 
-        List<GradeThreshold> thresholds = new ArrayList<>();
-
-        for (SceneGroupRequest group : request.sceneGroups()) {
-            List<WeightProfile> profiles = new ArrayList<>();
-            for (Map.Entry<FactorCode, BigDecimal> entry : group.weights().entrySet()) {
-                WeightProfile profile = new WeightProfile();
-                profile.setVersion(version);
-                profile.setSceneType(group.sceneType());
-                profile.setFactorCode(entry.getKey());
-                profile.setWeight(entry.getValue());
-                profiles.add(profile);
-            }
-            version.getProfiles().addAll(profiles);
-
-            GradeThreshold threshold = gradeThresholdRepository.findByVersionIdAndSceneType(id, group.sceneType())
-                    .orElseGet(GradeThreshold::new);
-            threshold.setVersion(version);
-            threshold.setSceneType(group.sceneType());
-            threshold.setGradeAMin(group.gradeAMin());
-            threshold.setGradeBMin(group.gradeBMin());
-            thresholds.add(threshold);
-        }
+        List<GradeThreshold> thresholds = applySceneGroups(version, request);
         gradeThresholdRepository.saveAll(thresholds);
         return WeightVersionMapper.toDetail(version, thresholds);
     }
@@ -144,7 +109,9 @@ public class WeightVersionCommandService {
             }
         }
 
-        WeightVersion currentVersion = weightVersionRepository.findByIsCurrentTrue().orElse(null);
+        // 「退役舊版 → 設新版為 current」必須是不可分割的一步。
+        // 悲觀鎖讓兩個同時 approve 的交易排隊，後到的那個會讀到已被退役的舊版。
+        WeightVersion currentVersion = weightVersionRepository.findCurrentForUpdate().orElse(null);
         if (currentVersion != null) {
             currentVersion.setCurrent(false);
             currentVersion.setStatus(WeightVersionStatus.RETIRED);
@@ -157,6 +124,17 @@ public class WeightVersionCommandService {
         // TODO FR-01 後改為 SecurityContextHolder 取得的當前登入者
         version.setApprovedBy(appUserRepository.getReferenceById(TEMP_APPROVER_ID));
         // TODO Phase 2：觸發全量重新評分（§FR-08 版本管理表「生效切換」）
+
+        // 目前一筆 current 都沒有時，上面的鎖沒有列可鎖，兩個交易會同時通過。
+        // 真正的守門員是 partial unique index uk_weight_version_current；
+        // 這裡主動 flush 把 INSERT／UPDATE 送出，讓違反在方法內被接住轉成 409，
+        // 而不是等交易提交時才炸、落到兜底 handler 變成 500。
+        try {
+            weightVersionRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.INVALID_STATE_TRANSITION,
+                    "另一個版本正在同時核准生效，請重新整理後再試");
+        }
 
         List<GradeThreshold> thresholds = gradeThresholdRepository.findByVersionId(id);
         return WeightVersionMapper.toDetail(version, thresholds);
@@ -182,11 +160,27 @@ public class WeightVersionCommandService {
                         group.sceneType() + "榜的因子不正確，應為" + expectedFactors);
             }
 
+            // 先檢查單值域再檢查加總：負權重可以被另一個超過 1 的權重抵銷掉，
+            // 只驗加總會讓 (-0.5, 1.5) 這種組合通過，最後撞 DB 的
+            // ck_weight_profile（weight >= 0 AND weight <= 1）變成 500。
+            for (Map.Entry<FactorCode, BigDecimal> entry : group.weights().entrySet()) {
+                BigDecimal weight = entry.getValue();
+                if (weight.compareTo(BigDecimal.ZERO) < 0 || weight.compareTo(BigDecimal.ONE) > 0) {
+                    throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                            group.sceneType() + " 榜的 " + entry.getKey() + " 權重為 " + weight
+                                    + "，必須介於 0.000 與 1.000 之間");
+                }
+            }
+
             BigDecimal sum = group.weights().values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
             if (sum.compareTo(BigDecimal.ONE) != 0) {
                 throw new BusinessException(ErrorCode.WEIGHT_SUM_INVALID,
                         group.sceneType() + " 榜權重加總為 " + sum + "，必須等於 1.000");
             }
+
+            // 分數值域 0–100（§5.5 加分小計上限 100，DB 端為 ck_grade_threshold_range）。
+            validateGradeRange(group.sceneType(), "A 級門檻", group.gradeAMin());
+            validateGradeRange(group.sceneType(), "B 級門檻", group.gradeBMin());
 
             if (group.gradeAMin().compareTo(group.gradeBMin()) <= 0) {
                 throw new BusinessException(ErrorCode.VALIDATION_FAILED,
@@ -194,6 +188,56 @@ public class WeightVersionCommandService {
                                 + "）必須大於 B 級門檻（" + group.gradeBMin() + "）");
             }
         }
+    }
+
+    private void validateGradeRange(SceneType scene, String label, BigDecimal value) {
+        if (value.compareTo(BigDecimal.ZERO) < 0 || value.compareTo(GRADE_MAX) > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    scene + " 榜的 " + label + "為 " + value + "，必須介於 0 與 100 之間");
+        }
+    }
+
+    /**
+     * 把四榜設定套進版本：建立權重明細，並回傳四筆門檻。
+     *
+     * <p>create 與 update 共用同一份邏輯，差別只在門檻是新建還是沿用既有列——
+     * 由 {@code version.getId()} 是否為 null 判斷，呼叫端不需要再傳旗標。
+     * 兩邊各寫一份迴圈時已經 drift 過一次（create 直接 new、update 做 upsert），
+     * 之後改驗證規則只改一處。
+     */
+    private List<GradeThreshold> applySceneGroups(WeightVersion version, CreateWeightVersionRequest request) {
+        List<GradeThreshold> thresholds = new ArrayList<>();
+        for (SceneGroupRequest group : request.sceneGroups()) {
+            version.getProfiles().addAll(buildProfiles(version, group));
+            thresholds.add(upsertThreshold(version, group));
+        }
+        return thresholds;
+    }
+
+    private List<WeightProfile> buildProfiles(WeightVersion version, SceneGroupRequest group) {
+        List<WeightProfile> profiles = new ArrayList<>();
+        for (Map.Entry<FactorCode, BigDecimal> entry : group.weights().entrySet()) {
+            WeightProfile profile = new WeightProfile();
+            profile.setVersion(version);
+            profile.setSceneType(group.sceneType());
+            profile.setFactorCode(entry.getKey());
+            profile.setWeight(entry.getValue());
+            profiles.add(profile);
+        }
+        return profiles;
+    }
+
+    private GradeThreshold upsertThreshold(WeightVersion version, SceneGroupRequest group) {
+        GradeThreshold threshold = version.getId() == null
+                ? new GradeThreshold()
+                : gradeThresholdRepository
+                        .findByVersionIdAndSceneType(version.getId(), group.sceneType())
+                        .orElseGet(GradeThreshold::new);
+        threshold.setVersion(version);
+        threshold.setSceneType(group.sceneType());
+        threshold.setGradeAMin(group.gradeAMin());
+        threshold.setGradeBMin(group.gradeBMin());
+        return threshold;
     }
 
     private WeightVersion applyRequest(WeightVersion version, CreateWeightVersionRequest request) {

@@ -69,7 +69,11 @@ public class WeightVersionController {
     public ResponseEntity<ApiResponse<WeightVersionDetailResponse>> create(
             @Valid @RequestBody CreateWeightVersionRequest request) {
         WeightVersionDetailResponse dto = commandService.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/weight-versions/" + dto.id())).body(ApiResponse.success(dto));
+        // Location 指向 /{id}/profiles 而非 /{id}：規格書 §8.2 是端點完整清單，
+        // 裡面沒有 GET /weight-versions/{id}，沿著 Location 打過去會 404。
+        // 該版本的完整內容（四組權重＋四榜門檻）就在 /profiles。
+        URI location = URI.create("/api/v1/weight-versions/" + dto.id() + "/profiles");
+        return ResponseEntity.created(location).body(ApiResponse.success(dto));
     }
 
     // TODO 權限列 15（§2.1）：僅 BUYER_LEAD → @PreAuthorize("hasRole('BUYER_LEAD')")
