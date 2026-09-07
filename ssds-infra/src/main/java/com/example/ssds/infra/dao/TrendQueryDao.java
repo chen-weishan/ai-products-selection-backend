@@ -212,6 +212,12 @@ public List<TrendSignalRow> findAllLatestSignals() {
      *
      * <p>回傳 null 表示該關鍵字當日沒有任何可用來源的讀值 ——
      * 呼叫端要當成「無資料」而非 0（§5.7 資料不足不懲罰）。
+     *
+     * <p><b>2026-09-07 修正：「可用」的判定改成 {@code availability <> 'UNAVAILABLE'}</b>，
+     * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
+     * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
+     * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
+     * 的定義（enabled 且非 UNAVAILABLE）不一致，以那兩處為準改過來。
      */
     public Double findCompositeHeat(Long keywordId, LocalDate readingDate) {
     return jdbcClient
@@ -252,7 +258,7 @@ public List<TrendSignalRow> findAllLatestSignals() {
                 FROM matched_readings mr
                 JOIN heat_source hs ON hs.id = mr.source_id
                 WHERE hs.enabled = TRUE
-                  AND hs.availability = 'AVAILABLE'
+                  AND hs.availability <> 'UNAVAILABLE'
                 """)
             .param("keywordId", keywordId)
             .param("readingDate", readingDate)
@@ -295,7 +301,7 @@ public List<TrendSignalRow> findAllLatestSignals() {
                  FROM matched_readings mr
                  JOIN heat_source hs ON hs.id = mr.source_id
                  WHERE hs.enabled = TRUE
-                   AND hs.availability = 'AVAILABLE'
+                   AND hs.availability <> 'UNAVAILABLE'
                  """)
             .param("keywordId", keywordId)
             .param("readingDate", readingDate)
