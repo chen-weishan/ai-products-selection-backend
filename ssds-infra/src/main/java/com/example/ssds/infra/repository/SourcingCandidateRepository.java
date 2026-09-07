@@ -1,6 +1,5 @@
 package com.example.ssds.infra.repository;
 
-import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import java.util.List;
@@ -8,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -40,7 +40,7 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
            where c.product.sourcingStatus = :status
            order by c.timeGapDays asc nulls last
            """)
-    List<SourcingCandidate> findByProductSourcingStatus(SourcingStatus status);
+    List<SourcingCandidate> findByProductSourcingStatus(@Param("status") SourcingStatus status);
 
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
@@ -50,6 +50,4 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      * 可為 null 也可能與 product_keyword 的現況不一致，不要拿來當即時關聯。
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
-
-    List<SourcingCandidate> findByHeatStage(HeatStage heatStage);
 }
