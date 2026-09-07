@@ -184,10 +184,18 @@ class SceneClassifierAgentTest {
 
         String prompt = factory.userPrompt(input(101L, HeatBucket.HIGH));
 
-        assertTrue(prompt.contains("productId"));
-        assertTrue(prompt.contains("heatSlope7d"));
+        assertFalse(prompt.contains("productId"));
+        assertFalse(prompt.contains("categoryId"));
+        assertFalse(prompt.contains("season"));
+        assertFalse(prompt.contains("heatSlope7d"));
+        assertFalse(prompt.contains("heatSlope30d"));
+        assertFalse(prompt.contains("heatBucket"));
+        assertTrue(prompt.contains("productName"));
+        assertTrue(prompt.contains("categoryName"));
         assertTrue(prompt.contains("heatSlopePercentile"));
         assertTrue(prompt.contains("heatStage"));
+        assertTrue(prompt.contains("historicalCampaignCount"));
+        assertTrue(prompt.contains("festivalMatches"));
         assertFalse(prompt.contains("cost"));
         assertFalse(prompt.contains("suggestedPrice"));
         assertFalse(prompt.contains("margin"));

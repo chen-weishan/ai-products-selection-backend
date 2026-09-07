@@ -1,13 +1,17 @@
 package com.example.ssds.ai.prompt;
 
+import com.example.ssds.ai.model.FestivalMatch;
 import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.core.domain.HeatStage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SceneClassifierPromptFactory {
-    public static final String PROMPT_VERSION = "scene-v6";
+    public static final String PROMPT_VERSION = "scene-v7";
     private final ObjectMapper objectMapper;
 
     public SceneClassifierPromptFactory(ObjectMapper objectMapper) {
@@ -23,7 +27,7 @@ public class SceneClassifierPromptFactory {
                 判定原則：
                 - VIRAL：heatStage 為 RISING 或短期熱度明顯上升，heatSlopePercentile 偏高，且不是由明確節慶或季節性主導。
                 - FESTIVAL：輸入中的 festivalMatches 有明確節慶匹配訊號。
-                - SEASONAL：輸入中的季節與熱度資料呈現明確季節性。
+                - SEASONAL：品項名稱或品類呈現明確季節性，且輸入的熱度或節慶訊號相符。
                 - REPLENISHMENT：heatStage 為 PLATEAU 且需求與歷史開團較穩定，或資料不足以支持其他情境。
                 - heatStage 為 DECLINING 時不得單據過去高熱度判定為 VIRAL。
 
@@ -48,9 +52,24 @@ public class SceneClassifierPromptFactory {
 
     public String userPrompt(SceneClassifierInput input) {
         try {
-            return objectMapper.writeValueAsString(input);
+            // productId/heatBucket 等執行上下文仍留給快取與日誌，不送入 LLM。
+            return objectMapper.writeValueAsString(new PromptPayload(
+                    input.productName(),
+                    input.categoryName(),
+                    input.heatSlopePercentile(),
+                    input.heatStage(),
+                    input.historicalCampaignCount(),
+                    input.festivalMatches()));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 SceneClassifier 輸入", exception);
         }
     }
+
+    private record PromptPayload(
+            String productName,
+            String categoryName,
+            BigDecimal heatSlopePercentile,
+            HeatStage heatStage,
+            long historicalCampaignCount,
+            List<FestivalMatch> festivalMatches) {}
 }

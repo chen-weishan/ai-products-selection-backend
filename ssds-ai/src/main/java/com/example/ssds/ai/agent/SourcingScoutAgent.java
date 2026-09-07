@@ -26,6 +26,7 @@ public class SourcingScoutAgent {
     private final GlobalAiRateLimiter rateLimiter;
     private final RetrySleeper retrySleeper;
     private final Cache<CacheKey, SourcingScoutResult> cache;
+    private final String configurationError;
 
     @Autowired
     public SourcingScoutAgent(
@@ -59,10 +60,16 @@ public class SourcingScoutAgent {
         this.rateLimiter = rateLimiter;
         this.models = parseModels(primary, fallbacks); this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
-        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays)).maximumSize(10_000).build();
+        this.configurationError = cacheDays < 0 ? "AI_CACHE_DAYS_SOURCING 不得小於 0" : null;
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(Math.max(0, cacheDays)))
+                .maximumSize(10_000).build();
     }
 
     public SourcingScoutResult scout(SourcingScoutInput input, boolean forceRefresh) {
+        if (configurationError != null) throw new SourcingConfigurationException(configurationError);
+        if (models.isEmpty()) {
+            throw new SourcingConfigurationException("B 軌未設定任何 MODEL_REASONING 模型");
+        }
         CacheKey key = new CacheKey(input.keyword().strip().toLowerCase(Locale.ROOT), input.categoryId(),
                 SourcingScoutPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
@@ -105,6 +112,8 @@ public class SourcingScoutAgent {
             } catch (SourcingBudgetExceededException exception) {
                 throw exception;
             } catch (AiBudgetExceededException exception) {
+                throw exception;
+            } catch (SourcingConfigurationException exception) {
                 throw exception;
             } catch (SourcingConnectorQuotaExceededException exception) {
                 log.warn("SourcingScout connector quota exhausted; stopping without retry or model fallback");
@@ -150,7 +159,6 @@ public class SourcingScoutAgent {
         LinkedHashSet<String> values = new LinkedHashSet<>();
         if (primary != null && !primary.isBlank()) values.add(primary.trim());
         if (fallbacks != null) Arrays.stream(fallbacks.split(",")).map(String::trim).filter(v -> !v.isBlank()).forEach(values::add);
-        if (values.isEmpty()) throw new IllegalArgumentException("至少必須設定一個 MODEL_REASONING 模型");
         return List.copyOf(values);
     }
     private boolean hasFallbackModel(int modelIndex) {

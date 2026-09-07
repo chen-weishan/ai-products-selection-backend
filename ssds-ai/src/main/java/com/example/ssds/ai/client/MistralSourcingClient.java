@@ -2,6 +2,7 @@ package com.example.ssds.ai.client;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
+import java.net.URI;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,7 @@ public class MistralSourcingClient {
     private final SourcingToolPolicy toolPolicy;
     private final ApplicationEventPublisher eventPublisher;
     private final List<String> connectors;
+    private final String configurationError;
     private final AtomicInteger connectorCursor = new AtomicInteger();
     private final Set<String> verifiedModels = ConcurrentHashMap.newKeySet();
 
@@ -41,21 +43,40 @@ public class MistralSourcingClient {
         this.mapper = mapper;
         this.toolPolicy = toolPolicy;
         this.apiKey = apiKey;
-        this.timeoutSeconds = timeoutSeconds;
+        this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 90;
         this.eventPublisher = eventPublisher;
         this.connectors = parseConnectors(connectors);
-        this.connectors.forEach(toolPolicy::requireAllowed);
+        String safeBaseUrl = baseUrl;
+        String invalidConfiguration = null;
+        if (timeoutSeconds <= 0) {
+            invalidConfiguration = "MISTRAL_SOURCING_TIMEOUT_SECONDS 必須大於 0";
+        }
+        if (!isHttpUrl(baseUrl)) {
+            invalidConfiguration = "MISTRAL_BASE_URL 必須是有效的 HTTP(S) URL";
+            safeBaseUrl = "https://api.mistral.ai/v1";
+        }
+        this.configurationError = invalidConfiguration;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
-        factory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
-        this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        factory.setReadTimeout(Duration.ofSeconds(this.timeoutSeconds));
+        this.restClient = RestClient.builder().baseUrl(safeBaseUrl).requestFactory(factory).build();
     }
 
     public ScoutClientResponse complete(String model, String prompt) {
-        if (apiKey.isBlank()) throw new IllegalStateException("MISTRAL_API_KEY 尚未設定");
-        verifyReasoning(model);
+        if (apiKey.isBlank()) throw new SourcingConfigurationException("MISTRAL_API_KEY 尚未設定");
+        if (configurationError != null) {
+            throw new SourcingConfigurationException(configurationError);
+        }
+        if (connectors.isEmpty()) {
+            throw new SourcingConfigurationException("B 軌未設定任何 Mistral sourcing connector");
+        }
         int connectorIndex = Math.floorMod(connectorCursor.get(), connectors.size());
         String connector = connectors.get(connectorIndex);
-        toolPolicy.requireAllowed(connector);
+        try {
+            toolPolicy.requireAllowed(connector);
+        } catch (SecurityException exception) {
+            throw new SourcingConfigurationException("B 軌 Connector 不在允許清單: " + connector, exception);
+        }
+        verifyReasoning(model);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("inputs", List.of(Map.of("role", "user", "content", prompt)));
@@ -74,11 +95,14 @@ public class MistralSourcingClient {
                     connector, connectors.get(Math.floorMod(connectorCursor.get(), connectors.size())));
             throw exception;
         }
-        JsonNode message = SourcingToolEvidenceVerifier.verifiedMessageOutput(response, connector);
+        SourcingToolEvidenceVerifier.Verification evidence =
+                SourcingToolEvidenceVerifier.verify(response, connector);
+        JsonNode message = evidence.messageOutput();
         String content = extractContent(message.path("content"));
         JsonNode usage = response.path("usage");
         return new ScoutClientResponse(content, message.path("model").asText(model),
-                nullableInt(usage, "prompt_tokens"), nullableInt(usage, "completion_tokens"), true, true);
+                nullableInt(usage, "prompt_tokens"), nullableInt(usage, "completion_tokens"),
+                evidence.searchedWeb(), evidence.openedWebPage());
     }
 
     private void verifyReasoning(String model) {
@@ -148,8 +172,17 @@ public class MistralSourcingClient {
         LinkedHashSet<String> values = new LinkedHashSet<>();
         if (configured != null) Arrays.stream(configured.split(","))
                 .map(String::trim).filter(value -> !value.isBlank()).forEach(values::add);
-        if (values.isEmpty()) throw new IllegalArgumentException("至少必須設定一個 Mistral sourcing connector");
         return List.copyOf(values);
+    }
+    private static boolean isHttpUrl(String value) {
+        if (value == null || value.isBlank()) return false;
+        try {
+            URI uri = URI.create(value);
+            return ("http".equalsIgnoreCase(uri.getScheme())
+                    || "https".equalsIgnoreCase(uri.getScheme())) && uri.getHost() != null;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
     private JsonNode parse(String raw, String model) {
         try { return mapper.readTree(raw); }

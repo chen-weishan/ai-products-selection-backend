@@ -146,16 +146,23 @@ public class SceneClassificationService {
 
     /**
      * 品項可綁多個關鍵字；先取最新日期，再以同日合成熱度最高的關鍵字作為代表階段。
+     * 數值同值時以關鍵字 ID 較小者固定勝出，避免 Set 迭代順序影響結果。
      */
     private Optional<HeatCompositeDaily> latestHeat(Product product) {
         return product.getKeywords().stream()
                 .map(keyword -> heatCompositeDailyRepository
                         .findFirstByKeywordIdOrderByStatDateDesc(keyword.getId()))
                 .flatMap(Optional::stream)
-                .max(Comparator
-                        .comparing(HeatCompositeDaily::getStatDate)
+                .sorted(Comparator
+                        .comparing(
+                                HeatCompositeDaily::getStatDate,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(
                                 HeatCompositeDaily::getCompositeValue,
-                                Comparator.nullsFirst(BigDecimal::compareTo)));
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(
+                                value -> value.getKeyword() == null ? null : value.getKeyword().getId(),
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .findFirst();
     }
 }

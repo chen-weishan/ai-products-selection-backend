@@ -4,9 +4,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.example.ssds.ai.model.ProductInsightInput;
 import com.example.ssds.ai.model.RecommendationInput;
+import com.example.ssds.ai.model.ReviewRiskInput;
+import com.example.ssds.ai.model.SourcingScoutInput;
 import com.example.ssds.ai.model.FestivalMatch;
 import com.example.ssds.ai.model.HeatBucket;
 import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.ai.schema.TrendInterpreterResponseParserTest;
 import com.example.ssds.ai.agent.WeightCalibrationAgentTest;
 import com.example.ssds.ai.schema.RecommendationResponseParserTest;
 import com.example.ssds.core.domain.Season;
@@ -59,6 +62,23 @@ class PromptSanitizerTest {
     }
 
     @Test
+    void reviewRiskWhitelistKeepsOnlyIdsAndDeidentifiedReviewText() throws Exception {
+        ReviewRiskInput sanitized = sanitizer.sanitizeReviewRisk(
+                101L,
+                List.of(new ReviewRiskInput.ReviewText(
+                        9L, "buyer@example.com 0912-345-678 說成本 100 元")));
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(sanitized);
+
+        assertAll(
+                () -> assertEquals(101L, sanitized.productId()),
+                () -> assertEquals(9L, sanitized.reviews().getFirst().reviewId()),
+                () -> assertFalse(json.contains("buyer@example.com")),
+                () -> assertFalse(json.contains("0912-345-678")),
+                () -> assertFalse(json.contains("cost")),
+                () -> assertFalse(json.contains("supplier")));
+    }
+
+    @Test
     void productInsightUsesWhitelistAndSanitizesEveryReview() {
         ProductInsightInput input = new ProductInsightInput(
                 101L,
@@ -82,6 +102,36 @@ class PromptSanitizerTest {
         assertEquals(6, sanitized.factors().size());
         assertEquals(List.of(0, 200, 300), sanitized.allowedQuantities());
         assertEquals("MID_AUTUMN", sanitized.festival().festivalCode());
+    }
+
+    @Test
+    void trendInterpreterWhitelistRetainsOnlySeriesSourcesAndAllowedOutputs() throws Exception {
+        var sanitized = sanitizer.sanitizeTrendInterpreter(TrendInterpreterResponseParserTest.input());
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(sanitized);
+
+        assertAll(
+                () -> assertEquals(31L, sanitized.keywordId()),
+                () -> assertFalse(sanitized.compositeSeries().isEmpty()),
+                () -> assertFalse(sanitized.sourceTrends().isEmpty()),
+                () -> assertFalse(sanitized.allowedOutputs().isEmpty()),
+                () -> assertFalse(json.contains("productId")),
+                () -> assertFalse(json.contains("sales")),
+                () -> assertFalse(json.contains("supplier")));
+    }
+
+    @Test
+    void sourcingWhitelistSanitizesLabelsWithoutAddingOperationalFields() throws Exception {
+        SourcingScoutInput sanitized = sanitizer.sanitizeSourcingScout(
+                new SourcingScoutInput("  低糖零食\u0001  ", 12L, "  進口零食\u0002  "));
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(sanitized);
+
+        assertAll(
+                () -> assertEquals("低糖零食", sanitized.keyword()),
+                () -> assertEquals("進口零食", sanitized.categoryName()),
+                () -> assertEquals(12L, sanitized.categoryId()),
+                () -> assertFalse(json.contains("productId")),
+                () -> assertFalse(json.contains("cost")),
+                () -> assertFalse(json.contains("supplier")));
     }
 
     @Test

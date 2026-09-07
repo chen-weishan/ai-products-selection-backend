@@ -148,6 +148,95 @@ class SceneClassificationServiceTest {
         verifyNoInteractions(logRepository);
     }
 
+    @Test
+    void multipleKeywordsUseHighestCompositeFromNewestAvailableDate() {
+        Product product = product(130L, TrackType.A);
+        TrendKeyword lower = TrendKeyword.builder().id(301L).keyword("低熱度").build();
+        TrendKeyword higher = TrendKeyword.builder().id(302L).keyword("高熱度").build();
+        TrendKeyword stale = TrendKeyword.builder().id(303L).keyword("過期高熱度").build();
+        product.setKeywords(new LinkedHashSet<>(List.of(lower, higher, stale)));
+        stubClassificationDependencies(product);
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(301L))
+                .thenReturn(Optional.of(heat(lower, LocalDate.of(2026, 9, 1), "40", HeatStage.PLATEAU)));
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(302L))
+                .thenReturn(Optional.of(heat(higher, LocalDate.of(2026, 9, 1), "80", HeatStage.RISING)));
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(303L))
+                .thenReturn(Optional.of(heat(stale, LocalDate.of(2026, 8, 31), "99", HeatStage.DECLINING)));
+
+        service.classify(130L, false);
+
+        ArgumentCaptor<SceneClassifierInput> input = ArgumentCaptor.forClass(SceneClassifierInput.class);
+        verify(promptSanitizer).sanitizeSceneClassifier(input.capture());
+        assertEquals(HeatStage.RISING, input.getValue().heatStage());
+    }
+
+    @Test
+    void multipleKeywordsPutNullCompositeLastAndBreakExactTiesByLowestKeywordId() {
+        Product product = product(131L, TrackType.A);
+        TrendKeyword nullValue = TrendKeyword.builder().id(303L).keyword("null").build();
+        TrendKeyword higherId = TrendKeyword.builder().id(302L).keyword("同值二").build();
+        TrendKeyword lowerId = TrendKeyword.builder().id(301L).keyword("同值一").build();
+        product.setKeywords(new LinkedHashSet<>(List.of(nullValue, higherId, lowerId)));
+        stubClassificationDependencies(product);
+        LocalDate date = LocalDate.of(2026, 9, 1);
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(303L))
+                .thenReturn(Optional.of(heat(nullValue, date, null, HeatStage.DECLINING)));
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(302L))
+                .thenReturn(Optional.of(heat(higherId, date, "80", HeatStage.PLATEAU)));
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(301L))
+                .thenReturn(Optional.of(heat(lowerId, date, "80", HeatStage.RISING)));
+
+        service.classify(131L, false);
+
+        ArgumentCaptor<SceneClassifierInput> input = ArgumentCaptor.forClass(SceneClassifierInput.class);
+        verify(promptSanitizer).sanitizeSceneClassifier(input.capture());
+        assertEquals(HeatStage.RISING, input.getValue().heatStage());
+    }
+
+    @Test
+    void productWithoutKeywordHeatUsesUnknownBucketAndNullStage() {
+        Product product = product(132L, TrackType.A);
+        product.setKeywords(new LinkedHashSet<>(List.of(
+                TrendKeyword.builder().id(304L).keyword("無熱度").build())));
+        stubClassificationDependencies(product);
+        when(heatCompositeDailyRepository.findFirstByKeywordIdOrderByStatDateDesc(304L))
+                .thenReturn(Optional.empty());
+
+        service.classify(132L, false);
+
+        ArgumentCaptor<SceneClassifierInput> input = ArgumentCaptor.forClass(SceneClassifierInput.class);
+        verify(promptSanitizer).sanitizeSceneClassifier(input.capture());
+        assertNull(input.getValue().heatStage());
+        assertEquals(com.example.ssds.ai.model.HeatBucket.UNKNOWN, input.getValue().heatBucket());
+    }
+
+    private void stubClassificationDependencies(Product product) {
+        when(productRepository.findWithDetailsById(product.getId())).thenReturn(Optional.of(product));
+        when(productScoreRepository
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(product.getId()))
+                .thenReturn(Optional.empty());
+        when(decisionRecordRepository.countByProductIdAndDecision(
+                product.getId(), com.example.ssds.core.domain.DecisionType.ADOPT)).thenReturn(0L);
+        when(festivalAffinityRepository.findByProductId(product.getId())).thenReturn(List.of());
+        when(logRepository.save(any())).thenAnswer(invocation -> {
+            SceneClassificationLog log = invocation.getArgument(0);
+            log.setId(500L + product.getId());
+            return log;
+        });
+    }
+
+    private static HeatCompositeDaily heat(
+            TrendKeyword keyword, LocalDate date, String compositeValue, HeatStage stage) {
+        return HeatCompositeDaily.builder()
+                .keyword(keyword)
+                .statDate(date)
+                .compositeValue(compositeValue == null ? null : new BigDecimal(compositeValue))
+                .slope7d(new BigDecimal("0.10"))
+                .slope30d(new BigDecimal("0.20"))
+                .stage(stage)
+                .build();
+    }
+
     private static Product product(Long id, TrackType trackType) {
         Category category = Category.builder().id(10L).name("進口零食").build();
         return Product.builder()

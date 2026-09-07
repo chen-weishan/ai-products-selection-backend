@@ -17,6 +17,52 @@ import org.springframework.web.client.ResourceAccessException;
 
 class SourcingScoutAgentTest {
     @Test
+    void emptyModelConfigurationIsIsolatedUntilBTrackInvocation() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        SourcingScoutAgent agent = assertDoesNotThrow(() -> new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                " ",
+                " ",
+                0,
+                3,
+                millis -> {}));
+
+        assertThrows(
+                SourcingConfigurationException.class,
+                () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
+        verifyNoInteractions(budget, client);
+    }
+
+    @Test
+    void invalidSourcingCacheSettingIsIsolatedUntilBTrackInvocation() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        SourcingScoutAgent agent = assertDoesNotThrow(() -> new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                "fake/primary",
+                "",
+                0,
+                -1,
+                millis -> {}));
+
+        assertThrows(
+                SourcingConfigurationException.class,
+                () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
+        verifyNoInteractions(budget, client);
+    }
+
+    @Test
     void globalLimitStopsBeforeBTrackBudgetAndHttpClient() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);

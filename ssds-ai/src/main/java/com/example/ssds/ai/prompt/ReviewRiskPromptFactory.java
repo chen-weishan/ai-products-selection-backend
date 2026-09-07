@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ReviewRiskPromptFactory {
-    public static final String PROMPT_VERSION = "review-risk-v1";
+    public static final String PROMPT_VERSION = "review-risk-v2";
     private final ObjectMapper objectMapper;
 
     public ReviewRiskPromptFactory(ObjectMapper objectMapper) {
@@ -35,7 +35,7 @@ public class ReviewRiskPromptFactory {
                 - 只能輸出一個合法 JSON object，不得輸出 Markdown code block、前言、結尾或來源說明。
                 - 根物件必須且只能包含 reviews、topicStatistics。
                 - reviews 必須與輸入逐筆一一對應，保留相同 reviewId，不得遺漏、新增或重複。
-                - 資料語意不明時使用 NEUTRAL，不得推測負評主題。
+                - 單則評論語意無法判讀或資料不足時使用 NEUTRAL，riskTopic 必須為 null，不得推測負評主題。
 
                 限制條款：
                 - 只能根據 INPUT_JSON 作答，不得使用外部知識，不得搜尋網路或呼叫工具。

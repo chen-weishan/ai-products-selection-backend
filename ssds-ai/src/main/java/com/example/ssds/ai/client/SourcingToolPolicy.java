@@ -14,9 +14,9 @@ public class SourcingToolPolicy {
     private final ApplicationEventPublisher events;
 
     public SourcingToolPolicy(
-            @Value("${mcp.allowed-tools:web_search}") String configured,
+            @Value("${mcp.allowed-tools:parallel_search,exa_search,tavily_search}") String configured,
             ApplicationEventPublisher events) {
-        this.allowedTools = Arrays.stream(configured.split(","))
+        this.allowedTools = Arrays.stream(configured == null ? new String[0] : configured.split(","))
                 .map(String::trim).filter(value -> !value.isBlank())
                 .collect(Collectors.toUnmodifiableSet());
         this.events = events;
