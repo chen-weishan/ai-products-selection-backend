@@ -2,6 +2,7 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.UserStatus;
 import com.example.ssds.infra.entity.AppUser;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,4 +33,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     @Modifying
     @Query("update AppUser u set u.failedAttempts = 0, u.lockedUntil = null where u.id = :id")
     int resetFailedAttempts(@Param("id") Long id);
+
+    /** FR-01：失敗次數達門檻時鎖定帳號。與 {@link #incrementFailedAttempts} 分開下，理由同上：原子寫入。 */
+    @Modifying
+    @Query("update AppUser u set u.lockedUntil = :until where u.id = :id")
+    int lockUntil(@Param("id") Long id, @Param("until") Instant until);
 }

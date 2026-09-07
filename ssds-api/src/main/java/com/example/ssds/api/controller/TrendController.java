@@ -1,7 +1,7 @@
-package com.example.ssds.controller;
+package com.example.ssds.api.controller;
 
 import com.example.ssds.core.dto.TrendKeywordDetailResponse;
-import com.example.ssds.core.dto.TrendSignalProjection;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
 import com.example.ssds.infra.service.TrendService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 
@@ -23,8 +24,8 @@ public class TrendController {
     }
 
     // 取得所有趨勢訊號
-    @GetMapping
-    public List<TrendSignalProjection> getTrends() {
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<TrendSignalRow> getTrends() {
         return trendService.getAllTrendSignals();
     }
 

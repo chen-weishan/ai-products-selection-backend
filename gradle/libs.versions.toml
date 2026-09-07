@@ -15,6 +15,8 @@ shedlock = "7.8.0"
 commonsMath = "3.6.1"
 # Resilience4j 不在 Spring Boot BOM 管理範圍內
 resilience4j = "2.4.0"
+# JJWT 不在 Spring Boot BOM 管理範圍內（FR-01 登入）
+jjwt = "0.13.0"
 
 [libraries]
 # --- Spring Boot starters（版本由 BOM 決定，故不寫 version） ---
@@ -37,8 +39,6 @@ test-security      = { module = "org.springframework.boot:spring-boot-starter-se
 test-validation    = { module = "org.springframework.boot:spring-boot-starter-validation-test" }
 test-spring-boot   = { module = "org.springframework.boot:spring-boot-starter-test" }
 test-junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
-test-testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
-test-testcontainers-junit      = { module = "org.testcontainers:junit-jupiter" }
 
 # --- 資料層 ---
 # Spring Boot 4 把 Flyway 的自動組態拆到獨立的 spring-boot-flyway 模組，
@@ -60,6 +60,11 @@ springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-u
 shedlock-spring   = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
 shedlock-jdbc     = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
 commons-math3     = { module = "org.apache.commons:commons-math3", version.ref = "commonsMath" }
+
+# --- JWT（FR-01） ---
+jjwt-api     = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
+jjwt-impl    = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
