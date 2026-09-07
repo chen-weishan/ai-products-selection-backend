@@ -17,12 +17,20 @@ dependencies {
 	// 規格書 §3.3：後端為 OpenAPI 契約的單一事實來源
 	implementation libs.springdoc.openapi
 
+	// JWT 簽發與解析（FR-01）。BCryptPasswordEncoder 已隨
+	// spring-boot-starter-security 帶入，不需另外加 crypto 依賴。
+	implementation libs.jjwt.api
+	runtimeOnly libs.jjwt.impl
+	runtimeOnly libs.jjwt.jackson
+
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql
 
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
+	// Mockito：webmvc/security/validation test starters 不保證帶入，ssds-core 也是靠這支
+	testImplementation libs.test.spring.boot
 }
 
 // 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改

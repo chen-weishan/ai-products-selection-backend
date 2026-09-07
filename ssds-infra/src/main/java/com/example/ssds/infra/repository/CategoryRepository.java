@@ -15,6 +15,9 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     List<Category> findByParentIdOrderBySortOrderAsc(Long parentId);
 
+    /** 依名稱查品類（不分大小寫），供 hashtag→品類名稱對照解析用。 */
+    List<Category> findByNameIgnoreCase(String name);
+    
     /**
      * 一次撈完兩層，供前端下拉選單使用。
      * 用 join fetch 而不是讓呼叫端逐一觸發 children，避免 N+1。

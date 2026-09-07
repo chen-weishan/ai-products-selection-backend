@@ -1,4 +1,4 @@
-package com.example.ssds.controller;
+package com.example.ssds.api.controller;
 
 import com.example.ssds.core.dto.TrendKeywordDetailResponse;
 import com.example.ssds.infra.dao.projection.TrendSignalRow;

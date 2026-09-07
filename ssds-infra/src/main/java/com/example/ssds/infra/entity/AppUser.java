@@ -88,4 +88,9 @@ public class AppUser extends BaseAuditEntity {
         return status == UserStatus.ACTIVE
                 && (lockedUntil == null || lockedUntil.isBefore(Instant.now()));
     }
+
+    /** 目前是否處於鎖定期間內（與帳號停用是兩回事，訊息與狀態碼都不同，見 FR-01）。 */
+    public boolean isLocked() {
+        return lockedUntil != null && lockedUntil.isAfter(Instant.now());
+    }
 }
