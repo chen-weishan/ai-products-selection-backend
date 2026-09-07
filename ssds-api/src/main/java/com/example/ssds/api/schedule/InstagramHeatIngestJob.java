@@ -59,11 +59,11 @@ public class InstagramHeatIngestJob {
     /**
      * 每週一台北時間 03:30 執行一次（規格「資料來源界定」表：Instagram 頻率為每週）。
      *
-     * <p>額度提醒：RapidAPI instagram-social 免費方案總共只有 100 次請求
-     * （非每日重置，reset 週期約 30 天），每次執行會消耗
-     * {@code InstagramHashtagMapping.ENTRIES.size()} 次請求。品類數量若之後
-     * 明顯增加，每週一次可能撐不到一個月就用完額度，屆時要嘛拉長週期、
-     * 要嘛升級付費方案（見 CONTEXT.md §7）。
+     * <p>額度提醒：改用 Apify 的 apify/instagram-hashtag-scraper 後是依
+     * 「實際爬到的貼文數」計費，每次執行會消耗
+     * {@code InstagramHashtagMapping.ENTRIES.size()} × resultsLimit 篇份的
+     * 用量。品類數量或 resultsLimit 若之後明顯增加，要留意 Apify 帳號的
+     * 用量額度／預算（見 CONTEXT.md §7）。
      */
     @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
     @Transactional

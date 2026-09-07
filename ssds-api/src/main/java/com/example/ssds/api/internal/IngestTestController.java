@@ -13,7 +13,7 @@ import com.example.ssds.api.schedule.InstagramHeatIngestJob;
  *
  * <p><b>只給自己本機開發測試用，正式上線前務必移除這支或加權限保護</b>——
  * 目前沒有任何驗證機制，任何打得到這台機器的人都能觸發，會消耗
- * RapidAPI 的請求額度（Instagram 免費方案總共只有 100 次，見
+ * Apify 帳號的用量額度（依實際爬到的貼文數計費，見
  * InstagramHeatIngestJob 的排程註解）。
  */
 @RestController
