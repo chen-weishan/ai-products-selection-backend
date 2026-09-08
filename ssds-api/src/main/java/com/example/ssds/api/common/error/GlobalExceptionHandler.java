@@ -1,13 +1,17 @@
 package com.example.ssds.api.common.error;
 
 import java.util.List;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -53,6 +57,48 @@ public class GlobalExceptionHandler {
                 .toList();
         return toResponse(ErrorCode.VALIDATION_FAILED,
                 ErrorCode.VALIDATION_FAILED.getDefaultMessage(), fieldErrors);
+    }
+
+    /**
+     * 必填的 query parameter 沒帶，例如 /scores/ranking 少了 period。
+     *
+     * <p>不單獨攔會被兜底吃成 500：本類別沒有繼承
+     * {@code ResponseEntityExceptionHandler}，所以 Spring 對這個例外的預設 400
+     * 處理不會生效。客戶端少帶參數屬於 400，不是伺服器錯誤。
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(
+            MissingServletRequestParameterException e) {
+        FieldError fieldError = new FieldError(e.getParameterName(), "必填參數未提供");
+        return toResponse(ErrorCode.VALIDATION_FAILED,
+                ErrorCode.VALIDATION_FAILED.getDefaultMessage(), List.of(fieldError));
+    }
+
+    /**
+     * 路徑對但 HTTP 方法不對，例如對 {@code POST /scores/simulate} 發 GET。
+     *
+     * <p>不單獨攔會被兜底吃成 500，與 {@link #handleMissingParameter} 同一類問題：
+     * 本類別沒有繼承 {@code ResponseEntityExceptionHandler}，Spring 的預設 405 處理不生效。
+     *
+     * <p>回應帶 {@code Allow} 標頭列出實際支援的方法（RFC 7231 §6.5.5 要求 405 必須帶）。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException e) {
+
+        ApiError error = new ApiError(
+                ErrorCode.METHOD_NOT_ALLOWED.name(),
+                ErrorCode.METHOD_NOT_ALLOWED.getDefaultMessage(),
+                null);
+
+        ResponseEntity.BodyBuilder builder =
+                ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.getHttpStatus());
+
+        Set<HttpMethod> supported = e.getSupportedHttpMethods();
+        if (supported != null && !supported.isEmpty()) {
+            builder.allow(supported.toArray(new HttpMethod[0]));
+        }
+        return builder.body(ApiResponse.failure(error));
     }
 
     /** 型別轉換失敗，例如 ?page=abc。 */
