@@ -16,6 +16,8 @@ public final class ProductInsightSchema {
 
         ObjectNode riskProperties = mapper.createObjectNode();
         riskProperties.set("text", string(mapper, 1, 200));
+        riskProperties.set("supportCount", mapper.createObjectNode()
+                .put("type", "integer").put("minimum", 0).put("maximum", 200));
         riskProperties.set("type", enumNode(
                 mapper, "QUALITY", "FOOD_SAFETY", "SHIPPING_DAMAGE", "PRICE", "LOGISTICS", "INVENTORY", "OTHER"));
         riskProperties.set("severity", enumNode(mapper, "LOW", "MEDIUM", "HIGH"));
@@ -29,7 +31,7 @@ public final class ProductInsightSchema {
                 4));
         properties.set("risks", array(
                 mapper,
-                object(mapper, riskProperties, "text", "type", "severity", "countedInPenalty"),
+                object(mapper, riskProperties, "text", "supportCount", "type", "severity", "countedInPenalty"),
                 2,
                 4));
         return object(mapper, properties, "sellingPoints", "risks");

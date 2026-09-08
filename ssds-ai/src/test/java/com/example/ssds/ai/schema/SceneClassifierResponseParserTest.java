@@ -4,8 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.ssds.ai.model.SceneClassifierOutput;
+import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.ai.model.FestivalMatch;
+import com.example.ssds.ai.model.HeatBucket;
 import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class SceneClassifierResponseParserTest {
@@ -22,10 +28,10 @@ class SceneClassifierResponseParserTest {
                   "confidence": 0.82,
                   "reasoning": "熱度上升，補充說明包含 {括號}。",
                   "alternativeScene": "SEASONAL",
-                  "signals": ["heatSlope7d: 3.40"]
+                  "signals": ["heatSlopePercentile: 88.00"]
                 }
                 ```
-                """);
+                """, input());
 
         assertEquals(SceneCode.VIRAL, output.sceneType());
         assertEquals("熱度上升，補充說明包含 {括號}。", output.reasoning());
@@ -40,10 +46,10 @@ class SceneClassifierResponseParserTest {
                     "confidence": 0.76,
                     "reasoning": "節慶匹配明確",
                     "alternativeScene": null,
-                    "signals": ["festivalMatches: MID_AUTUMN=0.90"]
+                    "signals": ["festivalMatches: MID_AUTUMN=0.45"]
                   }
                 }
-                """);
+                """, input());
 
         assertEquals(SceneCode.FESTIVAL, output.sceneType());
     }
@@ -57,10 +63,10 @@ class SceneClassifierResponseParserTest {
                     "confidence": 0.76,
                     "reasoning": "節慶匹配明確",
                     "alternativeScene": null,
-                    "signals": ["festivalMatches: MID_AUTUMN=0.90"]
+                    "signals": ["festivalMatches: MID_AUTUMN=0.45"]
                   }
                 }
-                """));
+                """, input()));
     }
 
     @Test
@@ -72,9 +78,30 @@ class SceneClassifierResponseParserTest {
                   "confidence": 0.82,
                   "reasoning": "熱度上升",
                   "alternativeScene": null,
-                  "signals": ["heatSlope7d: 3.40"],
+                  "signals": ["heatSlopePercentile: 88.00"],
                   "weights": {"TREND": 0.9}
                 }
-                """));
+                """, input()));
+    }
+
+    @Test
+    void rejectsNumberInNarrativeThatWasNotSentToModel() {
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse("""
+                {
+                  "sceneType":"VIRAL",
+                  "confidence":0.82,
+                  "reasoning":"熱度已連續上升 12 週",
+                  "alternativeScene":null,
+                  "signals":["heatSlopePercentile: 88.00"]
+                }
+                """, input()));
+    }
+
+    private static SceneClassifierInput input() {
+        return new SceneClassifierInput(
+                101L, "日式抹茶餅乾", 10L, "進口零食", Season.SUMMER,
+                new BigDecimal("3.40"), new BigDecimal("1.25"), new BigDecimal("88.00"),
+                HeatStage.RISING, HeatBucket.VERY_HIGH, 2,
+                List.of(new FestivalMatch("MID_AUTUMN", new BigDecimal("0.45"))));
     }
 }

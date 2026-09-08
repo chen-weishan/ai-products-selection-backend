@@ -54,6 +54,19 @@ class PromptSchemaContractTest {
                 () -> assertTrue(prompt.contains("只能輸出一個合法 JSON object")));
     }
 
+    @Test
+    void productInsightRequiresSupportCountForBothEvidenceLists() {
+        JsonNode schema = ProductInsightSchema.create(mapper);
+
+        assertAll(
+                () -> assertTrue(schema.at("/properties/sellingPoints/items/required")
+                        .valueStream().anyMatch(value -> "supportCount".equals(value.asText()))),
+                () -> assertTrue(schema.at("/properties/risks/items/required")
+                        .valueStream().anyMatch(value -> "supportCount".equals(value.asText()))),
+                () -> assertTrue(new ProductInsightPromptFactory(mapper).systemPrompt()
+                        .contains("支持該風險的則數")));
+    }
+
     private List<Contract> contracts() {
         return List.of(
                 new Contract("Agent 1", new SceneClassifierPromptFactory(mapper)::systemPrompt,

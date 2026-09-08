@@ -4,6 +4,7 @@ import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,19 +43,24 @@ public class MistralTrackAClient implements TrackAAiClient {
             @Value("${mistral.base-url:https://api.mistral.ai/v1}") String baseUrl,
             @Value("${mistral.api-key:}") String apiKey,
             @Value("${mistral.timeout-seconds:30}") int timeoutSeconds,
+            @Value("${mistral.connect-timeout-seconds:10}") int connectTimeoutSeconds,
             DailyAiBudget budget,
             ApplicationEventPublisher eventPublisher) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.eventPublisher = eventPublisher;
         this.budget = budget;
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(
+                                effectiveConnectTimeout(connectTimeoutSeconds, timeoutSeconds)))
+                        .build());
         requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
         this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
     }
 
     MistralTrackAClient(ObjectMapper objectMapper, String baseUrl, String apiKey, int timeoutSeconds) {
-        this(objectMapper, baseUrl, apiKey, timeoutSeconds,
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds, defaultConnectTimeout(timeoutSeconds),
                 new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), event -> {});
     }
 
@@ -64,8 +70,22 @@ public class MistralTrackAClient implements TrackAAiClient {
             String apiKey,
             int timeoutSeconds,
             ApplicationEventPublisher eventPublisher) {
-        this(objectMapper, baseUrl, apiKey, timeoutSeconds,
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds, defaultConnectTimeout(timeoutSeconds),
                 new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), eventPublisher);
+    }
+
+    private static int defaultConnectTimeout(int readTimeoutSeconds) {
+        return Math.min(10, Math.max(1, readTimeoutSeconds));
+    }
+
+    private static int effectiveConnectTimeout(int connectTimeoutSeconds, int readTimeoutSeconds) {
+        if (connectTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("LLM_CONNECT_TIMEOUT_SECONDS 必須大於 0");
+        }
+        if (readTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("LLM_TIMEOUT_SECONDS 必須大於 0");
+        }
+        return Math.min(connectTimeoutSeconds, readTimeoutSeconds);
     }
 
     @Override

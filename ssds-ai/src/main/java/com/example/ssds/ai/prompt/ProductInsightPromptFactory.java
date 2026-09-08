@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ProductInsightPromptFactory {
-    public static final String PROMPT_VERSION = "product-insight-v1";
+    public static final String PROMPT_VERSION = "product-insight-v2";
     private final ObjectMapper objectMapper;
 
     public ProductInsightPromptFactory(ObjectMapper objectMapper) {
@@ -27,11 +27,12 @@ public class ProductInsightPromptFactory {
                 - 證據不足時，text 明確填「資料不足：無足夠評論支持具體賣點」，supportCount 填 0，不得猜測。
 
                 risks 規則：
-                - 必須輸出 2 到 4 筆，每筆只能包含 text、type、severity、countedInPenalty。
+                - 必須輸出 2 到 4 筆，每筆只能包含 text、supportCount、type、severity、countedInPenalty。
+                - supportCount 必須是輸入評論中確實支持該風險的則數，不得超過 reviews 數量。
                 - type 只能是 QUALITY、FOOD_SAFETY、SHIPPING_DAMAGE、PRICE、LOGISTICS、INVENTORY、OTHER。
                 - severity 只能是 LOW、MEDIUM、HIGH。
                 - countedInPenalty 只能依 penalties 中 penaltyValue 大於 0 且 matchedTopics 命中的內容判定。
-                - 證據不足時，text 明確填「資料不足：無足夠資料支持具體風險」，type 使用 OTHER、severity 使用 LOW、countedInPenalty 使用 false。
+                - 證據不足時，text 明確填「資料不足：無足夠資料支持具體風險」，supportCount 填 0、type 使用 OTHER、severity 使用 LOW、countedInPenalty 使用 false。
 
                 輸出規則：
                 - 只能輸出一個合法 JSON object，不得輸出 Markdown code block、前言、結尾或來源說明。

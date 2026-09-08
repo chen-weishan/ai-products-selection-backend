@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SceneClassifierPromptFactory {
-    public static final String PROMPT_VERSION = "scene-v7";
+    public static final String PROMPT_VERSION = "scene-v8";
     private final ObjectMapper objectMapper;
 
     public SceneClassifierPromptFactory(ObjectMapper objectMapper) {

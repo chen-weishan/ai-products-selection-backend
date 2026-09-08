@@ -16,7 +16,8 @@ import org.springframework.stereotype.Component;
 public class ProductInsightResponseParser {
     private static final Set<String> ROOT_FIELDS = Set.of("sellingPoints", "risks");
     private static final Set<String> SELLING_FIELDS = Set.of("text", "supportCount", "aspect");
-    private static final Set<String> RISK_FIELDS = Set.of("text", "type", "severity", "countedInPenalty");
+    private static final Set<String> RISK_FIELDS =
+            Set.of("text", "supportCount", "type", "severity", "countedInPenalty");
     private static final String INSUFFICIENT_PREFIX = "資料不足";
     private final ObjectMapper objectMapper;
 
@@ -34,6 +35,7 @@ public class ProductInsightResponseParser {
 
             List<SellingPoint> sellingPoints = new ArrayList<>();
             Set<String> sellingTexts = new HashSet<>();
+            Set<String> inputNumbers = inputNumbers(input);
             for (JsonNode node : sellingNodes) {
                 requireObject(node, SELLING_FIELDS, "sellingPoints[]");
                 String text = text(node, "text", 200);
@@ -45,7 +47,11 @@ public class ProductInsightResponseParser {
                 if ((supportCount == 0) != text.startsWith(INSUFFICIENT_PREFIX)) {
                     fail("supportCount 為 0 時必須明確標示資料不足，反之亦然");
                 }
-                sellingPoints.add(new SellingPoint(text, supportCount, text(node, "aspect", 50)));
+                String aspect = text(node, "aspect", 50);
+                Set<String> allowed = new HashSet<>(inputNumbers);
+                NumericTokenValidator.addEquivalent(allowed, supportCount);
+                NumericTokenValidator.requireEquivalent(text + "\n" + aspect, allowed, "sellingPoints[]");
+                sellingPoints.add(new SellingPoint(text, supportCount, aspect));
             }
 
             EnumSet<InsightRiskType> penalizedTypes = penalizedTypes(input);
@@ -55,6 +61,13 @@ public class ProductInsightResponseParser {
                 requireObject(node, RISK_FIELDS, "risks[]");
                 String text = text(node, "text", 200);
                 if (!riskTexts.add(text)) fail("risks.text 不得重複");
+                int supportCount = integer(node, "supportCount");
+                if (supportCount < 0 || supportCount > input.reviews().size()) {
+                    fail("supportCount 必須介於 0 與輸入評論數量之間");
+                }
+                if ((supportCount == 0) != text.startsWith(INSUFFICIENT_PREFIX)) {
+                    fail("supportCount 為 0 時必須明確標示資料不足，反之亦然");
+                }
                 InsightRiskType type = enumValue(node.get("type"), InsightRiskType.class, "type");
                 Severity severity = enumValue(node.get("severity"), Severity.class, "severity");
                 JsonNode countedNode = node.get("countedInPenalty");
@@ -69,7 +82,10 @@ public class ProductInsightResponseParser {
                         && (type != InsightRiskType.OTHER || severity != Severity.LOW || counted)) {
                     fail("資料不足的風險必須使用 OTHER、LOW、false");
                 }
-                risks.add(new ProductInsightRisk(text, type, severity, counted));
+                Set<String> allowed = new HashSet<>(inputNumbers);
+                NumericTokenValidator.addEquivalent(allowed, supportCount);
+                NumericTokenValidator.requireEquivalent(text, allowed, "risks[]");
+                risks.add(new ProductInsightRisk(text, supportCount, type, severity, counted));
             }
             return new ProductInsightOutput(sellingPoints, risks);
         } catch (AiSchemaValidationException exception) {
@@ -79,6 +95,18 @@ public class ProductInsightResponseParser {
         } catch (IOException exception) {
             throw new AiSchemaValidationException("ProductInsight 回應無法讀取", exception);
         }
+    }
+
+    private static Set<String> inputNumbers(ProductInsightInput input) {
+        Set<String> allowed = NumericTokenValidator.equivalentTokensFrom(
+                input.product().name(),
+                input.product().category(),
+                input.product().logisticsCondition());
+        input.reviews().forEach(review ->
+                allowed.addAll(NumericTokenValidator.equivalentTokensFrom(review.content())));
+        input.penalties().forEach(penalty ->
+                NumericTokenValidator.addEquivalent(allowed, penalty.penaltyValue()));
+        return allowed;
     }
 
     private static EnumSet<InsightRiskType> penalizedTypes(ProductInsightInput input) {

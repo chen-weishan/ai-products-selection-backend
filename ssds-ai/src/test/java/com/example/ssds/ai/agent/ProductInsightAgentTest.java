@@ -18,6 +18,20 @@ import org.springframework.web.client.ResourceAccessException;
 
 class ProductInsightAgentTest {
     @Test
+    void oneSuccessfulExternalRequestProducesSellingPointsAndRisks() {
+        FakeClient client = new FakeClient(validJson());
+
+        ProductInsightResult result = agent(client).analyze(
+                input(), 0, LocalDate.of(2026, 8, 25), true);
+
+        assertAll(
+                () -> assertEquals(1, client.calls.get()),
+                () -> assertEquals(1, result.requestCount()),
+                () -> assertEquals(2, result.output().sellingPoints().size()),
+                () -> assertEquals(2, result.output().risks().size()));
+    }
+
+    @Test
     void successfulOutputIsCachedByReviewBucketDateAndPromptVersion() {
         FakeClient client = new FakeClient(validJson());
         ProductInsightAgent agent = agent(client);
@@ -105,8 +119,8 @@ class ProductInsightAgentTest {
                   {"text":"茶味受到肯定","supportCount":1,"aspect":"口味"},
                   {"text":"口感酥脆","supportCount":1,"aspect":"口感"}],
                  "risks":[
-                  {"text":"品質偶有差異","type":"QUALITY","severity":"MEDIUM","countedInPenalty":true},
-                  {"text":"價格資料有限","type":"PRICE","severity":"LOW","countedInPenalty":false}]}
+                  {"text":"品質偶有差異","supportCount":1,"type":"QUALITY","severity":"MEDIUM","countedInPenalty":true},
+                  {"text":"價格資料有限","supportCount":1,"type":"PRICE","severity":"LOW","countedInPenalty":false}]}
                 """;
     }
 

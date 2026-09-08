@@ -5,6 +5,7 @@ import com.example.ssds.core.domain.Severity;
 
 public record ProductInsightRisk(
         String text,
+        int supportCount,
         InsightRiskType type,
         Severity severity,
         boolean countedInPenalty) {}

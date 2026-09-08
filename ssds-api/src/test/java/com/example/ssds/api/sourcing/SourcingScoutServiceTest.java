@@ -60,6 +60,36 @@ class SourcingScoutServiceTest {
     }
 
     @Test
+    void startUsesCanonicalKeywordForLookupAndNewRecords() {
+        Fixture fixture = new Fixture();
+        when(fixture.categories.findById(10L)).thenReturn(Optional.of(fixture.category));
+        when(fixture.leadTimes.findById(10L)).thenReturn(Optional.of(fixture.leadTime));
+        when(fixture.keywords.findByKeyword("organic snack")).thenReturn(Optional.of(fixture.keyword));
+        when(fixture.products.findReusableSourcingProduct(31L, 10L))
+                .thenReturn(Optional.of(fixture.candidate.getProduct()));
+        when(fixture.candidates.findByProductId(601L)).thenReturn(Optional.of(fixture.candidate));
+        when(fixture.tasks.createSourcingScout(fixture.candidate.getProduct(), false))
+                .thenReturn(mock(AiTaskResponse.class));
+
+        fixture.service.start(new SourcingScoutRequest(" Ｏｒｇａｎｉｃ　 SNACK ", 10L, false));
+
+        verify(fixture.keywords).findByKeyword("organic snack");
+        verify(fixture.products).findReusableSourcingProduct(31L, 10L);
+    }
+
+    @Test
+    void scoutExposesAgentCacheHitForTaskAccounting() {
+        Fixture fixture = new Fixture();
+        SourcingScoutResult cached = new SourcingScoutResult(
+                result().output(), true, "test-model", "scout-v6", 10, 5, 0);
+        when(fixture.agent.scout(any(), eq(false))).thenReturn(cached);
+
+        var response = fixture.service.scout(601L, false);
+
+        assertTrue(response.cacheHit());
+    }
+
+    @Test
     void startCreatesEnabledKeywordAndBTrackProductWithRelationInOneTransaction() {
         Fixture fixture = new Fixture();
         when(fixture.categories.findById(10L)).thenReturn(Optional.of(fixture.category));

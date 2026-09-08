@@ -3,6 +3,7 @@ package com.example.ssds.ai.client;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,6 +39,7 @@ public class MistralSourcingClient {
             @Value("${mistral.base-url:https://api.mistral.ai/v1}") String baseUrl,
             @Value("${mistral.api-key:}") String apiKey,
             @Value("${mistral.sourcing-timeout-seconds:90}") int timeoutSeconds,
+            @Value("${mistral.connect-timeout-seconds:10}") int connectTimeoutSeconds,
             @Value("${mistral.sourcing-connectors:parallel_search,exa_search,tavily_search}") String connectors,
             ApplicationEventPublisher eventPublisher) {
         this.mapper = mapper;
@@ -51,14 +53,34 @@ public class MistralSourcingClient {
         if (timeoutSeconds <= 0) {
             invalidConfiguration = "MISTRAL_SOURCING_TIMEOUT_SECONDS 必須大於 0";
         }
+        if (connectTimeoutSeconds <= 0) {
+            invalidConfiguration = "LLM_CONNECT_TIMEOUT_SECONDS 必須大於 0";
+        }
         if (!isHttpUrl(baseUrl)) {
             invalidConfiguration = "MISTRAL_BASE_URL 必須是有效的 HTTP(S) URL";
             safeBaseUrl = "https://api.mistral.ai/v1";
         }
         this.configurationError = invalidConfiguration;
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(Math.min(
+                                connectTimeoutSeconds > 0 ? connectTimeoutSeconds : 10,
+                                this.timeoutSeconds)))
+                        .build());
         factory.setReadTimeout(Duration.ofSeconds(this.timeoutSeconds));
         this.restClient = RestClient.builder().baseUrl(safeBaseUrl).requestFactory(factory).build();
+    }
+
+    MistralSourcingClient(
+            ObjectMapper mapper,
+            SourcingToolPolicy toolPolicy,
+            String baseUrl,
+            String apiKey,
+            int timeoutSeconds,
+            String connectors,
+            ApplicationEventPublisher eventPublisher) {
+        this(mapper, toolPolicy, baseUrl, apiKey, timeoutSeconds,
+                Math.min(10, Math.max(1, timeoutSeconds)), connectors, eventPublisher);
     }
 
     public ScoutClientResponse complete(String model, String prompt) {

@@ -28,7 +28,7 @@ class SceneClassifierAgentTest {
                   "confidence": 0.82,
                   "reasoning": "近七日熱度快速上升且歷史開團次數少",
                   "alternativeScene": "SEASONAL",
-                  "signals": ["heat_slope_7d: +3.40", "history_records: 2"]
+                  "signals": ["heatSlopePercentile: 88.00", "historicalCampaignCount: 2"]
                 }
                 """);
 
@@ -48,7 +48,7 @@ class SceneClassifierAgentTest {
                   "confidence": 0.49,
                   "reasoning": "節慶關聯訊號不足",
                   "alternativeScene": "REPLENISHMENT",
-                  "signals": ["festival_match: 0.20"]
+                  "signals": ["festival_match: 0.45"]
                 }
                 """);
 
@@ -89,7 +89,7 @@ class SceneClassifierAgentTest {
                 {"sceneType":"VIRAL","confidence":0.9,"reasoning":"熱度上升","alternativeScene":null,"signals":["heatSlope7d: 3.40"],"weights":{"TREND":0.9}}
                 """,
                 """
-                {"sceneType":"VIRAL","confidence":0.82,"reasoning":"熱度上升","alternativeScene":"SEASONAL","signals":["heatSlope7d: 3.40"]}
+                {"sceneType":"VIRAL","confidence":0.82,"reasoning":"熱度上升","alternativeScene":"SEASONAL","signals":["heatSlopePercentile: 88.00"]}
                 """);
 
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.HIGH), false);
@@ -118,7 +118,7 @@ class SceneClassifierAgentTest {
         CountingFakeClient fake = new CountingFakeClient(
                 new AiRateLimitException("rate limited", null),
                 """
-                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 8"]}
+                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 2"]}
                 """);
 
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
@@ -132,7 +132,7 @@ class SceneClassifierAgentTest {
         CountingFakeClient fake = new CountingFakeClient(
                 new ResourceAccessException("timeout"),
                 """
-                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 8"]}
+                {"sceneType":"REPLENISHMENT","confidence":0.76,"reasoning":"需求穩定","alternativeScene":null,"signals":["historicalCampaignCount: 2"]}
                 """);
 
         SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
@@ -163,7 +163,7 @@ class SceneClassifierAgentTest {
                   "confidence": 0.76,
                   "reasoning": "需求穩定",
                   "alternativeScene": null,
-                  "signals": ["history_records: 8"]
+                  "signals": ["historicalCampaignCount: 2"]
                 }
                 """);
         SceneClassifierAgent agent = agent(fake);

@@ -1,6 +1,7 @@
 package com.example.ssds.ai.schema;
 
 import com.example.ssds.ai.model.SceneClassifierOutput;
+import com.example.ssds.ai.model.SceneClassifierInput;
 import com.example.ssds.ai.model.SceneCode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,7 +23,7 @@ public class SceneClassifierResponseParser {
         this.objectMapper = objectMapper;
     }
 
-    public SceneClassifierOutput parse(String raw) {
+    public SceneClassifierOutput parse(String raw, SceneClassifierInput input) {
         try {
             JsonNode root = parseRoot(raw);
             if (root == null || !root.isObject()) fail("根節點必須是 object");
@@ -46,12 +47,27 @@ public class SceneClassifierResponseParser {
             }
             List<String> signals = new ArrayList<>();
             signalNodes.forEach(node -> signals.add(text(node, "signals[]")));
+            Set<String> allowedNumbers = inputNumbers(input);
+            NumericTokenValidator.requireEquivalent(reasoning, allowedNumbers, "reasoning");
+            NumericTokenValidator.requireEquivalent(String.join("\n", signals), allowedNumbers, "signals");
             return new SceneClassifierOutput(scene, confidence, reasoning, alternative, signals);
         } catch (AiSchemaValidationException exception) {
             throw exception;
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             throw new AiSchemaValidationException("SceneClassifier 回應不是有效 Schema", exception);
         }
+    }
+
+    private static Set<String> inputNumbers(SceneClassifierInput input) {
+        Set<String> allowed = NumericTokenValidator.equivalentTokensFrom(
+                input.productName(), input.categoryName());
+        NumericTokenValidator.addEquivalent(allowed, input.heatSlopePercentile());
+        NumericTokenValidator.addEquivalent(allowed, input.historicalCampaignCount());
+        input.festivalMatches().forEach(match -> {
+            allowed.addAll(NumericTokenValidator.equivalentTokensFrom(match.festivalCode()));
+            NumericTokenValidator.addEquivalent(allowed, match.affinity());
+        });
+        return allowed;
     }
 
     private JsonNode parseRoot(String raw) throws JsonProcessingException {

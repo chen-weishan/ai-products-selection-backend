@@ -171,8 +171,13 @@ public class AiTaskWorker {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }
                     }
-                    case SOURCING_SCOUT -> sourcingScoutService.scout(
-                            item.getProduct().getId(), event.forceRefresh());
+                    case SOURCING_SCOUT -> {
+                        var response = sourcingScoutService.scout(
+                                item.getProduct().getId(), event.forceRefresh());
+                        if (response != null && response.cacheHit() && dailyAiBudget != null) {
+                            dailyAiBudget.recordCacheHit(task.getBudgetPool());
+                        }
+                    }
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
                 warning = mergeWarnings(warning, AiExecutionWarningContext.consumeMessage());

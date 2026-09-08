@@ -20,6 +20,7 @@ class ProductInsightResponseParserTest {
         assertEquals(2, output.sellingPoints().size());
         assertEquals(3, output.sellingPoints().getFirst().supportCount());
         assertEquals(InsightRiskType.QUALITY, output.risks().getFirst().type());
+        assertEquals(2, output.risks().getFirst().supportCount());
         assertTrue(output.risks().getFirst().countedInPenalty());
     }
 
@@ -49,6 +50,21 @@ class ProductInsightResponseParserTest {
         assertDoesNotThrow(() -> parser.parse(json, input()));
     }
 
+    @Test
+    void rejectsInventedNumberInSellingPointOrRiskText() {
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace("口感獲得多則正面回饋", "有 80% 顧客肯定口感"), input()));
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace("部分評論反映品質不穩定", "品質問題可能持續 12 天"), input()));
+    }
+
+    @Test
+    void rejectsRiskSupportCountOutsideReviewRange() {
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace("\"supportCount\":2,\"type\":\"QUALITY\"",
+                        "\"supportCount\":4,\"type\":\"QUALITY\""), input()));
+    }
+
     private static ProductInsightInput input() {
         return new ProductInsightInput(
                 101L,
@@ -75,8 +91,8 @@ class ProductInsightResponseParserTest {
                     {"text":"包裝完整度受到肯定","supportCount":1,"aspect":"包裝"}
                   ],
                   "risks":[
-                    {"text":"部分評論反映品質不穩定","type":"QUALITY","severity":"MEDIUM","countedInPenalty":true},
-                    {"text":"價格接受度的資料有限","type":"PRICE","severity":"LOW","countedInPenalty":false}
+                    {"text":"部分評論反映品質不穩定","supportCount":2,"type":"QUALITY","severity":"MEDIUM","countedInPenalty":true},
+                    {"text":"價格接受度的資料有限","supportCount":1,"type":"PRICE","severity":"LOW","countedInPenalty":false}
                   ]
                 }
                 """;

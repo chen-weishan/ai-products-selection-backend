@@ -13,9 +13,9 @@ public record SourcingScoutResponse(
         List<String> opportunitySignals, List<String> riskSignals,
         HeatStage heatStage, Short stageWeeks, Integer estimatedLifespanDays,
         Integer timeGapDays, String model,
-        String modelAlias, String promptVersion, OffsetDateTime generatedAt) {
+        String modelAlias, String promptVersion, boolean cacheHit, OffsetDateTime generatedAt) {
     public static SourcingScoutResponse from(
-            SourcingCandidate value, HeatCompositeDaily composite, ObjectMapper mapper) {
+            SourcingCandidate value, HeatCompositeDaily composite, ObjectMapper mapper, boolean cacheHit) {
         return new SourcingScoutResponse(value.getProduct().getId(),
                 value.getKeyword() == null ? null : value.getKeyword().getId(),
                 value.getDrivingKeyword() == null ? null : value.getDrivingKeyword().getId(),
@@ -25,7 +25,7 @@ public record SourcingScoutResponse(
                 composite == null ? null : composite.getStageWeeks(),
                 composite == null ? null : composite.getEstimatedLifespanDays(),
                 value.getTimeGapDays(), value.getModel(), "MODEL_REASONING",
-                value.getPromptVersion(), value.getReportGeneratedAt() == null ? null
+                value.getPromptVersion(), cacheHit, value.getReportGeneratedAt() == null ? null
                         : value.getReportGeneratedAt().atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime());
     }
     private static List<String> read(ObjectMapper mapper, String value) {

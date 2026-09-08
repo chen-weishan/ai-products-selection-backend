@@ -17,6 +17,35 @@ import org.springframework.web.client.ResourceAccessException;
 
 class SourcingScoutAgentTest {
     @Test
+    void normalizedEquivalentKeywordsShareCacheEntry() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        when(client.complete(anyString(), anyString())).thenReturn(new ScoutClientResponse(
+                """
+                {"report":"搜尋資料顯示此關鍵字具有可持續觀察的市場訊號與風險。",
+                 "opportunitySignals":["搜尋熱度可供觀察"],
+                 "riskSignals":["來源資訊仍有限"]}
+                """,
+                "fake/primary", 10, 5, true, true));
+        SourcingScoutAgent agent = new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                "fake/primary",
+                "",
+                0,
+                3,
+                millis -> {});
+
+        assertFalse(agent.scout(new SourcingScoutInput("熟凍帝王蟹", 10L, "水產"), false).cacheHit());
+        assertTrue(agent.scout(new SourcingScoutInput(" 熟凍  帝王蟹", 10L, "水產"), false).cacheHit());
+        verify(client, times(1)).complete(anyString(), anyString());
+    }
+
+    @Test
     void emptyModelConfigurationIsIsolatedUntilBTrackInvocation() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);

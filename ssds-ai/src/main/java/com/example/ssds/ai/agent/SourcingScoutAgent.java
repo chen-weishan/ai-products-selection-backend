@@ -3,6 +3,7 @@ package com.example.ssds.ai.agent;
 import com.example.ssds.ai.client.*;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.SourcingScoutPromptFactory;
+import com.example.ssds.ai.prompt.SourcingKeywordNormalizer;
 import com.example.ssds.ai.schema.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.*;
@@ -70,7 +71,7 @@ public class SourcingScoutAgent {
         if (models.isEmpty()) {
             throw new SourcingConfigurationException("B 軌未設定任何 MODEL_REASONING 模型");
         }
-        CacheKey key = new CacheKey(input.keyword().strip().toLowerCase(Locale.ROOT), input.categoryId(),
+        CacheKey key = new CacheKey(SourcingKeywordNormalizer.normalize(input.keyword()), input.categoryId(),
                 SourcingScoutPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
             SourcingScoutResult cached = cache.getIfPresent(key);

@@ -5,14 +5,12 @@ import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import java.io.IOException;
 import java.util.*;
-import java.util.regex.*;
 import org.springframework.stereotype.Component;
 
 @Component
 public class WeightCalibrationResponseParser {
     private static final Set<String> ROOT = Set.of("report", "adjustmentAdvice", "attentionNotes");
     private static final Set<String> ADVICE = Set.of("factorCode", "explanation");
-    private static final Pattern NUMBER = Pattern.compile("(?<![\\p{L}\\p{N}_])-?\\d+(?:\\.\\d+)?%?");
     private final ObjectMapper mapper;
     public WeightCalibrationResponseParser(ObjectMapper mapper) { this.mapper=mapper; }
 
@@ -42,14 +40,36 @@ public class WeightCalibrationResponseParser {
         catch(IOException e) { throw new AiSchemaValidationException("WeightCalibration 回應無法讀取",e); }
     }
     private void rejectInventedNumbers(String report,List<WeightCalibrationOutput.AdjustmentAdvice> advice,List<String> notes,WeightCalibrationInput input) {
-        String source;
-        try { source=mapper.writeValueAsString(input); } catch(JsonProcessingException e) { throw new AiSchemaValidationException("無法驗證輸出數值",e); }
+        Set<String> allowed = allowedNumbers(input);
         StringBuilder output=new StringBuilder(report); advice.forEach(v->output.append(' ').append(v.explanation())); notes.forEach(v->output.append(' ').append(v));
-        Matcher matcher=NUMBER.matcher(output);
-        while(matcher.find()) {
-            String token=matcher.group().replace("%","");
-            if(!source.contains(token)) fail("輸出包含輸入不存在的數字: "+matcher.group());
-        }
+        NumericTokenValidator.requireAllowed(output.toString(), allowed, "WeightCalibration 輸出");
+    }
+    private static Set<String> allowedNumbers(WeightCalibrationInput input) {
+        Set<String> allowed=NumericTokenValidator.tokensFrom(input.quarter(),input.regressionMethod(),input.regressionNote(),input.backtestNote());
+        NumericTokenValidator.add(allowed,input.sampleSize());
+        input.factors().forEach(value->{
+            allowed.addAll(NumericTokenValidator.tokensFrom(value.factorCode()));
+            NumericTokenValidator.add(allowed,value.correlation());
+            NumericTokenValidator.add(allowed,value.currentWeight());
+            NumericTokenValidator.add(allowed,value.suggestedWeight());
+            NumericTokenValidator.add(allowed,value.pValue());
+        });
+        WeightCalibrationInput.OverrideStatistics overrides=input.sceneOverrides();
+        NumericTokenValidator.add(allowed,overrides.totalClassifications());
+        NumericTokenValidator.add(allowed,overrides.overrideCount());
+        NumericTokenValidator.add(allowed,overrides.overrideRate());
+        overrides.concentratedCategories().forEach(value->{
+            allowed.addAll(NumericTokenValidator.tokensFrom(value.category()));
+            NumericTokenValidator.add(allowed,value.totalClassifications());
+            NumericTokenValidator.add(allowed,value.overrideCount());
+            NumericTokenValidator.add(allowed,value.overrideRate());
+        });
+        input.backtests().forEach(value->{
+            allowed.addAll(NumericTokenValidator.tokensFrom(value.scheme()));
+            NumericTokenValidator.add(allowed,value.correlation());
+            NumericTokenValidator.add(allowed,value.gradeAHitRate());
+        });
+        return allowed;
     }
     private static JsonNode array(JsonNode root,String field,int min,int max) { JsonNode n=root.get(field); if(n==null||!n.isArray()||n.size()<min||n.size()>max) fail(field+" 筆數不合法"); return n; }
     private static void exact(JsonNode n,Set<String> fields,String label) { if(n==null||!n.isObject()) fail(label+" 必須是 object"); Set<String>a=new HashSet<>();n.fieldNames().forEachRemaining(a::add);if(!a.equals(fields))fail(label+" 欄位不合法"); }

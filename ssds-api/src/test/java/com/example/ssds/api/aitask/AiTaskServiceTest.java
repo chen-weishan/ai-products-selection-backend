@@ -102,6 +102,7 @@ class AiTaskServiceTest {
                 AiTaskType.SELLING_POINT, List.of(101L), null));
 
         assertEquals(AiTaskType.SELLING_POINT, response.taskType());
+        assertEquals("Product Insight（賣點與風險）", response.taskTypeDisplayName());
         verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
     }
 

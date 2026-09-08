@@ -18,7 +18,7 @@ class ProductInsightResponseTest {
                 null,
                 false,
                 "not-invoked",
-                "product-insight-v1",
+                "product-insight-v2",
                 null,
                 null,
                 0);
@@ -36,7 +36,7 @@ class ProductInsightResponseTest {
                 FallbackReason.SCHEMA_INVALID,
                 false,
                 "fallback-model",
-                "product-insight-v1",
+                "product-insight-v2",
                 null,
                 null,
                 2);

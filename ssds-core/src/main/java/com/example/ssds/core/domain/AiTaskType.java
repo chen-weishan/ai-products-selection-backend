@@ -51,4 +51,18 @@ public enum AiTaskType {
     public BudgetPool budgetPool() {
         return budgetPool;
     }
+
+    /** 對外顯示名稱；enum name 仍是 API／資料庫的穩定相容碼。 */
+    public String displayName() {
+        return switch (this) {
+            case FULL_ANALYSIS -> "完整 AI 分析（Agent 1–4）";
+            case SCENE_CLASSIFY -> "情境原型判定";
+            case REVIEW_RISK -> "評論風險分析";
+            case SELLING_POINT -> "Product Insight（賣點與風險）";
+            case RECOMMENDATION -> "進貨建議";
+            case TREND_INTERPRET -> "趨勢解讀";
+            case SOURCING_SCOUT -> "尋源探索";
+            case WEIGHT_CALIBRATION -> "權重校準解讀";
+        };
+    }
 }

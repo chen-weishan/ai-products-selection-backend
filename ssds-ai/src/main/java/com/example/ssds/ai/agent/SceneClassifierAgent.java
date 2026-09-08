@@ -125,7 +125,7 @@ public class SceneClassifierAgent {
                 requestCount++;
                 AiClientResponse response = router.route(request);
                 raw = response.content();
-                SceneClassifierOutput output = parser.parse(raw);
+                SceneClassifierOutput output = parser.parse(raw, input);
                 return output.confidence().compareTo(MIN_CONFIDENCE) < 0
                         ? fallback(
                                 FallbackReason.LOW_CONFIDENCE,

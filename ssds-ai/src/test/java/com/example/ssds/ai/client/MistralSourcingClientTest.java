@@ -77,6 +77,19 @@ class MistralSourcingClientTest {
     }
 
     @Test
+    void invalidConnectTimeoutIsIsolatedUntilBTrackInvocation() {
+        MistralSourcingClient client = assertDoesNotThrow(() -> new MistralSourcingClient(
+                new ObjectMapper(),
+                new SourcingToolPolicy("exa_search", event -> {}),
+                "http://127.0.0.1:1", "test-key", 90, 0, "exa_search", event -> {}));
+
+        SourcingConfigurationException exception = assertThrows(
+                SourcingConfigurationException.class,
+                () -> client.complete("test-model", "test-prompt"));
+        assertEquals("LLM_CONNECT_TIMEOUT_SECONDS 必須大於 0", exception.getMessage());
+    }
+
+    @Test
     void recognizesActualCustomConnectorQuotaResponse() {
         HttpClientErrorException exception = response(
                 HttpStatus.TOO_MANY_REQUESTS,

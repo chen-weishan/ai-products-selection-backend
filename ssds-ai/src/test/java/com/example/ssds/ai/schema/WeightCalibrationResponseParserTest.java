@@ -22,4 +22,12 @@ class WeightCalibrationResponseParserTest {
           ```
           """,WeightCalibrationAgentTest.input()));
     }
+    @Test void rejectsSubstringAndPercentVariantsOfInputNumbers(){
+        assertThrows(AiSchemaValidationException.class,()->parser.parse("""
+          {"report":"樣本數 2，應審慎解讀。","adjustmentAdvice":[{"factorCode":"TREND","explanation":"照統計方向"}],"attentionNotes":["資料不足"]}
+          """,WeightCalibrationAgentTest.input()));
+        assertThrows(AiSchemaValidationException.class,()->parser.parse("""
+          {"report":"覆寫數為 20%。","adjustmentAdvice":[{"factorCode":"TREND","explanation":"照統計方向"}],"attentionNotes":["資料不足"]}
+          """,WeightCalibrationAgentTest.input()));
+    }
 }

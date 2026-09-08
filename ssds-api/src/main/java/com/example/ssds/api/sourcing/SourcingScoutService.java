@@ -46,7 +46,10 @@ public class SourcingScoutService {
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定品類"));
         CategoryLeadTime leadTime = leadTimes.findById(category.getId()).orElseThrow(() ->
                 new BusinessException(ErrorCode.VALIDATION_FAILED, "此品類尚未設定尋源前置天數"));
-        String normalized = request.keyword().strip();
+        String normalized = SourcingKeywordNormalizer.normalize(request.keyword());
+        if (normalized.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "尋源關鍵字不得為空白");
+        }
         TrendKeyword keyword = keywords.findByKeyword(normalized).orElseGet(() -> keywords.save(
                 TrendKeyword.builder().keyword(normalized).enabled(true).build()));
         Product product = products.findReusableSourcingProduct(keyword.getId(), category.getId())
@@ -83,18 +86,20 @@ public class SourcingScoutService {
         candidates.save(candidate);
         log.info("SourcingScout completed: productId={}, promptVersion={}, modelAlias=MODEL_REASONING, cacheHit={}",
                 productId, result.promptVersion(), result.cacheHit());
-        return response(candidate);
+        return response(candidate, result.cacheHit());
     }
-    @Transactional(readOnly=true) public SourcingScoutResponse latest(Long productId) { return response(load(productId)); }
+    @Transactional(readOnly=true) public SourcingScoutResponse latest(Long productId) {
+        return response(load(productId), false);
+    }
     private SourcingCandidate load(Long id) { return candidates.findDetailedByProductId(id).orElseThrow(() ->
             new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的尋源候選")); }
     private String write(Object value) { try { return mapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new IllegalStateException("無法序列化尋源訊號", e); } }
-    private SourcingScoutResponse response(SourcingCandidate candidate) {
+    private SourcingScoutResponse response(SourcingCandidate candidate, boolean cacheHit) {
         Optional<HeatCompositeDaily> composite = candidate.getDrivingKeyword() == null
                 ? Optional.empty()
                 : heatComposites.findFirstByKeywordIdOrderByStatDateDesc(
                         candidate.getDrivingKeyword().getId());
-        return SourcingScoutResponse.from(candidate, composite.orElse(null), mapper);
+        return SourcingScoutResponse.from(candidate, composite.orElse(null), mapper, cacheHit);
     }
 }

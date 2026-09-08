@@ -1,14 +1,19 @@
 package com.example.ssds.api.aitask;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.insight.dto.ProductInsightResponse;
 import com.example.ssds.api.recommendation.RecommendationService;
+import com.example.ssds.api.recommendation.dto.RecommendationResponse;
 import com.example.ssds.api.scene.SceneClassificationService;
+import com.example.ssds.api.scene.dto.SceneClassificationResponse;
 import com.example.ssds.api.sourcing.SourcingScoutService;
+import com.example.ssds.api.sourcing.dto.SourcingScoutResponse;
 import com.example.ssds.api.trend.TrendInterpretationService;
+import com.example.ssds.api.trend.dto.TrendInterpretationResponse;
 import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import com.example.ssds.ai.client.AiExecutionWarningContext;
@@ -23,8 +28,118 @@ import com.example.ssds.infra.repository.*;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class AiTaskWorkerTest {
+    @ParameterizedTest
+    @EnumSource(value = AiTaskType.class, names = {
+            "SCENE_CLASSIFY", "REVIEW_RISK", "SELLING_POINT",
+            "RECOMMENDATION", "TREND_INTERPRET", "SOURCING_SCOUT"})
+    void cacheHitIsPersistedWithoutConsumingRequestQuota(AiTaskType taskType) {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        TrendInterpretationService trendService = mock(TrendInterpretationService.class);
+        SourcingScoutService sourcingService = mock(SourcingScoutService.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        Product product = Product.builder().id(101L).build();
+        TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
+        AiTask task = AiTask.builder().id(730L).taskType(taskType)
+                .budgetPool(taskType == AiTaskType.SOURCING_SCOUT
+                        ? AiTaskType.BudgetPool.TRACK_B : AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(731L).task(task)
+                .product(taskType == AiTaskType.TREND_INTERPRET ? null : product)
+                .keyword(taskType == AiTaskType.TREND_INTERPRET ? keyword : null)
+                .build();
+        when(taskRepository.findById(730L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(730L)).thenReturn(List.of(item));
+        switch (taskType) {
+            case SCENE_CLASSIFY -> {
+                SceneClassificationResponse response = mock(SceneClassificationResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(sceneService.classify(101L, false)).thenReturn(response);
+            }
+            case REVIEW_RISK -> {
+                ReviewRiskResponse response = mock(ReviewRiskResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(reviewRiskService.analyze(101L, false)).thenReturn(response);
+            }
+            case SELLING_POINT -> {
+                ProductInsightResponse response = mock(ProductInsightResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(response.analysisCompleted()).thenReturn(true);
+                when(productInsightService.analyze(101L, false)).thenReturn(response);
+            }
+            case RECOMMENDATION -> {
+                RecommendationResponse response = mock(RecommendationResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(recommendationService.recommend(101L, false)).thenReturn(response);
+            }
+            case TREND_INTERPRET -> {
+                TrendInterpretationResponse response = mock(TrendInterpretationResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(trendService.interpret(31L, false)).thenReturn(response);
+            }
+            case SOURCING_SCOUT -> {
+                SourcingScoutResponse response = mock(SourcingScoutResponse.class);
+                when(response.cacheHit()).thenReturn(true);
+                when(sourcingService.scout(101L, false)).thenReturn(response);
+            }
+            default -> throw new IllegalArgumentException("unexpected task type");
+        }
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService, trendService, sourcingService,
+                null, budget, 150);
+
+        worker.run(new AiTaskCreatedEvent(730L, false));
+
+        assertEquals(TaskItemStatus.SKIPPED_CACHE, item.getStatus());
+        assertEquals(0, task.getRequestCount());
+        assertEquals(0, task.getRetryPoolRequestCount());
+        assertEquals(1, task.getCacheHitCount());
+    }
+
+    @Test
+    void sourcingRequestsAndRetriesArePersistedInTheirRespectivePools() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        TrendInterpretationService trendService = mock(TrendInterpretationService.class);
+        SourcingScoutService sourcingService = mock(SourcingScoutService.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        Product product = Product.builder().id(101L).build();
+        AiTask task = AiTask.builder().id(732L).taskType(AiTaskType.SOURCING_SCOUT)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_B).totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(733L).task(task).product(product).build();
+        when(taskRepository.findById(732L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(732L)).thenReturn(List.of(item));
+        doAnswer(ignored -> {
+            budget.acquire(AiTaskType.BudgetPool.TRACK_B, false);
+            budget.acquire(AiTaskType.BudgetPool.TRACK_B, true);
+            return mock(SourcingScoutResponse.class);
+        }).when(sourcingService).scout(101L, true);
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService, trendService, sourcingService,
+                null, budget, 150);
+
+        worker.run(new AiTaskCreatedEvent(732L, true));
+
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals(2, task.getRequestCount());
+        assertEquals(1, task.getRetryPoolRequestCount());
+        assertEquals(0, task.getCacheHitCount());
+    }
+
     @Test
     void sourcingConnectorQuotaMarksBackgroundTaskFailedWithSafeMessage() {
         AiTaskRepository taskRepository = mock(AiTaskRepository.class);
@@ -261,5 +376,84 @@ class AiTaskWorkerTest {
         assertEquals(TaskItemStatus.SKIPPED_QUOTA, second.getStatus());
         assertEquals(4, task.getRequestCount());
         assertEquals(TaskStatus.PARTIAL, task.getStatus());
+    }
+
+    @Test
+    void fullAnalysisPersistsActualAttemptsIncludingRetriesInsteadOfFixedStageCount() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(740L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(741L)
+                .task(task)
+                .product(Product.builder().id(101L).build())
+                .build();
+        when(taskRepository.findById(740L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(740L)).thenReturn(List.of(item));
+        when(orchestrator.analyze(101L, false)).thenAnswer(ignored -> {
+            for (int index = 0; index < 4; index++) {
+                budget.acquire(AiTaskType.BudgetPool.TRACK_A, false);
+            }
+            budget.acquire(AiTaskType.BudgetPool.TRACK_A, true);
+            budget.acquire(AiTaskType.BudgetPool.TRACK_A, true);
+            return new FullAnalysisOrchestrator.Result(0, "");
+        });
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 150);
+
+        worker.run(new AiTaskCreatedEvent(740L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()),
+                () -> assertEquals(6, task.getRequestCount()),
+                () -> assertEquals(2, task.getRetryPoolRequestCount()),
+                () -> assertEquals(0, task.getCacheHitCount()));
+    }
+
+    @Test
+    void fullAnalysisCanCompleteWithCacheHitsAndFewerThanFourExternalRequests() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(742L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(743L)
+                .task(task)
+                .product(Product.builder().id(101L).build())
+                .build();
+        when(taskRepository.findById(742L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(742L)).thenReturn(List.of(item));
+        when(orchestrator.analyze(101L, false)).thenAnswer(ignored -> {
+            budget.acquire(AiTaskType.BudgetPool.TRACK_A, false);
+            budget.acquire(AiTaskType.BudgetPool.TRACK_A, false);
+            return new FullAnalysisOrchestrator.Result(2, "");
+        });
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 150);
+
+        worker.run(new AiTaskCreatedEvent(742L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()),
+                () -> assertEquals(2, task.getRequestCount()),
+                () -> assertEquals(2, task.getCacheHitCount()),
+                () -> assertEquals(0, task.getRetryPoolRequestCount()));
     }
 }

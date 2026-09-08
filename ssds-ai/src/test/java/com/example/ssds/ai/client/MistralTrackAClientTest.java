@@ -128,6 +128,18 @@ class MistralTrackAClientTest {
         assertTrue(AiExecutionWarningContext.consumeMessage().contains("請更新模型設定"));
     }
 
+    @Test
+    void rejectsNonPositiveConnectTimeoutDuringTrackAConfiguration() {
+        assertThrows(IllegalArgumentException.class, () -> new MistralTrackAClient(
+                objectMapper,
+                "http://127.0.0.1:1/v1",
+                "test-key",
+                30,
+                0,
+                new DailyAiBudget(100, 0.7, 0.2, 0.1),
+                event -> {}));
+    }
+
     private MistralTrackAClient client() {
         return new MistralTrackAClient(
                 objectMapper,

@@ -55,10 +55,10 @@ class ProductInsightServiceTest {
                         new SellingPoint("口味獲得肯定", 1, "口味"),
                         new SellingPoint("資料不足：無足夠評論支持具體賣點", 0, "資料不足")),
                 List.of(
-                        new ProductInsightRisk("物流條件需留意", InsightRiskType.LOGISTICS, Severity.MEDIUM, true),
-                        new ProductInsightRisk("資料不足：無足夠資料支持具體風險", InsightRiskType.OTHER, Severity.LOW, false)));
+                        new ProductInsightRisk("物流條件需留意", 1, InsightRiskType.LOGISTICS, Severity.MEDIUM, true),
+                        new ProductInsightRisk("資料不足：無足夠資料支持具體風險", 0, InsightRiskType.OTHER, Severity.LOW, false)));
         ProductInsightResult result = new ProductInsightResult(
-                output, false, null, false, "mistral-medium-3-5", "product-insight-v1", 120, 40, 1);
+                output, false, null, false, "mistral-medium-3-5", "product-insight-v2", 120, 40, 1);
         when(productRepository.findWithDetailsById(101L)).thenReturn(Optional.of(product));
         when(reviewRepository.findByProductId(eq(101L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review)));
@@ -90,8 +90,11 @@ class ProductInsightServiceTest {
                 insights.stream().map(AiInsight::getInsightType).toList());
         assertEquals(1, insights.getFirst().getRequestCount());
         assertEquals(0, insights.get(1).getRequestCount());
+        assertEquals(1, insights.stream().mapToInt(AiInsight::getRequestCount).sum());
+        assertEquals(120, insights.getFirst().getPromptTokens());
+        assertNull(insights.get(1).getPromptTokens());
         assertEquals("MODEL_LONG_TEXT", insights.getFirst().getModelAlias());
-        assertEquals("product-insight-v1", insights.getFirst().getPromptVersion());
+        assertEquals("product-insight-v2", insights.getFirst().getPromptVersion());
         assertTrue(response.analysisCompleted());
     }
 }
