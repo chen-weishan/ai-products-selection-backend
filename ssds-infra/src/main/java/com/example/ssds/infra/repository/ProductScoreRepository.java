@@ -1,6 +1,7 @@
 package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.ProductScore;
 import java.util.List;
 import java.util.Optional;
@@ -48,4 +49,63 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
     long countByPeriodAndConfidenceLessThan(String period, int confidence);
 
     boolean existsByProductIdAndPeriod(Long productId, String period);
+
+    @Query(value = """
+            select s from ProductScore s
+            join fetch s.product p
+            left join fetch p.category
+            where s.period = :period
+              and s.active = true
+              and p.deletedAt is null
+              and (:scene is null or s.sceneType = :scene)
+              and (:categoryId is null or p.category.id = :categoryId)
+            order by s.finalScore desc, s.id asc
+            """,
+            countQuery = """
+            select count(s) from ProductScore s
+            join s.product p
+            where s.period = :period
+              and s.active = true
+              and p.deletedAt is null
+              and (:scene is null or s.sceneType = :scene)
+              and (:categoryId is null or p.category.id = :categoryId)
+            """)
+    Page<ProductScore> findRanking(
+            @Param("period") String period,
+            @Param("scene") SceneType scene,
+            @Param("categoryId") Long categoryId,
+            Pageable pageable);
+
+    /**
+     * FR-04 單一品項的分數快照（規格書 §8.2 GET /products/{id}/scores）。
+     *
+     * <p>{@code scene} 的語意與 {@link #findRanking} <b>不同</b>：
+     * 那支為 null 是「不篩榜」，這支為 null 是「<b>取主情境那筆</b>」（§8.2：
+     * 「省略 scene 回傳主情境」）。兩個條件互斥，剛好各自在對方為 null 時失效：
+     * <ul>
+     *   <li>{@code (:scene is null or s.sceneType = :scene)}——有給就依榜篩</li>
+     *   <li>{@code (:scene is not null or s.primary = true)}——沒給就取主情境</li>
+     * </ul>
+     *
+     * <p>{@code s.active = true} 不可省：§5.10 重算不覆寫，同一組
+     * (product, period, sceneType) 可能有多列歷史，不篩會拿到舊分數。
+     *
+     * <p>factors 是 ToMany，不在這裡 fetch——由呼叫端用
+     * {@code ScoreFactorRepository.findByScoreId(...)} 另外取。
+     */
+    @Query("""
+            select s from ProductScore s
+            join fetch s.product p
+            left join fetch p.category
+            where p.id = :productId
+              and s.period = :period
+              and s.active = true
+              and p.deletedAt is null
+              and (:scene is null or s.sceneType = :scene)
+              and (:scene is not null or s.primary = true)
+            """)
+    Optional<ProductScore> findSnapshot(
+            @Param("productId") Long productId,
+            @Param("period") String period,
+            @Param("scene") SceneType scene);
 }
