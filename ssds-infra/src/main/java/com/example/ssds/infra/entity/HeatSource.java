@@ -2,6 +2,7 @@ package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.AdapterType;
 import com.example.ssds.core.domain.HeatSourceCode;
+import com.example.ssds.core.domain.HeatGranularity;
 import com.example.ssds.core.domain.SourceAvailability;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -34,6 +35,11 @@ public class HeatSource {
     @Enumerated(EnumType.STRING)
     @Column(name = "adapter_type", nullable = false, length = 32)
     private AdapterType adapterType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    @Builder.Default
+    private HeatGranularity granularity = HeatGranularity.KEYWORD;
 
     /** §5.3.2 合成權重。 */
     @Column(name = "composite_weight", nullable = false, precision = 4, scale = 3)

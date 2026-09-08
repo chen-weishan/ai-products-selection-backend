@@ -9,11 +9,14 @@ package com.example.ssds.core.domain;
  */
 public enum AiTaskType {
 
+    /** 每品項依序執行 Agent 1–4 的每週全量 AI 分析。 */
+    FULL_ANALYSIS(BudgetPool.TRACK_A),
+
     /** 情境判定（SceneClassifierAgent） */
     SCENE_CLASSIFY(BudgetPool.TRACK_A),
     /** 評論風險分析（ReviewRiskAgent） */
     REVIEW_RISK(BudgetPool.TRACK_A),
-    /** 賣點萃取（SellingPointAgent） */
+    /** 賣點與風險文字（ProductInsightAgent）；保留既有資料庫 code SELLING_POINT。 */
     SELLING_POINT(BudgetPool.TRACK_A),
     /** 進貨建議（RecommendationAgent） */
     RECOMMENDATION(BudgetPool.TRACK_A),

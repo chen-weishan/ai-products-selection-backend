@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -33,6 +34,11 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
     @EntityGraph(attributePaths = {"factors", "weightVersion"})
     Optional<ProductScore> findFirstByProductIdOrderByCalculatedAtDesc(Long productId);
 
+    /** Agent 輸入只採用最新的主情境現行分數，避免把次要情境扣分重複送出。 */
+    @EntityGraph(attributePaths = {"factors"})
+    Optional<ProductScore> findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(
+            Long productId);
+
     /** FR-05 分數走勢：同一品項的歷史分數。 */
     List<ProductScore> findByProductIdOrderByCalculatedAtDesc(Long productId);
 
@@ -48,4 +54,12 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
     long countByPeriodAndConfidenceLessThan(String period, int confidence);
 
     boolean existsByProductIdAndPeriod(Long productId, String period);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update ProductScore s set s.active = false
+            where s.product.id = :productId and s.period = :period and s.active = true
+            """)
+    int deactivateCurrentScores(
+            @Param("productId") Long productId, @Param("period") String period);
 }

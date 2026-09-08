@@ -25,4 +25,5 @@ public interface ProductReviewRepository extends JpaRepository<ProductReview, Lo
     List<ProductReview> findUnanalyzedByProduct(@Param("productId") Long productId);
 
     long countByProductId(Long productId);
+
 }

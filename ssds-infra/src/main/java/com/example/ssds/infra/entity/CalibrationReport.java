@@ -46,10 +46,34 @@ public class CalibrationReport {
     @Column(name = "ai_interpretation", columnDefinition = "text")
     private String aiInterpretation;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "adjustment_advice", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String adjustmentAdvice = "[]";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "attention_notes", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String attentionNotes = "[]";
+
+    @Column(length = 80)
+    private String model;
+
+    @Column(name = "prompt_version", length = 20)
+    private String promptVersion;
+
+    @Column(name = "interpreted_at")
+    private Instant interpretedAt;
+
     /** 平權／現行版本／建議版本三者的比較（AC-15-4）。 */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "backtest_result", columnDefinition = "jsonb")
     private String backtestResult;
+
+    /** 部分採納時逐項勾選的結果；完整審核流程由權重模組負責。 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "accepted_items", columnDefinition = "jsonb")
+    private String acceptedItems;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

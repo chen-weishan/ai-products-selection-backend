@@ -45,9 +45,39 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
 
+    @EntityGraph(attributePaths = {"product", "product.category", "product.keywords", "keyword", "category", "drivingKeyword", "trendInterpretation"})
+    @Query("select c from SourcingCandidate c where c.product.id = :productId")
+    Optional<SourcingCandidate> findDetailedByProductId(@Param("productId") Long productId);
+
     /**
      * 依來源關鍵字查。keyword_id 是「當初從哪個關鍵字挖出來」的歷史紀錄，
      * 可為 null 也可能與 product_keyword 的現況不一致，不要拿來當即時關聯。
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
+
+    /** §5.8 每日重算範圍；REJECTED 是終態，PROMOTED 已轉 A 軌。 */
+    @EntityGraph(attributePaths = {"product", "product.keywords", "drivingKeyword"})
+    @Query("""
+           select distinct c from SourcingCandidate c
+           where c.product.trackType = com.example.ssds.core.domain.TrackType.B
+             and c.product.sourcingStatus not in (
+                 com.example.ssds.core.domain.SourcingStatus.PROMOTED,
+                 com.example.ssds.core.domain.SourcingStatus.REJECTED)
+             and c.product.deletedAt is null
+           """)
+    List<SourcingCandidate> findEligibleForTimeGapRecalculation();
+
+    /** Agent 5 覆寫某關鍵字後，重算所有與該關鍵字關聯的可變動 B 軌候選。 */
+    @EntityGraph(attributePaths = {"product", "product.keywords", "drivingKeyword"})
+    @Query("""
+           select distinct c from SourcingCandidate c join c.product.keywords k
+           where k.id = :keywordId
+             and c.product.trackType = com.example.ssds.core.domain.TrackType.B
+             and c.product.sourcingStatus not in (
+                 com.example.ssds.core.domain.SourcingStatus.PROMOTED,
+                 com.example.ssds.core.domain.SourcingStatus.REJECTED)
+             and c.product.deletedAt is null
+           """)
+    List<SourcingCandidate> findEligibleForTimeGapRecalculationByKeywordId(
+            @Param("keywordId") Long keywordId);
 }
