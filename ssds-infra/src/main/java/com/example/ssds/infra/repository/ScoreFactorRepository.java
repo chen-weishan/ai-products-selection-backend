@@ -2,6 +2,7 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.infra.entity.ScoreFactor;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -24,4 +25,6 @@ public interface ScoreFactorRepository extends JpaRepository<ScoreFactor, Long> 
 
     /** §5.7：缺資料的因子要在 UI 標灰底。 */
     List<ScoreFactor> findByScoreIdAndDataAvailableFalse(Long scoreId);
+
+    List<ScoreFactor> findByScoreIdIn(Collection<Long> scoreIds);
 }
