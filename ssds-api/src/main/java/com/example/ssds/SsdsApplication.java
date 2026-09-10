@@ -15,9 +15,9 @@ public class SsdsApplication {
 		
 	}
 	//暫時放這裡之後再搬家
-	@Bean
-    public PasswordEncoder passwordEncoder() {
-        return new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
-    }
+//	@Bean
+//    public PasswordEncoder passwordEncoder() {
+//        return new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+//    }
 	
 }

@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.ssds.service.AuthService;
 
 @RestController
-@RequestMapping("/api/v1/auth") 
+@RequestMapping("/auth") 
 @CrossOrigin(origins = "*", allowedHeaders = "*")
 public class AuthController {
 
