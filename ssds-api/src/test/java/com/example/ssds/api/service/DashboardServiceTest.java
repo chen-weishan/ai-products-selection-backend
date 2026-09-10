@@ -59,8 +59,7 @@ class DashboardServiceTest {
     @Autowired
     private SourcingCandidateRepository sourcingCandidateRepository;
 
-    @Autowired
-    private SceneClassificationLogRepository sceneClassificationLogRepository;
+    ;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -149,21 +148,19 @@ private RiskAlert createRiskAlert(Product product, Severity severity) {
     }
 
     // Helper to create a SourcingCandidate (need to set product.sourcingStatus)
-    private SourcingCandidate createSourcingCandidate(Product product, SourcingStatus sourcingStatus, Integer timeGapDays) {
-        // Set product's sourcingStatus
-        product.setSourcingStatus(sourcingStatus);
-        product = productRepository.save(product);
-        // Calculate estimatedLifespanDays based on desired timeGapDays and default leadTimeDays (7)
-        Integer leadTimeDays = 7;
-        Integer estimatedLifespanDays = (timeGapDays == null) ? null : timeGapDays + leadTimeDays;
-        SourcingCandidate sc = SourcingCandidate.builder()
-                .product(product)
-                .leadTimeDays(leadTimeDays)
-                .estimatedLifespanDays(estimatedLifespanDays)
-                .timeGapDays(timeGapDays)
-                .build();
-        return sourcingCandidateRepository.save(sc);
-    }
+private SourcingCandidate createSourcingCandidate(Product product, SourcingStatus sourcingStatus, Integer timeGapDays) {
+         // Set product's sourcingStatus
+         product.setSourcingStatus(sourcingStatus);
+         product = productRepository.save(product);
+         // leadTimeDays is hardcoded to 7 as before
+         Integer leadTimeDays = 7;
+         SourcingCandidate sc = SourcingCandidate.builder()
+                 .product(product)
+                 .leadTimeDays(leadTimeDays)
+                 .timeGapDays(timeGapDays)
+                 .build();
+         return sourcingCandidateRepository.save(sc);
+     }
 
 
 
@@ -393,11 +390,11 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
                 .build();
         product = productRepository.save(product);
 
-        // Old snapshot: is_active = false
-        ProductScore oldScore = createProductScore(product, period, scene, gradeA, new BigDecimal("70"), false);
-
-        // New snapshot: is_active = true, higher score should win
-        ProductScore newScore = createProductScore(product, period, scene, gradeA, new BigDecimal("85"), true);
+// Old snapshot: is_active = false
+         createProductScore(product, period, scene, gradeA, new BigDecimal("70"), false);
+         
+         // New snapshot: is_active = true, higher score should win
+         createProductScore(product, period, scene, gradeA, new BigDecimal("85"), true);
 
 DashboardRankingsResponseDto rankings = dashboardService.getRankings(period, TrackType.A, scene, 5);
 List<RankingItemDto> viral = rankings.viral();

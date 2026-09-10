@@ -142,14 +142,14 @@ public class DashboardService {
                 List<SourcingCandidate> candidates = sourcingCandidateRepository
                                 .findDashboardSummaryCandidates(PageRequest.of(0, sourcingLimit));
 
-                List<BtrackSummaryDto> items = candidates.stream()
-                                .map(sc -> new BtrackSummaryDto(
-                                                sc.getProduct().getId(),
-                                                sc.getProduct().getName(),
-                                                sc.getHeatStage() != null ? sc.getHeatStage().name() : null,
-                                                sc.getTimeGapDays(),
-                                                sc.getProduct().getSourcingStatus().name()))
-                                .toList();
+List<BtrackSummaryDto> items = candidates.stream()
+                                 .map(sc -> new BtrackSummaryDto(
+                                         sc.getProduct().getId(),
+                                         sc.getProduct().getName(),
+                                         null,
+                                         sc.getTimeGapDays(),
+                                         sc.getProduct().getSourcingStatus().name()))
+                                 .toList();
 
                 return new DashboardSourcingSummaryResponseDto(items);
         }

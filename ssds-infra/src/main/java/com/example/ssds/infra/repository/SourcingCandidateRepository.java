@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+
 import org.springframework.data.domain.Pageable;
 
 /**
@@ -18,7 +18,7 @@ import org.springframework.data.domain.Pageable;
  * 狀態不在本實體上：v3.0 §7.2.9 明訂一律以 {@code product.sourcingStatus}
  * 為準，不重複於 sourcing_candidate。因此所有依狀態的查詢都要 join 過去。
  */
-@Repository
+
 public interface SourcingCandidateRepository extends JpaRepository<SourcingCandidate, Long> {
 
     /**
@@ -54,7 +54,7 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
 
-    List<SourcingCandidate> findByHeatStage(HeatStage heatStage);
+    
 
     /**
      * FR-02 儀表板 B 軌摘要。AC-16-2／AC-02-7：以時效落差升冪為主排序，
