@@ -23,7 +23,8 @@ public final class InstagramHashtagMapping {
 
     /** 要新增／調整追蹤的 hashtag，直接改這個清單即可。 */
     public static final List<Entry> ENTRIES = List.of(
-            new Entry("skincare", "零食")
+             new Entry("matcha", "零食"),
+             new Entry("低醣", "生鮮冷凍")
     );
 
     private InstagramHashtagMapping() {}

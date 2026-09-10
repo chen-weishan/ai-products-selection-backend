@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,6 +18,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+
 /**
  * 規格書 §2.1／FR-01：無狀態 JWT 驗證。角色層級的存取控制交給各 Controller 方法上的
  * {@code @PreAuthorize}（見 {@link EnableMethodSecurity}），而不是在這裡列 URL pattern——
@@ -26,6 +28,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@Profile("!dev")
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

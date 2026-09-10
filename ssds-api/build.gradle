@@ -44,4 +44,5 @@ tasks.named('bootRun') {
 	// 不改的話 ./.env 指到 ssds-api/.env（不存在），
 	// 密碼會退回未解析的預設值而在連線時才報 authentication failed。
 	workingDir = rootProject.projectDir
+	jvmArgs = ["-Xms512m", "-Xmx1024m", "-XX:MaxMetaspaceSize=256m"]
 }

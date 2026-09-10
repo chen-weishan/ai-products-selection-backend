@@ -7,6 +7,10 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import com.example.ssds.api.security.JwtAuthenticationFilter;
+import com.example.ssds.api.security.RestAuthenticationEntryPoint;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * 開發環境的臨時安全設定（FR-01 完成後整個檔案刪除）。
@@ -28,12 +32,25 @@ import org.springframework.security.web.SecurityFilterChain;
 @Profile("dev")
 public class DevSecurityConfig {
 
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RestAuthenticationEntryPoint authenticationEntryPoint;
+
+    public DevSecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            RestAuthenticationEntryPoint authenticationEntryPoint) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+    }
+
     @Bean
     SecurityFilterChain devFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-                .httpBasic(Customizer.withDefaults());
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/refresh").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }
