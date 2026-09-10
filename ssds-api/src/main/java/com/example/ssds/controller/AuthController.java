@@ -1,23 +1,25 @@
 package com.example.ssds.controller;
 
+import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Autowired;
 import com.example.ssds.service.AuthService;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth") 
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class AuthController {
 
-    @Autowired
+    @Autowired 
     private AuthService authService;
 
-    @PostMapping("/login")
-    public ResponseEntity<Object> login(@RequestBody java.util.Map<String, String> body) {
-        // 💡 完美的 Map 裸奔流：直接把前端的 body 丟給 Service
+    @PostMapping("/login") // 組合出來為 POST /api/v1/auth/login
+    public ResponseEntity<Object> login(@RequestBody Map<String, String> body) {
         return authService.authenticate(body);
     }
 }
