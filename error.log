@@ -1,0 +1,760 @@
+> Task :ssds-core:compileJava UP-TO-DATE
+> Task :ssds-ai:compileJava NO-SOURCE
+> Task :ssds-ai:processResources NO-SOURCE
+> Task :ssds-ai:classes UP-TO-DATE
+> Task :ssds-ai:jar UP-TO-DATE
+> Task :ssds-calibration:compileJava NO-SOURCE
+> Task :ssds-infra:compileJava UP-TO-DATE
+> Task :ssds-ingest:compileJava NO-SOURCE
+> Task :ssds-api:compileJava UP-TO-DATE
+> Task :ssds-api:processResources UP-TO-DATE
+> Task :ssds-api:classes UP-TO-DATE
+> Task :ssds-api:resolveMainClassName UP-TO-DATE
+> Task :ssds-calibration:processResources NO-SOURCE
+> Task :ssds-calibration:classes UP-TO-DATE
+> Task :ssds-calibration:jar UP-TO-DATE
+> Task :ssds-core:processResources NO-SOURCE
+> Task :ssds-core:classes UP-TO-DATE
+> Task :ssds-core:jar UP-TO-DATE
+> Task :ssds-infra:processResources UP-TO-DATE
+> Task :ssds-infra:classes UP-TO-DATE
+> Task :ssds-infra:jar UP-TO-DATE
+> Task :ssds-ingest:processResources NO-SOURCE
+> Task :ssds-ingest:classes UP-TO-DATE
+> Task :ssds-ingest:jar UP-TO-DATE
+
+> Task :ssds-api:bootRun
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-25T16:21:12.467+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Starting SsdsApplication using Java 21.0.7 with PID 95460 (/Users/a123/Project/ai-products-selection-backend/ssds-api/build/classes/java/main started by a123 in /Users/a123/Project/ai-products-selection-backend)
+2026-08-25T16:21:12.469+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : The following 1 profile is active: "dev"
+2026-08-25T16:21:12.495+08:00  INFO 95460 --- [ssds] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2026-08-25T16:21:12.495+08:00  INFO 95460 --- [ssds] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2026-08-25T16:21:12.883+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-25T16:21:12.939+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 52 ms. Found 35 JPA repository interfaces.
+2026-08-25T16:21:13.245+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-25T16:21:13.253+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-25T16:21:13.254+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-25T16:21:13.271+08:00  INFO 95460 --- [ssds] [  restartedMain] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 776 ms
+2026-08-25T16:21:13.387+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-25T16:21:13.414+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-25T16:21:13.625+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-25T16:21:13.641+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-08-25T16:21:15.184+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@74dd5caa
+2026-08-25T16:21:15.185+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-08-25T16:21:16.093+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://aws-0-ap-south-1.pooler.supabase.com:6543/postgres]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.6
+	Default catalog/schema: postgres/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-25T16:21:16.889+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-25T16:21:16.892+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 500)
+2026-08-25T16:21:16.894+08:00  INFO 95460 --- [ssds] [  restartedMain] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-25T16:21:16.982+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-25T16:21:18.023+08:00  INFO 95460 --- [ssds] [  restartedMain] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name devUserDetailsService
+2026-08-25T16:21:19.074+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/api/v1'
+2026-08-25T16:21:19.079+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Started SsdsApplication in 6.803 seconds (process running for 7.035)
+2026-08-25T16:21:19.080+08:00  WARN 95460 --- [ssds] [  restartedMain] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-25T16:21:19.080+08:00  WARN 95460 --- [ssds] [  restartedMain] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-08-25T16:21:49.370+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.a.c.c.C.[.[localhost].[/api/v1]        : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-25T16:21:49.371+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-25T16:21:49.372+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+Hibernate: 
+    select
+        count(*) 
+    from
+        public.product p1_0
+Hibernate: 
+    select
+        count(ps1_0.id) 
+    from
+        public.product_score ps1_0 
+    where
+        ps1_0.period=? 
+        and ps1_0.grade='A'
+2026-08-25T16:21:57.181+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:CHAR) <- [2026W34]
+Hibernate: 
+    select
+        count(ra1_0.id) 
+    from
+        public.risk_alert ra1_0 
+    where
+        ra1_0.status=?
+2026-08-25T16:21:57.334+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [OPEN]
+Hibernate: 
+    select
+        ps1_0.id,
+        ps1_0.is_active,
+        ps1_0.bonus_subtotal,
+        ps1_0.calculated_at,
+        ps1_0.confidence,
+        ps1_0.final_score,
+        ps1_0.grade,
+        ps1_0.penalty_subtotal,
+        ps1_0.period,
+        ps1_0.is_primary,
+        ps1_0.product_id,
+        p1_0.id,
+        p1_0.category_id,
+        p1_0.cost,
+        p1_0.created_at,
+        p1_0.created_by,
+        p1_0.listed_at,
+        p1_0.logistics_condition,
+        p1_0.margin_rate,
+        p1_0.moq,
+        p1_0.name,
+        p1_0.reject_reason,
+        p1_0.season,
+        p1_0.shelf_life_days,
+        p1_0.sourcing_status,
+        p1_0.status,
+        p1_0.suggested_price,
+        p1_0.supplier_id,
+        p1_0.track_type,
+        p1_0.updated_at,
+        ps1_0.scene_type,
+        ps1_0.weight_version_id 
+    from
+        public.product_score ps1_0 
+    join
+        public.product p1_0 
+            on p1_0.id=ps1_0.product_id 
+    where
+        ps1_0.period=? 
+        and ps1_0.scene_type=cast(? as varchar) 
+    order by
+        ps1_0.final_score desc 
+    fetch
+        first ? rows only
+2026-08-25T16:21:57.486+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:CHAR) <- [2026W34]
+2026-08-25T16:21:57.486+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (2:VARCHAR) <- [VIRAL]
+2026-08-25T16:21:57.486+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (3:INTEGER) <- [5]
+Hibernate: 
+    select
+        ps1_0.id,
+        ps1_0.is_active,
+        ps1_0.bonus_subtotal,
+        ps1_0.calculated_at,
+        ps1_0.confidence,
+        ps1_0.final_score,
+        ps1_0.grade,
+        ps1_0.penalty_subtotal,
+        ps1_0.period,
+        ps1_0.is_primary,
+        ps1_0.product_id,
+        p1_0.id,
+        p1_0.category_id,
+        p1_0.cost,
+        p1_0.created_at,
+        p1_0.created_by,
+        p1_0.listed_at,
+        p1_0.logistics_condition,
+        p1_0.margin_rate,
+        p1_0.moq,
+        p1_0.name,
+        p1_0.reject_reason,
+        p1_0.season,
+        p1_0.shelf_life_days,
+        p1_0.sourcing_status,
+        p1_0.status,
+        p1_0.suggested_price,
+        p1_0.supplier_id,
+        p1_0.track_type,
+        p1_0.updated_at,
+        ps1_0.scene_type,
+        ps1_0.weight_version_id 
+    from
+        public.product_score ps1_0 
+    join
+        public.product p1_0 
+            on p1_0.id=ps1_0.product_id 
+    where
+        ps1_0.period=? 
+        and ps1_0.scene_type=cast(? as varchar) 
+    order by
+        ps1_0.final_score desc 
+    fetch
+        first ? rows only
+2026-08-25T16:21:57.673+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:CHAR) <- [2026W34]
+2026-08-25T16:21:57.673+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (2:VARCHAR) <- [FESTIVAL]
+2026-08-25T16:21:57.673+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (3:INTEGER) <- [5]
+Hibernate: 
+    select
+        ps1_0.id,
+        ps1_0.is_active,
+        ps1_0.bonus_subtotal,
+        ps1_0.calculated_at,
+        ps1_0.confidence,
+        ps1_0.final_score,
+        ps1_0.grade,
+        ps1_0.penalty_subtotal,
+        ps1_0.period,
+        ps1_0.is_primary,
+        ps1_0.product_id,
+        p1_0.id,
+        p1_0.category_id,
+        p1_0.cost,
+        p1_0.created_at,
+        p1_0.created_by,
+        p1_0.listed_at,
+        p1_0.logistics_condition,
+        p1_0.margin_rate,
+        p1_0.moq,
+        p1_0.name,
+        p1_0.reject_reason,
+        p1_0.season,
+        p1_0.shelf_life_days,
+        p1_0.sourcing_status,
+        p1_0.status,
+        p1_0.suggested_price,
+        p1_0.supplier_id,
+        p1_0.track_type,
+        p1_0.updated_at,
+        ps1_0.scene_type,
+        ps1_0.weight_version_id 
+    from
+        public.product_score ps1_0 
+    join
+        public.product p1_0 
+            on p1_0.id=ps1_0.product_id 
+    where
+        ps1_0.period=? 
+        and ps1_0.scene_type=cast(? as varchar) 
+    order by
+        ps1_0.final_score desc 
+    fetch
+        first ? rows only
+2026-08-25T16:21:57.821+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:CHAR) <- [2026W34]
+2026-08-25T16:21:57.821+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (2:VARCHAR) <- [REPLENISHMENT]
+2026-08-25T16:21:57.821+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (3:INTEGER) <- [5]
+Hibernate: 
+    select
+        ps1_0.id,
+        ps1_0.is_active,
+        ps1_0.bonus_subtotal,
+        ps1_0.calculated_at,
+        ps1_0.confidence,
+        ps1_0.final_score,
+        ps1_0.grade,
+        ps1_0.penalty_subtotal,
+        ps1_0.period,
+        ps1_0.is_primary,
+        ps1_0.product_id,
+        p1_0.id,
+        p1_0.category_id,
+        p1_0.cost,
+        p1_0.created_at,
+        p1_0.created_by,
+        p1_0.listed_at,
+        p1_0.logistics_condition,
+        p1_0.margin_rate,
+        p1_0.moq,
+        p1_0.name,
+        p1_0.reject_reason,
+        p1_0.season,
+        p1_0.shelf_life_days,
+        p1_0.sourcing_status,
+        p1_0.status,
+        p1_0.suggested_price,
+        p1_0.supplier_id,
+        p1_0.track_type,
+        p1_0.updated_at,
+        ps1_0.scene_type,
+        ps1_0.weight_version_id 
+    from
+        public.product_score ps1_0 
+    join
+        public.product p1_0 
+            on p1_0.id=ps1_0.product_id 
+    where
+        ps1_0.period=? 
+        and ps1_0.scene_type=cast(? as varchar) 
+    order by
+        ps1_0.final_score desc 
+    fetch
+        first ? rows only
+2026-08-25T16:21:57.973+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:CHAR) <- [2026W34]
+2026-08-25T16:21:57.973+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (2:VARCHAR) <- [SEASONAL]
+2026-08-25T16:21:57.973+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (3:INTEGER) <- [5]
+Hibernate: 
+    select
+        hs1_0.id,
+        hs1_0.adapter_type,
+        hs1_0.availability,
+        hs1_0.composite_weight,
+        hs1_0.enabled,
+        hs1_0.last_fetched_at,
+        hs1_0.quota_limit,
+        hs1_0.quota_used,
+        hs1_0.source_code 
+    from
+        public.heat_source hs1_0
+Hibernate: 
+    select
+        dr1_0.id,
+        dr1_0.ai_action,
+        dr1_0.ai_insight_id,
+        dr1_0.ai_qty_max,
+        dr1_0.ai_qty_min,
+        dr1_0.campaign_end_date,
+        dr1_0.decided_at,
+        dr1_0.decided_by,
+        dr1_0.decision,
+        dr1_0.expected_list_date,
+        dr1_0.first_order_qty,
+        dr1_0.followed_ai,
+        dr1_0.product_id,
+        p1_0.id,
+        p1_0.category_id,
+        p1_0.cost,
+        p1_0.created_at,
+        p1_0.created_by,
+        p1_0.listed_at,
+        p1_0.logistics_condition,
+        p1_0.margin_rate,
+        p1_0.moq,
+        p1_0.name,
+        p1_0.reject_reason,
+        p1_0.season,
+        p1_0.shelf_life_days,
+        p1_0.sourcing_status,
+        p1_0.status,
+        p1_0.suggested_price,
+        p1_0.supplier_id,
+        p1_0.track_type,
+        p1_0.updated_at,
+        dr1_0.reason,
+        dr1_0.reviewed_at,
+        dr1_0.reviewed_by,
+        dr1_0.score_id 
+    from
+        public.decision_record dr1_0 
+    join
+        public.product p1_0 
+            on p1_0.id=dr1_0.product_id 
+    join
+        public.campaign_result r1_0 
+            on dr1_0.id=r1_0.decision_id 
+    where
+        dr1_0.decision=? 
+        and dr1_0.campaign_end_date is not null 
+        and dr1_0.campaign_end_date<=? 
+        and r1_0.decision_id is null 
+    order by
+        dr1_0.campaign_end_date
+2026-08-25T16:21:58.435+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [ADOPT]
+2026-08-25T16:21:58.435+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (2:DATE) <- [2026-08-18]
+Hibernate: 
+    SELECT
+        * 
+    FROM
+        sourcing_candidate sc 
+    JOIN
+        product p 
+            ON p.id = sc.product_id 
+    WHERE
+        p.track_type = 'B'   
+        AND p.sourcing_status != 'REJECTED' 
+    ORDER BY
+        sc.time_gap_days ASC NULLS LAST 
+    LIMIT
+        ? 
+2026-08-25T16:21:58.651+08:00 TRACE 95460 --- [ssds] [nio-8080-exec-2] org.hibernate.orm.jdbc.bind              : binding parameter (1:INTEGER) <- [3]
+2026-08-25T16:21:58.813+08:00 ERROR 95460 --- [ssds] [nio-8080-exec-2] c.e.s.a.c.error.GlobalExceptionHandler   : 未預期的錯誤
+
+org.springframework.orm.jpa.JpaSystemException: Encountered a duplicated sql alias [id] during auto-discovery of a native-sql query
+	at org.springframework.orm.jpa.hibernate.HibernateExceptionTranslator.convertHibernateAccessException(HibernateExceptionTranslator.java:223) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.hibernate.HibernateExceptionTranslator.convertHibernateAccessException(HibernateExceptionTranslator.java:131) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.hibernate.HibernateExceptionTranslator.translateExceptionIfPossible(HibernateExceptionTranslator.java:105) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.translateExceptionIfPossible(HibernateJpaDialect.java:223) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.translateExceptionIfPossible(AbstractEntityManagerFactoryBean.java:577) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.dao.support.ChainedPersistenceExceptionTranslator.translateExceptionIfPossible(ChainedPersistenceExceptionTranslator.java:61) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.dao.support.DataAccessUtils.translateIfNecessary(DataAccessUtils.java:346) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:157) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.data.jpa.repository.support.CrudMethodMetadataPostProcessor$CrudMethodMetadataPopulatingMethodInterceptor.invoke(CrudMethodMetadataPostProcessor.java:137) ~[spring-data-jpa-4.1.0.jar:4.1.0]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.JdkDynamicAopProxy.invoke(JdkDynamicAopProxy.java:222) ~[spring-aop-7.0.8.jar:7.0.8]
+	at jdk.proxy4/jdk.proxy4.$Proxy172.findPriorityListWithLimit(Unknown Source) ~[na:na]
+	at com.example.ssds.api.service.DashboardService.getBTrackSummary(DashboardService.java:122) ~[main/:na]
+	at com.example.ssds.api.service.DashboardService.getSummary(DashboardService.java:85) ~[main/:na]
+	at com.example.ssds.controller.DashboardController.getSummary(DashboardController.java:28) ~[main/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:252) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:184) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:117) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:934) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:853) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:86) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:963) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:866) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1000) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:892) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:622) ~[tomcat-embed-core-11.0.22.jar:6.1]
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:874) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:710) ~[tomcat-embed-core-11.0.22.jar:6.1]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:128) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:53) ~[tomcat-embed-websocket-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy.lambda$doFilterInternal$2(FilterChainProxy.java:235) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:376) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:101) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:126) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:120) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.AnonymousAuthenticationFilter.doFilter(AnonymousAuthenticationFilter.java:100) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter.doFilter(SecurityContextHolderAwareRequestFilter.java:181) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.savedrequest.RequestCacheAwareFilter.doFilter(RequestCacheAwareFilter.java:63) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.www.BasicAuthenticationFilter.doFilterInternal(BasicAuthenticationFilter.java:247) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:110) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:96) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.header.HeaderWriterFilter.doHeadersAfter(HeaderWriterFilter.java:90) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.header.HeaderWriterFilter.doFilterInternal(HeaderWriterFilter.java:75) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:82) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:69) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter.doFilterInternal(WebAsyncManagerIntegrationFilter.java:62) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.session.DisableEncodeUrlFilter.doFilterInternal(DisableEncodeUrlFilter.java:42) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy.doFilterInternal(FilterChainProxy.java:237) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy.doFilter(FilterChainProxy.java:195) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.ServletRequestPathFilter.doFilter(ServletRequestPathFilter.java:52) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebSecurityConfiguration.java:317) ~[spring-security-config-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.DelegatingFilterProxy.invokeDelegate(DelegatingFilterProxy.java:355) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.DelegatingFilterProxy.doFilter(DelegatingFilterProxy.java:272) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:199) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:165) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:77) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:492) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:113) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:83) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:72) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:341) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:397) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:1272) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1801) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:946) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+Caused by: org.hibernate.loader.NonUniqueDiscoveredSqlAliasException: Encountered a duplicated sql alias [id] during auto-discovery of a native-sql query
+	at org.hibernate.query.results.internal.ResultSetMappingImpl.checkDuplicateAliases(ResultSetMappingImpl.java:258) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.query.results.internal.ResultSetMappingImpl.resolve(ResultSetMappingImpl.java:205) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.internal.JdbcSelectExecutorStandardImpl.resolveJdbcValues(JdbcSelectExecutorStandardImpl.java:409) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.internal.JdbcSelectExecutorStandardImpl.resolveJdbcValuesSource(JdbcSelectExecutorStandardImpl.java:349) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.internal.JdbcSelectExecutorStandardImpl.doExecuteQuery(JdbcSelectExecutorStandardImpl.java:143) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.internal.JdbcSelectExecutorStandardImpl.executeQuery(JdbcSelectExecutorStandardImpl.java:100) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.spi.JdbcSelectExecutor.executeQuery(JdbcSelectExecutor.java:63) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.spi.JdbcSelectExecutor.list(JdbcSelectExecutor.java:137) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.spi.JdbcSelectExecutor.list(JdbcSelectExecutor.java:114) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.sql.exec.spi.JdbcSelectExecutor.list(JdbcSelectExecutor.java:104) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.query.sql.internal.NativeSelectQueryPlanImpl.performList(NativeSelectQueryPlanImpl.java:138) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.query.sql.internal.NativeQueryImpl.doList(NativeQueryImpl.java:756) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.query.spi.AbstractSelectionQuery.list(AbstractSelectionQuery.java:153) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.query.Query.getResultList(Query.java:121) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.orm.jpa.SharedEntityManagerCreator$DeferredQueryInvocationHandler.invoke(SharedEntityManagerCreator.java:554) ~[spring-orm-7.0.8.jar:7.0.8]
+	at jdk.proxy4/jdk.proxy4.$Proxy215.getResultList(Unknown Source) ~[na:na]
+	at org.springframework.data.jpa.repository.query.JpaQueryExecution$CollectionExecution.doExecute(JpaQueryExecution.java:141) ~[spring-data-jpa-4.1.0.jar:4.1.0]
+	at org.springframework.data.jpa.repository.query.JpaQueryExecution.execute(JpaQueryExecution.java:100) ~[spring-data-jpa-4.1.0.jar:4.1.0]
+	at org.springframework.data.jpa.repository.query.AbstractJpaQuery.doExecute(AbstractJpaQuery.java:166) ~[spring-data-jpa-4.1.0.jar:4.1.0]
+	at org.springframework.data.jpa.repository.query.AbstractJpaQuery.execute(AbstractJpaQuery.java:156) ~[spring-data-jpa-4.1.0.jar:4.1.0]
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.doInvoke(RepositoryMethodInvoker.java:169) ~[spring-data-commons-4.1.0.jar:4.1.0]
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.invoke(RepositoryMethodInvoker.java:158) ~[spring-data-commons-4.1.0.jar:4.1.0]
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.doInvoke(QueryExecutorMethodInterceptor.java:167) ~[spring-data-commons-4.1.0.jar:4.1.0]
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.invoke(QueryExecutorMethodInterceptor.java:146) ~[spring-data-commons-4.1.0.jar:4.1.0]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.data.projection.DefaultMethodInvokingMethodInterceptor.invoke(DefaultMethodInvokingMethodInterceptor.java:69) ~[spring-data-commons-4.1.0.jar:4.1.0]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor$1.proceedWithInvocation(TransactionInterceptor.java:133) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:371) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:130) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:135) ~[spring-tx-7.0.8.jar:7.0.8]
+	... 94 common frames omitted
+
+2026-08-25T16:21:58.904+08:00  WARN 95460 --- [ssds] [nio-8080-exec-2] .m.m.a.ExceptionHandlerExceptionResolver : Resolved [org.springframework.orm.jpa.JpaSystemException: Encountered a duplicated sql alias [id] during auto-discovery of a native-sql query]
+2026-08-25T16:26:59.636+08:00  INFO 95460 --- [ssds] [   File Watcher] rtingClassPathChangeChangedEventListener : Restarting due to 35 class path changes (0 additions, 2 deletions, 33 modifications)
+2026-08-25T16:26:59.653+08:00  INFO 95460 --- [ssds] [       Thread-1] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-08-25T16:26:59.657+08:00  INFO 95460 --- [ssds] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-08-25T16:26:59.666+08:00  INFO 95460 --- [ssds] [       Thread-1] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-25T16:26:59.672+08:00  INFO 95460 --- [ssds] [       Thread-1] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-08-25T16:26:59.819+08:00  INFO 95460 --- [ssds] [       Thread-1] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-25T16:26:59.926+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Starting SsdsApplication using Java 21.0.7 with PID 95460 (/Users/a123/Project/ai-products-selection-backend/ssds-api/build/classes/java/main started by a123 in /Users/a123/Project/ai-products-selection-backend)
+2026-08-25T16:26:59.926+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : No active profile set, falling back to 1 default profile: "default"
+2026-08-25T16:27:00.049+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-25T16:27:00.067+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 17 ms. Found 35 JPA repository interfaces.
+2026-08-25T16:27:00.137+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-25T16:27:00.138+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-25T16:27:00.138+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-25T16:27:00.144+08:00  INFO 95460 --- [ssds] [  restartedMain] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 217 ms
+2026-08-25T16:27:00.161+08:00  WARN 95460 --- [ssds] [  restartedMain] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/hibernate/autoconfigure/HibernateJpaConfiguration.class]: Failed to initialize dependency 'inMemoryDatabaseShutdownExecutor' of LoadTimeWeaverAware bean 'entityManagerFactory': Error creating bean with name 'inMemoryDatabaseShutdownExecutor' defined in class path resource [org/springframework/boot/devtools/autoconfigure/DevToolsDataSourceAutoConfiguration.class]: Unsatisfied dependency expressed through method 'inMemoryDatabaseShutdownExecutor' parameter 0: Error creating bean with name 'dataSource' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceConfiguration$Hikari.class]: Failed to instantiate [com.zaxxer.hikari.HikariDataSource]: Factory method 'dataSource' threw exception with message: Failed to determine a suitable driver class
+2026-08-25T16:27:00.162+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Stopping service [Tomcat]
+2026-08-25T16:27:00.165+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-25T16:27:00.171+08:00 ERROR 95460 --- [ssds] [  restartedMain] o.s.b.d.LoggingFailureAnalysisReporter   : 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Failed to configure a DataSource: 'url' attribute is not specified and no embedded datasource could be configured.
+
+Reason: Failed to determine a suitable driver class
+
+
+Action:
+
+Consider the following:
+	If you want an embedded database (H2, HSQL or Derby), please put it on the classpath.
+	If you have database settings to be loaded from a particular profile you may need to activate it (no profiles are currently active).
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-25T16:28:16.978+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Starting SsdsApplication using Java 21.0.7 with PID 95460 (/Users/a123/Project/ai-products-selection-backend/ssds-api/build/classes/java/main started by a123 in /Users/a123/Project/ai-products-selection-backend)
+2026-08-25T16:28:16.978+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : No active profile set, falling back to 1 default profile: "default"
+2026-08-25T16:28:17.119+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-25T16:28:17.133+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 12 ms. Found 35 JPA repository interfaces.
+2026-08-25T16:28:17.189+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-25T16:28:17.190+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-25T16:28:17.191+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-25T16:28:17.196+08:00  INFO 95460 --- [ssds] [  restartedMain] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 216 ms
+2026-08-25T16:28:17.213+08:00  WARN 95460 --- [ssds] [  restartedMain] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/hibernate/autoconfigure/HibernateJpaConfiguration.class]: Failed to initialize dependency 'inMemoryDatabaseShutdownExecutor' of LoadTimeWeaverAware bean 'entityManagerFactory': Error creating bean with name 'inMemoryDatabaseShutdownExecutor' defined in class path resource [org/springframework/boot/devtools/autoconfigure/DevToolsDataSourceAutoConfiguration.class]: Unsatisfied dependency expressed through method 'inMemoryDatabaseShutdownExecutor' parameter 0: Error creating bean with name 'dataSource' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceConfiguration$Hikari.class]: Failed to instantiate [com.zaxxer.hikari.HikariDataSource]: Factory method 'dataSource' threw exception with message: Failed to determine a suitable driver class
+2026-08-25T16:28:17.213+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Stopping service [Tomcat]
+2026-08-25T16:28:17.216+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-25T16:28:17.216+08:00 ERROR 95460 --- [ssds] [  restartedMain] o.s.b.d.LoggingFailureAnalysisReporter   : 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Failed to configure a DataSource: 'url' attribute is not specified and no embedded datasource could be configured.
+
+Reason: Failed to determine a suitable driver class
+
+
+Action:
+
+Consider the following:
+	If you want an embedded database (H2, HSQL or Derby), please put it on the classpath.
+	If you have database settings to be loaded from a particular profile you may need to activate it (no profiles are currently active).
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-25T16:28:38.768+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Starting SsdsApplication using Java 21.0.7 with PID 95460 (/Users/a123/Project/ai-products-selection-backend/ssds-api/build/classes/java/main started by a123 in /Users/a123/Project/ai-products-selection-backend)
+2026-08-25T16:28:38.769+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : The following 1 profile is active: "dev"
+2026-08-25T16:28:38.866+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-25T16:28:38.880+08:00  INFO 95460 --- [ssds] [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 12 ms. Found 35 JPA repository interfaces.
+2026-08-25T16:28:38.968+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-25T16:28:38.969+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-25T16:28:38.969+08:00  INFO 95460 --- [ssds] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-25T16:28:38.975+08:00  INFO 95460 --- [ssds] [  restartedMain] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 206 ms
+2026-08-25T16:28:39.027+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-25T16:28:39.043+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-25T16:28:39.044+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-08-25T16:28:40.413+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@4bab7f48
+2026-08-25T16:28:40.414+08:00  INFO 95460 --- [ssds] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-08-25T16:28:41.292+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://aws-0-ap-south-1.pooler.supabase.com:6543/postgres]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.6
+	Default catalog/schema: postgres/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-25T16:28:41.454+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-25T16:28:41.455+08:00  INFO 95460 --- [ssds] [  restartedMain] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 500)
+2026-08-25T16:28:41.455+08:00  INFO 95460 --- [ssds] [  restartedMain] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-25T16:28:41.833+08:00  INFO 95460 --- [ssds] [  restartedMain] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name devUserDetailsService
+2026-08-25T16:28:42.365+08:00  INFO 95460 --- [ssds] [  restartedMain] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/api/v1'
+2026-08-25T16:28:42.367+08:00  INFO 95460 --- [ssds] [  restartedMain] com.example.ssds.SsdsApplication         : Started SsdsApplication in 3.611 seconds (process running for 450.337)
+2026-08-25T16:28:42.367+08:00  WARN 95460 --- [ssds] [  restartedMain] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-25T16:28:42.368+08:00  WARN 95460 --- [ssds] [  restartedMain] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-08-25T16:28:42.368+08:00  INFO 95460 --- [ssds] [  restartedMain] .ConditionEvaluationDeltaLoggingListener : Condition evaluation unchanged
+2026-08-25T16:28:48.439+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.a.c.c.C.[.[localhost].[/api/v1]        : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-25T16:28:48.439+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-25T16:28:48.441+08:00  INFO 95460 --- [ssds] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-08-25T16:28:48.641+08:00 ERROR 95460 --- [ssds] [nio-8080-exec-1] c.e.s.a.c.error.GlobalExceptionHandler   : 未預期的錯誤
+
+org.springframework.web.servlet.resource.NoResourceFoundException: No static resource dashboard/summary for request '/api/v1/dashboard/summary'.
+	at org.springframework.web.servlet.resource.ResourceHttpRequestHandler.handleRequest(ResourceHttpRequestHandler.java:527) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter.handle(HttpRequestHandlerAdapter.java:50) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:963) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:866) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1000) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:892) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:622) ~[tomcat-embed-core-11.0.22.jar:6.1]
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:874) ~[spring-webmvc-7.0.8.jar:7.0.8]
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:710) ~[tomcat-embed-core-11.0.22.jar:6.1]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:128) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:53) ~[tomcat-embed-websocket-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy.lambda$doFilterInternal$2(FilterChainProxy.java:235) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:376) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:101) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:126) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:120) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.AnonymousAuthenticationFilter.doFilter(AnonymousAuthenticationFilter.java:100) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter.doFilter(SecurityContextHolderAwareRequestFilter.java:181) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.savedrequest.RequestCacheAwareFilter.doFilter(RequestCacheAwareFilter.java:63) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.www.BasicAuthenticationFilter.doFilterInternal(BasicAuthenticationFilter.java:247) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:110) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:96) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.header.HeaderWriterFilter.doHeadersAfter(HeaderWriterFilter.java:90) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.header.HeaderWriterFilter.doFilterInternal(HeaderWriterFilter.java:75) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:82) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:69) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter.doFilterInternal(WebAsyncManagerIntegrationFilter.java:62) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.session.DisableEncodeUrlFilter.doFilterInternal(DisableEncodeUrlFilter.java:42) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.web.FilterChainProxy$VirtualFilterChain.doFilter(FilterChainProxy.java:385) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy.doFilterInternal(FilterChainProxy.java:237) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.security.web.FilterChainProxy.doFilter(FilterChainProxy.java:195) ~[spring-security-web-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.ServletRequestPathFilter.doFilter(ServletRequestPathFilter.java:52) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebSecurityConfiguration.java:317) ~[spring-security-config-7.1.0.jar:7.1.0]
+	at org.springframework.web.filter.DelegatingFilterProxy.invokeDelegate(DelegatingFilterProxy.java:355) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.DelegatingFilterProxy.doFilter(DelegatingFilterProxy.java:272) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:199) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-7.0.8.jar:7.0.8]
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:107) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:165) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:77) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:492) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:113) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:83) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:72) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:341) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:397) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:1272) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1801) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:946) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57) ~[tomcat-embed-core-11.0.22.jar:11.0.22]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+
+2026-08-25T16:28:48.647+08:00  WARN 95460 --- [ssds] [nio-8080-exec-1] .m.m.a.ExceptionHandlerExceptionResolver : Resolved [org.springframework.web.servlet.resource.NoResourceFoundException: No static resource dashboard/summary for request '/api/v1/dashboard/summary'.]
+
+> Task :ssds-api:bootRun FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':ssds-api:bootRun' (registered by plugin 'org.springframework.boot').
+> Process 'command '/Users/a123/Library/Java/JavaVirtualMachines/graalvm-jdk-21.0.7/Contents/Home/bin/java'' finished with non-zero exit value 137 (this value may indicate that the process was terminated with the SIGKILL signal, which is often caused by the system running out of memory)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 8m 55s
+12 actionable tasks: 1 executed, 11 up-to-date

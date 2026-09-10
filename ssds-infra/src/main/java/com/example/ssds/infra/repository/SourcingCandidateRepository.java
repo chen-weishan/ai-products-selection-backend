@@ -8,15 +8,17 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+
+import org.springframework.data.domain.Pageable;
 
 /**
  * B 軌尋源候選（規格書 §7.2.9 sourcing_candidate、FR-16-2）。
  *
- * <p>狀態不在本實體上：v3.0 §7.2.9 明訂一律以 {@code product.sourcingStatus}
+ * <p>
+ * 狀態不在本實體上：v3.0 §7.2.9 明訂一律以 {@code product.sourcingStatus}
  * 為準，不重複於 sourcing_candidate。因此所有依狀態的查詢都要 join 過去。
  */
-@Repository
+
 public interface SourcingCandidateRepository extends JpaRepository<SourcingCandidate, Long> {
 
     /**
@@ -24,23 +26,24 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      * 熱度最高但來不及的品項排在前面不具意義。
      * 已淘汰者灰底保留，供下次同關鍵字出現時參考，所以不過濾掉 REJECTED。
      *
-     * <p>時效落差可能為 null（壽命尚未推估）。{@code nulls last} 是刻意的：
+     * <p>
+     * 時效落差可能為 null（壽命尚未推估）。{@code nulls last} 是刻意的：
      * null 代表「還不知道來不來得及」，排在已知可行的品項前面會誤導。
      */
-    @EntityGraph(attributePaths = {"product", "keyword", "category"})
+    @EntityGraph(attributePaths = { "product", "keyword", "category" })
     @Query("""
-           select c from SourcingCandidate c
-           order by c.timeGapDays asc nulls last, c.product.sourcingStatus asc
-           """)
+            select c from SourcingCandidate c
+            order by c.timeGapDays asc nulls last, c.product.sourcingStatus asc
+            """)
     List<SourcingCandidate> findPriorityList();
 
-    @EntityGraph(attributePaths = {"product", "keyword", "category"})
+    @EntityGraph(attributePaths = { "product", "keyword", "category" })
     @Query("""
-           select c from SourcingCandidate c
-           where c.product.sourcingStatus = :status
-           order by c.timeGapDays asc nulls last
-           """)
-    List<SourcingCandidate> findByProductSourcingStatus(@Param("status") SourcingStatus status);
+            select c from SourcingCandidate c
+            where c.product.sourcingStatus = :status
+            order by c.timeGapDays asc nulls last
+            """)
+    // List<SourcingCandidate> findByProductSourcingStatus(SourcingStatus status);
 
     /** 一個品項最多一列候選（product_id UNIQUE，§7.2.9）。 */
     Optional<SourcingCandidate> findByProductId(Long productId);
@@ -50,4 +53,33 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      * 可為 null 也可能與 product_keyword 的現況不一致，不要拿來當即時關聯。
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
+
+    
+
+    /**
+     * FR-02 儀表板 B 軌摘要。AC-16-2／AC-02-7：以時效落差升冪為主排序，
+     * 落差最小者最急迫；null（壽命尚未推估）排最後，避免誤導優先序。
+     *
+     * <p>
+     * 已淘汰者<b>不過濾</b> —— FR-02 明定「已淘汰者灰底顯示」，
+     * 前端依 product.sourcingStatus 標灰。筆數由呼叫端以 Pageable 控制
+     * (§8.2 sourcing-summary 預設 limit=3）。
+     */
+    @EntityGraph(attributePaths = { "product" })
+    @Query("""
+            select c from SourcingCandidate c
+            where c.product.trackType = 'B'
+              and c.product.deletedAt IS NULL
+              and c.product.sourcingStatus in (SOURCING, URGENT, REJECTED)
+            order by c.timeGapDays asc nulls last, c.id asc
+            """)
+    List<SourcingCandidate> findDashboardSummaryCandidates(Pageable pageable);
+
+    @EntityGraph(attributePaths = { "product", "keyword", "category" })
+    @Query("""
+            select c from SourcingCandidate c
+            where c.product.sourcingStatus = :status
+            order by c.timeGapDays asc nulls last
+            """)
+    List<SourcingCandidate> findByProductSourcingStatus(@Param("status") SourcingStatus status);
 }

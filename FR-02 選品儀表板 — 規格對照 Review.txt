@@ -1,0 +1,221 @@
+對照《開發規格書 v3.0》§FR-02（L530–566）、§8.2 儀表板端點（L3295–3305）、§7.3、§5.10。
+
+五支端點齊全、回應 envelope 與 /api/v1 前綴正確、top-products 已正確廢除。以下為需修正項目。
+
+🔴 Blocker
+1. MAX(r.severity) 取到的不是最高嚴重度
+ssds-infra/src/main/java/com/example/ssds/infra/repository/RiskAlertRepository.java:48-54
+
+severity 以 @Enumerated(EnumType.STRING) 存成 VARCHAR(16)（RiskAlert.java:40-42），SQL MAX() 走字典序：MEDIUM > LOW > HIGH。同時具 HIGH 與 MEDIUM 未處理風險的品項，排行榜 riskLevel 會顯示 MEDIUM，紅點消失。
+
+修法：改以明確順位取最小值，不要依賴字串排序。
+
+@Query("""
+        SELECT r.product.id,
+               MIN(CASE r.severity
+                       WHEN com.example.ssds.core.domain.Severity.HIGH   THEN 1
+                       WHEN com.example.ssds.core.domain.Severity.MEDIUM THEN 2
+                       ELSE 3 END)
+        FROM RiskAlert r
+        WHERE r.product.id IN :productIds
+          AND r.status = com.example.ssds.core.domain.AlertStatus.OPEN
+        GROUP BY r.product.id
+        """)
+List<Object[]> findTopSeverityRankByProductIds(@Param("productIds") List<Long> productIds);
+2. 同一支查詢的 Map<Long, Severity> 回傳型別會在執行期爆掉
+ssds-infra/.../repository/RiskAlertRepository.java:54
+
+Spring Data JPA 不會把兩欄投影自動轉成 Map，多欄查詢只會給 List<Object[]>，實際呼叫時丟轉換例外。目前沒被發現，是因為 test-results/rankings.json 四榜全空，DashboardService.java:120-122 的 allProductIds.isEmpty() 短路了，這條路徑從未執行。
+
+修法：同第 1 點改回 List<Object[]>，在 DashboardService 組 Map。
+
+Map<Long, Severity> riskMap = allProductIds.isEmpty() ? Map.of()
+        : riskAlertRepository.findTopSeverityRankByProductIds(new ArrayList<>(allProductIds)).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> SEVERITY_BY_RANK.get(((Number) row[1]).intValue())));
+3. 軟刪除完全未實作，所有 FR-02 數字偏高
+ssds-infra/src/main/java/com/example/ssds/infra/entity/Product.java（缺 deletedAt 欄位）
+
+V17__align_schema_to_spec_v3.sql:88-93 已建 product.deleted_at，欄位註解明寫「所有品項查詢一律帶 deleted_at IS NULL（§7.3）」，但 entity 沒有對應欄位，專案內 grep deletedAt 零結果。受影響的 FR-02 查詢：
+
+ProductRepository.countByTrackType（KPI 候選品項總數）
+ProductScoreRepository.findTopByPeriodAndSceneType（四榜）
+SourcingCandidateRepository.findDashboardSummaryCandidates（B 軌摘要）
+DecisionRecordRepository.findOverdueCampaigns（待回填）
+spring.jpa.hibernate.ddl-auto=validate 抓不到 —— validate 只做 entity → 表的單向比對，DB 多一欄不會失敗。
+
+修法：Product 補欄位，四支查詢全部加條件。
+
+// Product.java
+@Column(name = "deleted_at")
+private Instant deletedAt;
+// 例：ProductScoreRepository
+WHERE s.period = :period
+  AND s.sceneType = CAST(:sceneType AS string)
+  AND s.active = true
+  AND p.deletedAt IS NULL
+KPI 總數改 countByTrackTypeAndDeletedAtIsNull(TrackType)。
+
+🟠 Major
+4. track 參數只作用在四張 KPI 卡的其中一張
+ssds-api/src/main/java/com/example/ssds/api/service/DashboardService.java:68-79
+
+trackType（L69）只餵給 countByTrackType。L74 countAGradeByPeriod(period)、L75 countByStatusAndSeverity(...)、L76 getOverdueCampaigns().size()、L78 existsByPeriodAndActiveTrue(period) 全部忽略軌別。FR-02「軌別切換」是整頁維度，切到 B 軌時三張卡數字不變。
+
+修法：四個查詢一律帶 trackType。例如 countAGradeByPeriod(period, trackType) → JPQL 加 AND s.product.trackType = :trackType；風險與待回填同樣 join product.trackType。
+
+5. track=B 靜默回傳四個空陣列
+DashboardService.java:93（if (trackType == TrackType.A)）
+
+§8.2 稱此端點為「分軌分組排行」，但 B 軌被 Java 端硬擋，回 200 + 四個空陣列，前端無從分辨「B 軌沒有榜」與「本週尚未評分」。
+
+修法（擇一，需先確認 B 軌是否評分）：
+
+B 軌不設榜 → track=B 回 400 VALIDATION_FAILED，並在 §8.2 端點註記；
+B 軌有榜 → 移除 L93 的 if，改由查詢層以 trackType 過濾（見第 6 點）。
+6. 排行查詢沒有 track 條件，B 軌品項可混入 A 軌榜
+ssds-infra/src/main/java/com/example/ssds/infra/repository/ProductScoreRepository.java:60-72
+
+findTopByPeriodAndSceneType 只過 period / sceneType / active。第 5 點的 Java 端 if 只擋得住「查 B 軌」，擋不住「B 軌品項出現在 A 軌結果」—— 只要 B 軌品項有 product_score 就會上榜。
+
+修法：
+
+@Query("""
+        SELECT s FROM ProductScore s
+        JOIN FETCH s.product p
+        WHERE s.period = :period
+          AND s.sceneType = CAST(:sceneType AS string)
+          AND s.active = true
+          AND p.trackType = :trackType
+          AND p.deletedAt IS NULL
+        ORDER BY s.finalScore DESC
+        """)
+List<ProductScore> findTopByPeriodAndSceneType(
+        @Param("period") String period,
+        @Param("sceneType") String sceneType,
+        @Param("trackType") TrackType trackType,
+        Pageable pageable);
+7. 逾期天數用 JVM 預設時區，UTC 機器上差一天
+DashboardService.java:225 與 :234（LocalDate.now()）
+
+DashboardController.java:29 已特地宣告 TAIPEI_ZONE 並註解「用 JVM 預設時區會在非台北時區的機器上算出不同週次」，Service 這裡漏掉同一件事。部署在 UTC 主機時，「結案滿 7 天」判準與逾期天數皆偏移一天 → AC-02-5 不成立。
+
+修法：
+
+// DISPLAY_ZONE 已存在於 L51
+LocalDate today = LocalDate.now(DISPLAY_ZONE);
+LocalDate cutoff = today.minusDays(7);
+...
+ChronoUnit.DAYS.between(dr.getCampaignEndDate(), today) - 7
+today 取一次後重用，避免 L225 與 L234 跨午夜取到不同日期。
+
+8. 查詢參數零驗證
+ssds-api/src/main/java/com/example/ssds/controller/DashboardController.java:36-50
+
+period 未驗格式（§8.2 為 2026W30），亂填字串 → 空結果而非 400；
+scene 未驗是否屬四個 SceneType，打錯字 → 四榜全空、無錯誤；
+limit 無上下界，limit=100000 直接照吃。
+修法：
+
+@RequestParam(required = false)
+@Pattern(regexp = "\\d{4}W\\d{2}", message = "period 格式須為 2026W30")
+String period,
+
+@RequestParam(required = false) SceneType scene,   // 綁 enum，非法值由 Spring 轉 400
+
+@RequestParam(required = false, defaultValue = "5") @Min(1) @Max(50) Integer limit
+Controller 加 @Validated；GlobalExceptionHandler 已有 VALIDATION_FAILED 對應（§8.1）。
+
+🟡 Minor
+9. 同一請求內把待回填清單撈兩次
+DashboardService.java:76（getOverdueCampaigns().size()）、:151
+
+為了拿一個計數，把整份 DecisionRecord（含 JOIN FETCH product）實體化。
+
+修法：KPI 改用 count 查詢 countOverdueCampaigns(decision, cutoff, trackType)，清單查詢保留給 /todos。
+
+10. 過時且與 v3.0 判準衝突的待回填查詢仍在
+ssds-infra/src/main/java/com/example/ssds/infra/repository/DecisionRecordRepository.java:36-45（findPendingFeedback）
+
+以 expectedListDate 為起算點，是 v2.0 判準；v3.0 §FR-15（L1109–1119）已改為 campaign_end_date + 7，正解是同檔 findOverdueCampaigns（:47-56）。findPendingFeedback 目前無任何呼叫端。
+
+修法：刪除 findPendingFeedback。同檔 L1-20 另有重複 import（DecisionType、LocalDate、@Query、@Param 各 import 兩次），一併清掉。
+
+11. 未使用的組合 DTO
+ssds-api/src/main/java/com/example/ssds/api/dto/DashboardSummaryDto.java:1-28
+
+整份無呼叫端。§8.2 已拆為五支端點，單一大回應與該設計衝突，留著會誤導後續開發。
+
+修法：刪除。
+
+12. riskLevel 文件與實作不符
+ssds-api/src/main/java/com/example/ssds/api/dto/RankingItemDto.java:14、對應 DashboardService.java:196
+
+javadoc 寫「HIGH／MEDIUM／NONE」，但 L196 severity.name() 也會輸出 LOW，前端沒有對應色點。
+
+修法：javadoc 補 LOW，或在 service 明確把 LOW 併入 NONE —— 擇一，需與前端確認。
+
+⚪️ 驗收與依賴缺口（非本次 diff，但合併前需建票）
+13. AC-02-1～02-7 零自動化覆蓋
+ssds-api/src/test 僅有 SsdsApplicationTests。test-results/RESULTS.md 不可當作驗證證據：檔內 $(cat test-results/summary.json) 未展開（產生腳本沒真的執行），且 summary.json 為 scoringExecuted:false／aGradeCount:0、rankings.json 四榜全空 —— 去重（AC-02-6）、時效落差排序（AC-02-7）、逾期天數（AC-02-5）三條核心邏輯一次都沒跑到。
+
+建議最小測試集（@DataJpaTest + seed）：
+
+測項	seed	斷言
+AC-02-6	一品項同時上 VIRAL 與 SEASONAL 且皆 A 級	aGradeCount == 1
+AC-02-7	三筆 B 軌候選，time_gap_days = 5 / 2 / null	順序 2, 5, null
+AC-02-5	結案 10 天未回填	出現於 todos，overdueDays == 3
+第 1 點	同品項 HIGH + MEDIUM 未處理風險	riskLevel == "HIGH"
+§5.10	同鍵兩筆快照，舊筆 is_active=false	榜上只出現一筆
+14. AC-02-4 目前不可能成立
+heat_source.availability 依 §FR-14-2 由健檢排程寫入，但 ssds-ingest／ssds-ai／ssds-calibration 三個模組僅有 build.gradle、無任何程式碼，燈號恆為初始值。GET /dashboard/heat-sources 本身實作正確，缺的是寫入端。
+
+15. 效能（AC-02-1，500 筆／2 秒）未實測
+索引本身齊備：idx_score_rank (period, scene_type, is_active, grade, final_score DESC)（V13:265）、idx_decision_pending（V17:554）、idx_sourcing_gap（V17:778）。第 6 點加上 trackType 條件後，建議確認執行計畫仍走 idx_score_rank。
+
+建議修復順序
+第 1 → 2 → 3 點（同在排行／KPI 主路徑，且第 2 點會直接丟例外）
+第 4 → 5 → 6 點（軌別語意需一次定案）
+第 7 → 8 點
+第 9–12 點（清理）
+第 13 點（補測試後才有回歸保護）
+
+
+
+FR-02 問題清單：
+
+#: 1 🔴
+檔案名稱: ssds-infra/.../repository/SourcingCandidateRepository.java:74（findDashboardSummaryCandidates）
+規格書內容: FR-02 顯示內容「B 軌摘要：尋源中候選 Top 3，依時效落差升冪排序；已淘汰者灰底顯示」／AC-02-7
+問題: 查詢多一條 and c.stageWeeks IS NULL。stage_weeks 是「已處於該熱度階段的週數」（§5.8、§7.2.9 stage_weeks TINYINT
+NULL），與儀表板摘要無關。凡已記錄階段週數的候選整個從 B 軌摘要消失。測試未抓到，因測資 stageWeeks 全為 null
+建議修改方式: 刪除 and c.stageWeeks IS NULL。另補狀態條件：只取尋源中相關狀態＋保留 REJECTED，例如 and c.product.sourcingStatus in (SOURCING, URGENT,
+REJECTED)（PENDING 為「待評估」不屬尋源中）。測試加一筆 stageWeeks = 2 的候選，斷言它仍上榜
+────────────────────────────────────────
+#: 2 🟡
+檔案名稱: ssds-api/.../controller/DashboardController.java（track 參數）、ssds-api/.../service/DashboardService.java（getKpi、getRankings）
+規格書內容: §8.1 錯誤代碼「400 VALIDATION_FAILED 欄位驗證失敗」；§8.2 ?track=A
+問題: "B".equals(track) ? TrackType.B : TrackType.A。傳 track=X 或 track=b 不報錯，靜默回 A 軌資料
+建議修改方式: 參數型別改 TrackType（enum binding），非法值自然拋 MethodArgumentTypeMismatchException，GlobalExceptionHandler:59 已對應 400
+VALIDATION_FAILED。Service 兩處三元運算式一併移除
+────────────────────────────────────────
+#: 3 🟡
+檔案名稱: ssds-api/.../service/DashboardService.java（getTodos /
+getOverdueCampaigns）、ssds-infra/.../repository/DecisionRecordRepository.java（findOverdueCampaigns vs countOverdueCampaigns）
+規格書內容: FR-02 KPI 卡片「結案未回填數」與「待回填結案」區塊，同一畫面同一軌別
+問題: countOverdueCampaigns 有 p.trackType = :trackType，findOverdueCampaigns 沒有。KPI 數字與待回填清單筆數會對不起來
+建議修改方式: 統一口徑。建議 /dashboard/todos 比照 /summary 加 track 參數，findOverdueCampaigns 補 and p.trackType = :trackType，Service 兩處傳同一個
+TrackType
+────────────────────────────────────────
+#: 4 🟡
+檔案名稱: ssds-api/.../service/DashboardService.java（getKpi）、ssds-infra/.../repository/RiskAlertRepository.java（countByStatusAndSeverity）
+規格書內容: FR-02 KPI 卡片「高風險示警數」；AC-10-2「已 IGNORED 的示警不再出現於預設清單」
+問題: 只計 status = OPEN。ACKNOWLEDGED（已確認但未處理完）被排除，KPI 低估。規格只把 IGNORED 排除在預設之外
+建議修改方式: 改為 r.status <> AlertStatus.IGNORED and r.severity = HIGH；
+────────────────────────────────────────
+#: 5 🟢
+檔案名稱: ssds-infra/.../repository/DecisionRecordRepository.java（findOverdueCampaigns、countOverdueCampaigns）
+規格書內容: FR-02「結案逾 7 天未回填」；§FR-11「結案日 + 7 日仍未回填者，逾期天數 = 今日 − 結案日 − 7」
+問題: 條件 campaignEndDate <= :cutoff（cutoff = today − 7）使「剛好滿 7 天」入列，overdueDays = 0。「逾 7 天」應為嚴格大於
+建議修改方式: 兩支查詢改 campaignEndDate < :cutoff；DashboardServiceTest.testAC02_5_OverdueCampaigns 補一筆 endDate = today−7 的邊界案例，斷言不入列
