@@ -29,7 +29,7 @@ public class AuthService {
 
     @Autowired
     private JwtUtils jwtUtils;
-    
+    @Transactional
     public ResponseEntity<Object> authenticate(Map<String, String> body) {
         
         String email = body.get("email");
@@ -60,7 +60,9 @@ public class AuthService {
         if (user.getLockedUntil() != null && Instant.now().isBefore(user.getLockedUntil())) {
             return ResponseEntity.status(403).body(new ApiError("AUTH_LOCKED", "嘗試次數過多，帳號已被鎖定，請稍後再試。"));
         }
+        System.out.println(password+" "+user.getPasswordHash()+(!passwordEncoder.matches(password, user.getPasswordHash())));
 
+	
         // 5. 密碼比對與計數邏輯
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             
@@ -75,6 +77,7 @@ public class AuthService {
                 return ResponseEntity.status(403).body(new ApiError("AUTH_LOCKED", "嘗試次數過多，帳號已被鎖定 15 分鐘。"));
             } else {
                 userRepository.saveAndFlush(user); // 實打實將次數 +1 寫入資料庫
+                System.out.println("====== [測試驗收] 帳號 " + email + " 密碼輸入錯誤！當前累計失敗次數為: " + newAttempts + " ======");
                 return ResponseEntity.status(401).body(new ApiError("AUTH_FAILED", "帳號或密碼錯誤。"));
             }
         }
