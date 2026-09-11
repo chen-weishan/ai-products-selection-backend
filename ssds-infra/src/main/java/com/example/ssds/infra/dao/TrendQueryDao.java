@@ -102,24 +102,24 @@ public class TrendQueryDao {
                      JOIN keyword_categories kc ON kc.category_id = hr.category_id
                      WHERE hs.granularity = 'CATEGORY'
                  ),
-                 LatestDate AS (
+                 SourceLatest AS (
                      SELECT MAX(reading_date) AS asof FROM relevant_readings
                  ),
                  Today AS (
                      SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
-                     FROM relevant_readings rr, LatestDate ld
+                     FROM relevant_readings rr, SourceLatest ld
                      WHERE rr.reading_date = ld.asof
                      GROUP BY rr.source_id
                  ),
                  D7 AS (
                      SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_7d
-                     FROM relevant_readings rr, LatestDate ld
+                     FROM relevant_readings rr, SourceLatest ld
                      WHERE rr.reading_date = ld.asof - INTERVAL '7 days'
                      GROUP BY rr.source_id
                  ),
                  D30 AS (
                      SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_30d
-                     FROM relevant_readings rr, LatestDate ld
+                     FROM relevant_readings rr, SourceLatest ld
                      WHERE rr.reading_date = ld.asof - INTERVAL '30 days'
                      GROUP BY rr.source_id
                  )

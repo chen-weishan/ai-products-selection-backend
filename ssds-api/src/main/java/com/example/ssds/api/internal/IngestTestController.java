@@ -1,11 +1,13 @@
 package com.example.ssds.api.internal;
 
-// import com.example.ssds.schedule.ThreadsHeatIngestJob;
+
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.ssds.api.schedule.InstagramHeatIngestJob;
+import com.example.ssds.api.schedule.ThreadsHeatIngestJob;
+import com.example.ssds.api.schedule.GoogleTrendsHeatIngestJob;
 
 /**
  * 開發測試用：手動觸發熱度採集排程，不用乾等 cron 時間到
@@ -21,17 +23,17 @@ import com.example.ssds.api.schedule.InstagramHeatIngestJob;
 class IngestTestController {
 
     private final InstagramHeatIngestJob instagramJob;
-    // private final ThreadsHeatIngestJob threadsJob;
-    // private final GoogleTrendsHeatIngestJob googleTrendsJob;
+    private final ThreadsHeatIngestJob threadsJob;
+    private final GoogleTrendsHeatIngestJob googleTrendsJob;
 
     IngestTestController(
-            InstagramHeatIngestJob instagramJob)
-            // ThreadsHeatIngestJob threadsJob,
-            // GoogleTrendsHeatIngestJob googleTrendsJob) 
+            InstagramHeatIngestJob instagramJob,
+            ThreadsHeatIngestJob threadsJob,
+            GoogleTrendsHeatIngestJob googleTrendsJob )
             {
         this.instagramJob = instagramJob;
-        // this.threadsJob = threadsJob;
-        // this.googleTrendsJob = googleTrendsJob;
+        this.threadsJob = threadsJob;
+        this.googleTrendsJob = googleTrendsJob;
     }
 
     @PostMapping("/instagram")
@@ -39,13 +41,13 @@ class IngestTestController {
         instagramJob.run();
     }
 
-    // @PostMapping("/threads")
-    // void runThreads() {
-    //     threadsJob.run();
-    // }
+    @PostMapping("/threads")
+    void runThreads() {
+        threadsJob.run();
+    }
 
-    // @PostMapping("/google-trends")
-    // void runGoogleTrends() {
-    //     googleTrendsJob.run();
-    // }
+    @PostMapping("/google-trends")
+    void runGoogleTrends() {
+        googleTrendsJob.run();
+    }
 }   
