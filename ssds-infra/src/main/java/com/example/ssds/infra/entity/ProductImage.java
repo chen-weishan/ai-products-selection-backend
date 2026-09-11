@@ -21,7 +21,7 @@ public class ProductImage {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @Column(name = "file_path", nullable = false, length = 500)
+    @Column(name = "file_path", nullable = false, length = 255)
     private String filePath;
 
     @Column(name = "sort_order", nullable = false)

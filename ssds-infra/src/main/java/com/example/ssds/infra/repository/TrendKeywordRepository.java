@@ -12,6 +12,19 @@ public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long
 
     Optional<TrendKeyword> findByKeyword(String keyword);
 
+    List<TrendKeyword> findAllByOrderByKeywordAsc();
+
+    List<TrendKeyword> findByKeywordContainingIgnoreCaseOrderByKeywordAsc(
+            String keyword
+    );
+
+    List<TrendKeyword> findByEnabledOrderByKeywordAsc(boolean enabled);
+
+    List<TrendKeyword> findByKeywordContainingIgnoreCaseAndEnabledOrderByKeywordAsc(
+            String keyword,
+            boolean enabled
+    );
+
     /** 每日 06:00 熱度採集的取件範圍（§5.10）。 */
     List<TrendKeyword> findByEnabledTrue();
 }

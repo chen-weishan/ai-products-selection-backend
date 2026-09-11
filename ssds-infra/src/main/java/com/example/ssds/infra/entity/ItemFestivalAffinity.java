@@ -31,7 +31,7 @@ public class ItemFestivalAffinity {
     private Product product;
 
     @Id
-    @Column(name = "festival_code", nullable = false, length = 32)
+    @Column(name = "festival_code", nullable = false, length = 24)
     private String festivalCode;
 
     /** 0–1。初期人工建立，累積後由 AI 建議、人審核。 */

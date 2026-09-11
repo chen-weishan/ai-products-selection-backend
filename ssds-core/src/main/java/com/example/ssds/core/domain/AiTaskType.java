@@ -9,6 +9,8 @@ package com.example.ssds.core.domain;
  */
 public enum AiTaskType {
 
+    /** 品項批次完整分析，建立後由 FR-07 執行器拆解各 Agent 工作。 */
+    FULL_ANALYSIS(BudgetPool.TRACK_A),
     /** 情境判定（SceneClassifierAgent） */
     SCENE_CLASSIFY(BudgetPool.TRACK_A),
     /** 評論風險分析（ReviewRiskAgent） */
