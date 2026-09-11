@@ -9,15 +9,15 @@ public final class ReviewRiskSchema {
 
     public static JsonNode create(ObjectMapper objectMapper) {
         ObjectNode reviewProperties = objectMapper.createObjectNode();
-        reviewProperties.set("reviewId", objectMapper.createObjectNode()
-                .put("type", "integer").put("minimum", 1));
+        reviewProperties.set("reviewIndex", objectMapper.createObjectNode()
+                .put("type", "integer").put("minimum", 0).put("maximum", 199));
         reviewProperties.set("sentiment", enumNode(
                 objectMapper, "POSITIVE", "NEUTRAL", "NEGATIVE"));
         reviewProperties.set("riskTopic", objectMapper.createObjectNode()
                 .set("anyOf", objectMapper.createArrayNode()
                         .add(enumNode(objectMapper, "QUALITY", "FOOD_SAFETY", "SHIPPING_DAMAGE", "PRICE", "OTHER"))
                         .add(objectMapper.createObjectNode().put("type", "null"))));
-        ObjectNode reviewItem = objectSchema(objectMapper, reviewProperties, "reviewId", "sentiment", "riskTopic");
+        ObjectNode reviewItem = objectSchema(objectMapper, reviewProperties, "reviewIndex", "sentiment", "riskTopic");
 
         ObjectNode statisticProperties = objectMapper.createObjectNode();
         statisticProperties.set("topic", enumNode(

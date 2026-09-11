@@ -9,9 +9,12 @@ import com.example.ssds.ai.client.AiClientResponse;
 import com.example.ssds.ai.client.AiPromptRequest;
 import com.example.ssds.ai.client.AiRateLimitException;
 import com.example.ssds.ai.client.GlobalAiRateLimiter;
+import com.example.ssds.ai.client.ExternalLlmDisabledException;
+import com.example.ssds.ai.client.ExternalLlmPolicy;
 import com.example.ssds.ai.client.TrackAAiClient;
 import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -40,6 +43,18 @@ class AiAccessRouterTest {
 
         assertThrows(AiRateLimitException.class, () -> router.route(request(AiTaskType.SCENE_CLASSIFY)));
         verifyNoInteractions(client);
+    }
+
+    @Test
+    void disabledPolicyStopsBeforeRateLimitAndClient() {
+        TrackAAiClient client = mock(TrackAAiClient.class);
+        GlobalAiRateLimiter limiter = mock(GlobalAiRateLimiter.class);
+        AiAccessRouter router = new AiAccessRouter(
+                client, limiter, new ExternalLlmPolicy(false, new ObjectMapper()));
+
+        assertThrows(ExternalLlmDisabledException.class,
+                () -> router.route(request(AiTaskType.SCENE_CLASSIFY)));
+        verifyNoInteractions(limiter, client);
     }
 
     private static AiPromptRequest request(AiTaskType type) {

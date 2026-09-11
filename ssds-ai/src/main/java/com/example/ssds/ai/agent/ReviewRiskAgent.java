@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.ReviewRiskPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
@@ -42,8 +43,7 @@ public class ReviewRiskAgent {
             ReviewRiskPromptFactory promptFactory,
             ReviewRiskResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-long-text-primary:mistral-medium-3-5}") String primaryModel,
-            @Value("${mistral.model-long-text-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbackModels,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -51,8 +51,8 @@ public class ReviewRiskAgent {
                 promptFactory,
                 parser,
                 objectMapper,
-                primaryModel,
-                fallbackModels,
+                modelCatalog.longText().primary(),
+                modelCatalog.longText().fallbacks(),
                 retryMax,
                 cacheDays,
                 Thread::sleep);
@@ -179,6 +179,10 @@ public class ReviewRiskAgent {
                     continue;
                 }
                 return fallback(FallbackReason.AI_UNAVAILABLE, model);
+            } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
+                log.warn("ReviewRisk external request blocked by policy: productId={}, reason={}",
+                        input.productId(), safeLogMessage(exception.getMessage()));
+                return fallback(FallbackReason.AI_UNAVAILABLE, "policy-blocked");
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {

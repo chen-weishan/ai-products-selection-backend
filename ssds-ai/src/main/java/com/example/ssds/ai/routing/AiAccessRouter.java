@@ -3,6 +3,7 @@ package com.example.ssds.ai.routing;
 import com.example.ssds.ai.client.AiClientResponse;
 import com.example.ssds.ai.client.GlobalAiRateLimiter;
 import com.example.ssds.ai.client.AiPromptRequest;
+import com.example.ssds.ai.client.ExternalLlmPolicy;
 import com.example.ssds.ai.client.TrackAAiClient;
 import com.example.ssds.core.domain.AiTaskType;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,11 +14,21 @@ import org.springframework.stereotype.Component;
 public class AiAccessRouter {
     private final TrackAAiClient trackAClient;
     private final GlobalAiRateLimiter rateLimiter;
+    private final ExternalLlmPolicy externalLlmPolicy;
 
     @Autowired
-    public AiAccessRouter(TrackAAiClient trackAClient, GlobalAiRateLimiter rateLimiter) {
+    public AiAccessRouter(
+            TrackAAiClient trackAClient,
+            GlobalAiRateLimiter rateLimiter,
+            ExternalLlmPolicy externalLlmPolicy) {
         this.trackAClient = trackAClient;
         this.rateLimiter = rateLimiter;
+        this.externalLlmPolicy = externalLlmPolicy;
+    }
+
+    public AiAccessRouter(TrackAAiClient trackAClient, GlobalAiRateLimiter rateLimiter) {
+        this(trackAClient, rateLimiter,
+                new ExternalLlmPolicy(true, new com.fasterxml.jackson.databind.ObjectMapper()));
     }
 
     public AiAccessRouter(TrackAAiClient trackAClient) {
@@ -28,6 +39,7 @@ public class AiAccessRouter {
         if (request.taskType().budgetPool() == AiTaskType.BudgetPool.TRACK_B) {
             throw new IllegalArgumentException("B 軌工具任務不得使用無工具的 TrackAAiClient: " + request.taskType());
         }
+        externalLlmPolicy.validateUserJson(request.userPrompt());
         rateLimiter.acquire();
         return trackAClient.complete(request);
     }

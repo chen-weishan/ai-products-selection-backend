@@ -14,20 +14,21 @@ import com.example.ssds.core.domain.AiTaskType;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
-    @EntityGraph(attributePaths = {"product", "keyword"})
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
     List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
     long countByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
     /** 配額耗盡或單輪上限超出的 FULL_ANALYSIS 品項，供隔日續跑。 */
     @Query("""
-            select distinct i.product from AiTaskItem i
+            select distinct p from AiTaskItem i join i.product p
             where i.task.taskType = :taskType
               and i.status = :status
-              and i.product is not null
+              and p.deletedAt is null
               and not exists (
                   select newer.id from AiTaskItem newer
                   where newer.product.id = i.product.id
@@ -37,7 +38,7 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
                         com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED,
                         com.example.ssds.core.domain.TaskItemStatus.SKIPPED_CACHE)
               )
-            order by i.product.id
+            order by p.id
             """)
     List<com.example.ssds.infra.entity.Product> findProductsPendingQuotaRetry(
             @Param("taskType") AiTaskType taskType,

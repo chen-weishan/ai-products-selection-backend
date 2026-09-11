@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
-/** 所有評論送往外部 LLM 前的集中式去識別化入口。 */
+/** 所有外部 LLM payload 的集中 allowlist、文字清理與評論去識別化入口。 */
 @Component
 public class PromptSanitizer {
     private static final Pattern EMAIL = Pattern.compile(
@@ -22,9 +22,16 @@ public class PromptSanitizer {
     private static final Pattern ORDER = Pattern.compile(
             "\\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{8,}\\b");
     private static final Pattern PHONE = Pattern.compile(
-            "(?<!\\d)(?:\\+?886[-\\s]?)?(?:0?9\\d{2}[-\\s]?\\d{3}[-\\s]?\\d{3}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4})(?!\\d)");
+            "(?<!\\d)(?:(?:\\+?886)[-\\s]?)?(?:(?:[（(]?0?9\\d{2}[）)]?[-\\s]?\\d{3}[-\\s]?\\d{3})|"
+                    + "(?:[（(]?0\\d{1,2}[）)]?[-\\s]?\\d{3,4}[-\\s]?\\d{4}))"
+                    + "(?:\\s*(?:#|ext\\.?|分機)\\s*\\d{1,6})?(?!\\d)",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern ADDRESS = Pattern.compile(
-            "[\\p{IsHan}]{1,12}(?:縣|市|區|鄉|鎮|村|里)?[\\p{IsHan}0-9]{1,16}(?:路|街|巷|弄)[\\p{IsHan}0-9-]{0,16}(?:號(?:之\\d+)?)?");
+            "(?:[\\p{IsHan}]{1,20}(?:縣|市|區|鄉|鎮|村|里)?[\\p{IsHan}0-9]{1,20}(?:路|街|大道)"
+                    + "(?:[一二三四五六七八九十百0-9]+段)?(?:\\s*[一二三四五六七八九十百0-9]+巷)?"
+                    + "(?:\\s*[一二三四五六七八九十百0-9]+弄)?(?:\\s*[0-9]+\\s*號(?:\\s*之\\s*\\d+)?)?"
+                    + "|[\\p{IsHan}]{2,24}(?:巷|弄)\\s*[0-9]+\\s*號(?:\\s*之\\s*\\d+)?"
+                    + "|[\\p{IsHan}]{1,16}(?:縣|市|區|鄉|鎮|村|里)[\\p{IsHan}\\s]{0,16}[0-9]+\\s*號(?:\\s*之\\s*\\d+)?)");
 
     /** Agent 1 白名單：品項／品類識別資訊、熱度訊號、歷史開團數與節慶匹配。 */
     public SceneClassifierInput sanitizeSceneClassifier(SceneClassifierInput input) {

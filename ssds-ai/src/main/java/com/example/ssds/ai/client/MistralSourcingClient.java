@@ -29,6 +29,7 @@ public class MistralSourcingClient {
     private final ApplicationEventPublisher eventPublisher;
     private final List<String> connectors;
     private final String configurationError;
+    private final ExternalLlmPolicy externalLlmPolicy;
     private final AtomicInteger connectorCursor = new AtomicInteger();
     private final Set<String> verifiedModels = ConcurrentHashMap.newKeySet();
 
@@ -38,37 +39,51 @@ public class MistralSourcingClient {
             SourcingToolPolicy toolPolicy,
             @Value("${mistral.base-url:https://api.mistral.ai/v1}") String baseUrl,
             @Value("${mistral.api-key:}") String apiKey,
-            @Value("${mistral.sourcing-timeout-seconds:90}") int timeoutSeconds,
-            @Value("${mistral.connect-timeout-seconds:10}") int connectTimeoutSeconds,
+            @Value("${mistral.sourcing-timeout-seconds:90}") String timeoutSeconds,
+            @Value("${mistral.sourcing-connect-timeout-seconds:10}") String connectTimeoutSeconds,
             @Value("${mistral.sourcing-connectors:parallel_search,exa_search,tavily_search}") String connectors,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ExternalLlmPolicy externalLlmPolicy) {
         this.mapper = mapper;
         this.toolPolicy = toolPolicy;
         this.apiKey = apiKey;
-        this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 90;
+        this.externalLlmPolicy = externalLlmPolicy;
+        NumberSetting readTimeout = positiveNumber(
+                timeoutSeconds, 90, "MISTRAL_SOURCING_TIMEOUT_SECONDS");
+        NumberSetting connectTimeout = positiveNumber(
+                connectTimeoutSeconds, 10, "LLM_CONNECT_TIMEOUT_SCOUT_SECONDS");
+        this.timeoutSeconds = readTimeout.value();
         this.eventPublisher = eventPublisher;
         this.connectors = parseConnectors(connectors);
         String safeBaseUrl = baseUrl;
-        String invalidConfiguration = null;
-        if (timeoutSeconds <= 0) {
-            invalidConfiguration = "MISTRAL_SOURCING_TIMEOUT_SECONDS 必須大於 0";
-        }
-        if (connectTimeoutSeconds <= 0) {
-            invalidConfiguration = "LLM_CONNECT_TIMEOUT_SECONDS 必須大於 0";
-        }
+        String invalidConfiguration = firstError(readTimeout.error(), connectTimeout.error());
         if (!isHttpUrl(baseUrl)) {
-            invalidConfiguration = "MISTRAL_BASE_URL 必須是有效的 HTTP(S) URL";
+            invalidConfiguration = firstError(
+                    invalidConfiguration, "MISTRAL_BASE_URL 必須是有效的 HTTP(S) URL");
             safeBaseUrl = "https://api.mistral.ai/v1";
         }
         this.configurationError = invalidConfiguration;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(Math.min(
-                                connectTimeoutSeconds > 0 ? connectTimeoutSeconds : 10,
+                                connectTimeout.value(),
                                 this.timeoutSeconds)))
                         .build());
         factory.setReadTimeout(Duration.ofSeconds(this.timeoutSeconds));
         this.restClient = RestClient.builder().baseUrl(safeBaseUrl).requestFactory(factory).build();
+    }
+
+    MistralSourcingClient(
+            ObjectMapper mapper,
+            SourcingToolPolicy toolPolicy,
+            String baseUrl,
+            String apiKey,
+            String timeoutSeconds,
+            String connectTimeoutSeconds,
+            String connectors,
+            ApplicationEventPublisher eventPublisher) {
+        this(mapper, toolPolicy, baseUrl, apiKey, timeoutSeconds, connectTimeoutSeconds, connectors,
+                eventPublisher, new ExternalLlmPolicy(true, mapper));
     }
 
     MistralSourcingClient(
@@ -83,21 +98,54 @@ public class MistralSourcingClient {
                 Math.min(10, Math.max(1, timeoutSeconds)), connectors, eventPublisher);
     }
 
-    public ScoutClientResponse complete(String model, String prompt) {
-        if (apiKey.isBlank()) throw new SourcingConfigurationException("MISTRAL_API_KEY 尚未設定");
+    MistralSourcingClient(
+            ObjectMapper mapper,
+            SourcingToolPolicy toolPolicy,
+            String baseUrl,
+            String apiKey,
+            int timeoutSeconds,
+            int connectTimeoutSeconds,
+            String connectors,
+            ApplicationEventPublisher eventPublisher) {
+        this(
+                mapper,
+                toolPolicy,
+                baseUrl,
+                apiKey,
+                Integer.toString(timeoutSeconds),
+                Integer.toString(connectTimeoutSeconds),
+                connectors,
+                eventPublisher,
+                new ExternalLlmPolicy(true, mapper));
+    }
+
+    /** Local-only validation. It must run before rate-limit permission and budget consumption. */
+    public void preflight() {
+        externalLlmPolicy.requireEnabled();
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new SourcingConfigurationException("MISTRAL_API_KEY 尚未設定");
+        }
         if (configurationError != null) {
             throw new SourcingConfigurationException(configurationError);
         }
         if (connectors.isEmpty()) {
             throw new SourcingConfigurationException("B 軌未設定任何 Mistral sourcing connector");
         }
+        for (String connector : connectors) {
+            try {
+                toolPolicy.requireAllowed(connector);
+            } catch (SecurityException exception) {
+                throw new SourcingConfigurationException(
+                        "B 軌 Connector 不在允許清單: " + connector, exception);
+            }
+        }
+    }
+
+    public ScoutClientResponse complete(String model, String prompt) {
+        preflight();
+        externalLlmPolicy.validateCombinedPrompt(prompt);
         int connectorIndex = Math.floorMod(connectorCursor.get(), connectors.size());
         String connector = connectors.get(connectorIndex);
-        try {
-            toolPolicy.requireAllowed(connector);
-        } catch (SecurityException exception) {
-            throw new SourcingConfigurationException("B 軌 Connector 不在允許清單: " + connector, exception);
-        }
         verifyReasoning(model);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
@@ -206,6 +254,23 @@ public class MistralSourcingClient {
             return false;
         }
     }
+
+    private static NumberSetting positiveNumber(String raw, int fallback, String settingName) {
+        try {
+            int value = Integer.parseInt(raw == null ? "" : raw.trim());
+            return value > 0
+                    ? new NumberSetting(value, null)
+                    : new NumberSetting(fallback, settingName + " 必須大於 0");
+        } catch (NumberFormatException exception) {
+            return new NumberSetting(fallback, settingName + " 必須是正整數");
+        }
+    }
+
+    private static String firstError(String first, String second) {
+        return first != null ? first : second;
+    }
+
+    private record NumberSetting(int value, String error) {}
     private JsonNode parse(String raw, String model) {
         try { return mapper.readTree(raw); }
         catch (JsonProcessingException | IllegalArgumentException exception) {

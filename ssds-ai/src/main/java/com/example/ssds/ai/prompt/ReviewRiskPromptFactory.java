@@ -3,11 +3,13 @@ package com.example.ssds.ai.prompt;
 import com.example.ssds.ai.model.ReviewRiskInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ReviewRiskPromptFactory {
-    public static final String PROMPT_VERSION = "review-risk-v2";
+    public static final String PROMPT_VERSION = "review-risk-v3";
     private final ObjectMapper objectMapper;
 
     public ReviewRiskPromptFactory(ObjectMapper objectMapper) {
@@ -34,7 +36,7 @@ public class ReviewRiskPromptFactory {
                 輸出規則：
                 - 只能輸出一個合法 JSON object，不得輸出 Markdown code block、前言、結尾或來源說明。
                 - 根物件必須且只能包含 reviews、topicStatistics。
-                - reviews 必須與輸入逐筆一一對應，保留相同 reviewId，不得遺漏、新增或重複。
+                - reviews 必須與輸入逐筆一一對應，保留相同 reviewIndex，不得遺漏、新增或重複。
                 - 單則評論語意無法判讀或資料不足時使用 NEUTRAL，riskTopic 必須為 null，不得推測負評主題。
 
                 限制條款：
@@ -46,9 +48,16 @@ public class ReviewRiskPromptFactory {
 
     public String userPrompt(ReviewRiskInput input) {
         try {
-            return objectMapper.writeValueAsString(input);
+            List<ReviewPayload> reviews = new ArrayList<>(input.reviews().size());
+            for (int index = 0; index < input.reviews().size(); index++) {
+                reviews.add(new ReviewPayload(index, input.reviews().get(index).content()));
+            }
+            return objectMapper.writeValueAsString(new PromptPayload(reviews));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 ReviewRisk 輸入", exception);
         }
     }
+
+    private record PromptPayload(List<ReviewPayload> reviews) {}
+    private record ReviewPayload(int reviewIndex, String content) {}
 }

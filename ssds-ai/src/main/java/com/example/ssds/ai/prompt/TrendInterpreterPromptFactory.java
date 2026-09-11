@@ -3,11 +3,12 @@ package com.example.ssds.ai.prompt;
 import com.example.ssds.ai.model.TrendInterpreterInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class TrendInterpreterPromptFactory {
-    public static final String PROMPT_VERSION = "trend-v1";
+    public static final String PROMPT_VERSION = "trend-v2";
     private final ObjectMapper objectMapper;
 
     public TrendInterpreterPromptFactory(ObjectMapper objectMapper) {
@@ -40,9 +41,25 @@ public class TrendInterpreterPromptFactory {
 
     public String userPrompt(TrendInterpreterInput input) {
         try {
-            return objectMapper.writeValueAsString(input);
+            List<SourcePayload> sources = input.sourceTrends().stream()
+                    .map(source -> new SourcePayload(source.source(), source.granularity(), source.slope7d(),
+                            source.slope30d(), source.availability()))
+                    .toList();
+            return objectMapper.writeValueAsString(
+                    new PromptPayload(input.compositeSeries(), sources, input.allowedOutputs()));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 TrendInterpreter 輸入", exception);
         }
     }
+
+    private record PromptPayload(
+            List<TrendInterpreterInput.CompositePoint> compositeSeries,
+            List<SourcePayload> sourceTrends,
+            List<TrendInterpreterInput.AllowedOutput> allowedOutputs) {}
+    private record SourcePayload(
+            com.example.ssds.core.domain.HeatSourceCode source,
+            com.example.ssds.core.domain.HeatGranularity granularity,
+            java.math.BigDecimal slope7d,
+            java.math.BigDecimal slope30d,
+            com.example.ssds.core.domain.SourceAvailability availability) {}
 }

@@ -51,6 +51,7 @@ public interface ProductRepository
     @Query("""
             select p from Product p
             where p.trackType = :trackType
+              and p.deletedAt is null
               and p.status not in (com.example.ssds.core.domain.ProductStatus.DRAFT,
                                    com.example.ssds.core.domain.ProductStatus.REJECTED)
             """)
@@ -63,6 +64,7 @@ public interface ProductRepository
     @Query("""
             select p from Product p
             where p.trackType = com.example.ssds.core.domain.TrackType.A
+              and p.deletedAt is null
               and p.status in :statuses
             order by
               case when (select count(l.id) from SceneClassificationLog l where l.product.id = p.id) = 0

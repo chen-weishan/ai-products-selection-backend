@@ -3,8 +3,6 @@ package com.example.ssds.api.trend;
 import com.example.ssds.ai.model.TrendInterpreterInput;
 import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
 import com.example.ssds.api.aitask.AiTaskService;
-import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
-import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,11 +48,7 @@ public class TrendInterpretationJob {
         for (int from = 0; from < keywordIds.size(); from += TASK_CHUNK_SIZE) {
             List<Long> chunk = keywordIds.subList(
                     from, Math.min(from + TASK_CHUNK_SIZE, keywordIds.size()));
-            taskService.create(new CreateAiTaskRequest(
-                    AiTaskType.TREND_INTERPRET,
-                    List.of(),
-                    chunk,
-                    new CreateAiTaskRequest.Options(false)));
+            taskService.createScheduledTrendInterpretation(chunk);
         }
         log.info("TrendInterpreter daily enqueue completed: keywordCount={}", keywordIds.size());
     }

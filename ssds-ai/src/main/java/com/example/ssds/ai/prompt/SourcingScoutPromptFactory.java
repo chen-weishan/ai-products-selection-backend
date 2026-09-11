@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SourcingScoutPromptFactory {
-    public static final String PROMPT_VERSION = "scout-v6";
+    public static final String PROMPT_VERSION = "scout-v7";
     public static final String INSUFFICIENT_REPORT =
             "資料不足：本次已執行網路搜尋，但可驗證來源不足，無法形成可靠的尋源探索結論。";
     private final ObjectMapper objectMapper;
@@ -61,9 +61,11 @@ public class SourcingScoutPromptFactory {
     }
 
     public String userPrompt(SourcingScoutInput input) {
-        try { return objectMapper.writeValueAsString(input); }
+        try { return objectMapper.writeValueAsString(new PromptPayload(input.keyword(), input.categoryName())); }
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 SourcingScout 輸入", exception);
         }
     }
+
+    private record PromptPayload(String keyword, String categoryName) {}
 }

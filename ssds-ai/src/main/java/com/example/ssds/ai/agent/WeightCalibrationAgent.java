@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.WeightCalibrationPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
@@ -23,10 +24,10 @@ public class WeightCalibrationAgent {
     @Autowired
     public WeightCalibrationAgent(AiAccessRouter router,WeightCalibrationPromptFactory prompts,
             WeightCalibrationResponseParser parser,ObjectMapper mapper,
-            @Value("${mistral.model-reasoning-primary:mistral-medium-3-5}") String primary,
-            @Value("${mistral.model-reasoning-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbacks,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax) {
-        this(router,prompts,parser,mapper,primary,fallbacks,retryMax,Thread::sleep);
+        this(router,prompts,parser,mapper,modelCatalog.reasoning().primary(),
+                modelCatalog.reasoning().fallbacks(),retryMax,Thread::sleep);
     }
     WeightCalibrationAgent(AiAccessRouter router,WeightCalibrationPromptFactory prompts,
             WeightCalibrationResponseParser parser,ObjectMapper mapper,
@@ -60,6 +61,9 @@ public class WeightCalibrationAgent {
                 if(schemaRetries==0){schemaRetries++;if(pause(2000))continue;}
                 if(schemaRetries==1&&hasFallback(modelIndex)){schemaRetries++;modelIndex++;continue;}
                 return fallback(FallbackReason.SCHEMA_INVALID,model,requests);
+            } catch(ExternalLlmDisabledException|OutboundDataPolicyException e) {
+                log.warn("WeightCalibration external request blocked by policy: quarter={}, reason={}",input.quarter(),safe(e.getMessage()));
+                return fallback(FallbackReason.AI_UNAVAILABLE,"policy-blocked",Math.max(0,requests-1));
             } catch(AiBudgetExceededException e) {
                 return fallback(FallbackReason.AI_UNAVAILABLE,model,requests);
             } catch(AiRateLimitException e) {

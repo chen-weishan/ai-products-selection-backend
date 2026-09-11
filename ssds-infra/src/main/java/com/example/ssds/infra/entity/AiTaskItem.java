@@ -31,7 +31,7 @@ public class AiTaskItem {
     @JoinColumn(name = "task_id", nullable = false)
     private AiTask task;
 
-    /** 權重校準等非品項層級的任務為 null。 */
+    /** 非品項層級的任務為 null。 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")
     private Product product;
@@ -48,6 +48,11 @@ public class AiTaskItem {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "keyword_id")
     private TrendKeyword keyword;
+
+    /** WEIGHT_CALIBRATION 任務的目標報告；與 product、keyword 擇一。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "calibration_report_id")
+    private CalibrationReport calibrationReport;
 
     @Column(name = "duration_ms")
     private Integer durationMs;

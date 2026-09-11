@@ -62,6 +62,33 @@ class PromptSanitizerTest {
     }
 
     @Test
+    void masksTaiwanParenthesizedPhonesExtensionsAndSpacedAddressesWithoutMaskingOrdinaryNumbers() {
+        String sanitized = sanitizer.sanitizeReviewText(
+                "市話 (02) 2345-6789 分機 321，手機 +886 912 345 678，地址台北市中山區南京東路三段 100 號之 2；評分 88，日期 2026-09-10。");
+
+        assertAll(
+                () -> assertFalse(sanitized.contains("2345-6789")),
+                () -> assertFalse(sanitized.contains("912 345 678")),
+                () -> assertFalse(sanitized.contains("100 號之 2")),
+                () -> assertEquals(2, sanitized.split("\\[PHONE]", -1).length - 1),
+                () -> assertTrue(sanitized.contains("[ADDRESS]")),
+                () -> assertTrue(sanitized.contains("評分 88")),
+                () -> assertTrue(sanitized.contains("2026-09-10")));
+    }
+
+    @Test
+    void masksStandaloneLaneAlleyAndAdministrativeAreaHouseNumberAddresses() {
+        String sanitized = sanitizer.sanitizeReviewText(
+                "請送到幸福巷 12 號之 3，備用地址是信義區松仁里 100 號；商品型號 100 號不是地址。");
+
+        assertAll(
+                () -> assertFalse(sanitized.contains("幸福巷 12 號之 3")),
+                () -> assertFalse(sanitized.contains("信義區松仁里 100 號")),
+                () -> assertTrue(sanitized.contains("商品型號 100 號")),
+                () -> assertEquals(2, sanitized.split("\\[ADDRESS]", -1).length - 1));
+    }
+
+    @Test
     void reviewRiskWhitelistKeepsOnlyIdsAndDeidentifiedReviewText() throws Exception {
         ReviewRiskInput sanitized = sanitizer.sanitizeReviewRisk(
                 101L,

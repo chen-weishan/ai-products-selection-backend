@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class RecommendationPromptFactory {
-    public static final String PROMPT_VERSION = "recommendation-v1";
+    public static final String PROMPT_VERSION = "recommendation-v2";
     private final ObjectMapper objectMapper;
 
     public RecommendationPromptFactory(ObjectMapper objectMapper) {
@@ -39,9 +39,21 @@ public class RecommendationPromptFactory {
 
     public String userPrompt(RecommendationInput input) {
         try {
-            return objectMapper.writeValueAsString(input);
+            return objectMapper.writeValueAsString(new PromptPayload(
+                    input.factors(), input.bonusSubtotal(), input.penaltySubtotal(), input.grade(),
+                    input.sceneType(), input.matchedPenaltyRules(), input.festival(), input.allowedQuantities()));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 Recommendation 輸入", exception);
         }
     }
+
+    private record PromptPayload(
+            java.util.List<RecommendationInput.FactorPercentile> factors,
+            java.math.BigDecimal bonusSubtotal,
+            java.math.BigDecimal penaltySubtotal,
+            com.example.ssds.core.domain.Grade grade,
+            com.example.ssds.core.domain.SceneType sceneType,
+            java.util.List<com.example.ssds.core.domain.FactorCode> matchedPenaltyRules,
+            RecommendationInput.FestivalWindow festival,
+            java.util.List<Integer> allowedQuantities) {}
 }

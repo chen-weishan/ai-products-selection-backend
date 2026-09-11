@@ -24,6 +24,8 @@ class ReviewRiskResponseParserTest {
         assertEquals(2, output.reviews().size());
         assertEquals(Sentiment.NEGATIVE, output.reviews().getFirst().sentiment());
         assertEquals(ReviewRiskTopic.SHIPPING_DAMAGE, output.reviews().getFirst().riskTopic());
+        assertEquals(1L, output.reviews().getFirst().reviewId());
+        assertEquals(2L, output.reviews().get(1).reviewId());
     }
 
     @Test
@@ -42,8 +44,8 @@ class ReviewRiskResponseParserTest {
         return """
                 {
                   "reviews": [
-                    {"reviewId":1,"sentiment":"NEGATIVE","riskTopic":"SHIPPING_DAMAGE"},
-                    {"reviewId":2,"sentiment":"POSITIVE","riskTopic":null}
+                    {"reviewIndex":0,"sentiment":"NEGATIVE","riskTopic":"SHIPPING_DAMAGE"},
+                    {"reviewIndex":1,"sentiment":"POSITIVE","riskTopic":null}
                   ],
                   "topicStatistics": [
                     {"topic":"QUALITY","ratio":0,"severity":"LOW"},

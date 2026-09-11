@@ -6,6 +6,7 @@ import com.example.ssds.api.review.ReviewRiskService;
 import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.api.trend.TrendInterpretationService;
 import com.example.ssds.api.sourcing.SourcingScoutService;
+import com.example.ssds.api.calibration.WeightCalibrationService;
 import com.example.ssds.ai.client.AiExecutionWarningContext;
 import com.example.ssds.ai.client.AiBudgetExceededException;
 import com.example.ssds.ai.client.AiBudgetExecutionContext;
@@ -34,6 +35,7 @@ public class AiTaskWorker {
     private final RecommendationService recommendationService;
     private final TrendInterpretationService trendInterpretationService;
     private final SourcingScoutService sourcingScoutService;
+    private final WeightCalibrationService weightCalibrationService;
     private final FullAnalysisOrchestrator fullAnalysisOrchestrator;
     private final DailyAiBudget dailyAiBudget;
     private final int batchItemCap;
@@ -48,6 +50,7 @@ public class AiTaskWorker {
             RecommendationService recommendationService,
             TrendInterpretationService trendInterpretationService,
             SourcingScoutService sourcingScoutService,
+            WeightCalibrationService weightCalibrationService,
             FullAnalysisOrchestrator fullAnalysisOrchestrator,
             DailyAiBudget dailyAiBudget,
             @Value("${ai.batch-item-cap:150}") int batchItemCap) {
@@ -59,6 +62,7 @@ public class AiTaskWorker {
         this.recommendationService = recommendationService;
         this.trendInterpretationService = trendInterpretationService;
         this.sourcingScoutService = sourcingScoutService;
+        this.weightCalibrationService = weightCalibrationService;
         this.fullAnalysisOrchestrator = fullAnalysisOrchestrator;
         this.dailyAiBudget = dailyAiBudget;
         this.batchItemCap = Math.max(0, batchItemCap);
@@ -72,7 +76,7 @@ public class AiTaskWorker {
             ProductInsightService productInsightService,
             RecommendationService recommendationService) {
         this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
-                productInsightService, recommendationService, null, null, null, null, 150);
+                productInsightService, recommendationService, null, null, null, null, null, 150);
     }
 
     AiTaskWorker(
@@ -84,7 +88,7 @@ public class AiTaskWorker {
             RecommendationService recommendationService,
             TrendInterpretationService trendInterpretationService) {
         this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
-                productInsightService, recommendationService, trendInterpretationService, null, null, null, 150);
+                productInsightService, recommendationService, trendInterpretationService, null, null, null, null, 150);
     }
 
     AiTaskWorker(
@@ -98,7 +102,39 @@ public class AiTaskWorker {
             SourcingScoutService sourcingScoutService) {
         this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
                 productInsightService, recommendationService, trendInterpretationService,
-                sourcingScoutService, null, null, 150);
+                sourcingScoutService, null, null, null, 150);
+    }
+
+    AiTaskWorker(
+            AiTaskRepository taskRepository,
+            AiTaskItemRepository itemRepository,
+            SceneClassificationService sceneClassificationService,
+            ReviewRiskService reviewRiskService,
+            ProductInsightService productInsightService,
+            RecommendationService recommendationService,
+            TrendInterpretationService trendInterpretationService,
+            SourcingScoutService sourcingScoutService,
+            WeightCalibrationService weightCalibrationService) {
+        this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
+                productInsightService, recommendationService, trendInterpretationService,
+                sourcingScoutService, weightCalibrationService, null, null, 150);
+    }
+
+    AiTaskWorker(
+            AiTaskRepository taskRepository,
+            AiTaskItemRepository itemRepository,
+            SceneClassificationService sceneClassificationService,
+            ReviewRiskService reviewRiskService,
+            ProductInsightService productInsightService,
+            RecommendationService recommendationService,
+            TrendInterpretationService trendInterpretationService,
+            SourcingScoutService sourcingScoutService,
+            FullAnalysisOrchestrator fullAnalysisOrchestrator,
+            DailyAiBudget dailyAiBudget,
+            int batchItemCap) {
+        this(taskRepository, itemRepository, sceneClassificationService, reviewRiskService,
+                productInsightService, recommendationService, trendInterpretationService,
+                sourcingScoutService, null, fullAnalysisOrchestrator, dailyAiBudget, batchItemCap);
     }
 
     @Async
@@ -178,6 +214,8 @@ public class AiTaskWorker {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }
                     }
+                    case WEIGHT_CALIBRATION -> weightCalibrationService.interpret(
+                            item.getCalibrationReport().getId(), event.forceRefresh());
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
                 warning = mergeWarnings(warning, AiExecutionWarningContext.consumeMessage());

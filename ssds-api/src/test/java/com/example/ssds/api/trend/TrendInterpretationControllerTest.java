@@ -1,36 +1,30 @@
 package com.example.ssds.api.trend;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.*;
 
-import com.example.ssds.ai.client.AiBudgetExecutionContext;
-import com.example.ssds.api.trend.dto.TrendInterpretationResponse;
-import com.example.ssds.core.domain.AiTaskType;
-import org.junit.jupiter.api.AfterEach;
+import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.dto.*;
+import com.example.ssds.core.domain.*;
 import org.junit.jupiter.api.Test;
 
 class TrendInterpretationControllerTest {
-    @AfterEach
-    void clearBudgetContext() {
-        AiBudgetExecutionContext.clear();
-    }
-
     @Test
-    void manualInterpretationUsesRetryPoolAndClearsContextAfterward() {
+    void manualInterpretationCreatesRetryPoolTask() {
         TrendInterpretationService service = mock(TrendInterpretationService.class);
-        TrendInterpretationResponse response = mock(TrendInterpretationResponse.class);
-        when(service.interpret(31L, true)).thenAnswer(ignored -> {
-            assertEquals(
-                    AiTaskType.BudgetPool.RETRY,
-                    AiBudgetExecutionContext.resolve(AiTaskType.BudgetPool.TRACK_A));
-            return response;
-        });
+        AiTaskService taskService = mock(AiTaskService.class);
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(taskService.create(any())).thenReturn(task);
 
-        new TrendInterpretationController(service).interpret(31L, true);
+        var response = new TrendInterpretationController(service, taskService)
+                .interpret(31L, true);
 
-        assertEquals(
-                AiTaskType.BudgetPool.TRACK_A,
-                AiBudgetExecutionContext.resolve(AiTaskType.BudgetPool.TRACK_A));
+        assertEquals(202, response.getStatusCode().value());
+        verify(taskService).create(argThat(request ->
+                request.taskType() == AiTaskType.TREND_INTERPRET
+                        && request.keywordIds().equals(java.util.List.of(31L))
+                        && request.forceRefresh()));
+        verifyNoInteractions(service);
     }
 }

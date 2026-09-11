@@ -13,7 +13,7 @@ class SourcingScoutPromptFactoryTest {
     void requestsOnePublicSearchAndDefinesNonBlankFallback() {
         String prompt = factory.systemPrompt();
         assertAll(
-                () -> assertEquals("scout-v6", SourcingScoutPromptFactory.PROMPT_VERSION),
+                () -> assertEquals("scout-v7", SourcingScoutPromptFactory.PROMPT_VERSION),
                 () -> assertTrue(prompt.contains("搜尋 Connector")),
                 () -> assertTrue(prompt.contains("完成一次有效搜尋後即停止")),
                 () -> assertFalse(prompt.contains("Google Trends")),
@@ -33,7 +33,7 @@ class SourcingScoutPromptFactoryTest {
         assertTrue(correction.contains("report 為空白或長度不合格"));
         assertTrue(correction.contains("固定資料不足文案"));
         assertEquals(
-                "{\"keyword\":\"低糖零食\",\"categoryId\":10,\"categoryName\":\"零食\"}",
+                "{\"keyword\":\"低糖零食\",\"categoryName\":\"零食\"}",
                 factory.userPrompt(new SourcingScoutInput("低糖零食", 10L, "零食")));
     }
 }

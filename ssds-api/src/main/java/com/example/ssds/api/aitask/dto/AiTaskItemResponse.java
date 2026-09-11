@@ -7,6 +7,7 @@ public record AiTaskItemResponse(
         Long itemId,
         Long productId,
         Long keywordId,
+        Long calibrationReportId,
         TaskItemStatus status,
         String errorMessage,
         Integer durationMs
@@ -16,6 +17,7 @@ public record AiTaskItemResponse(
                 item.getId(),
                 item.getProduct() == null ? null : item.getProduct().getId(),
                 item.getKeyword() == null ? null : item.getKeyword().getId(),
+                item.getCalibrationReport() == null ? null : item.getCalibrationReport().getId(),
                 item.getStatus(),
                 item.getErrorMessage(),
                 item.getDurationMs());

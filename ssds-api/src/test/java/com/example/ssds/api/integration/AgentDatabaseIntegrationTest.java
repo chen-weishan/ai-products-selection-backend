@@ -2,6 +2,8 @@ package com.example.ssds.api.integration;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +29,8 @@ import com.example.ssds.ai.model.WeightCalibrationOutput;
 import com.example.ssds.ai.model.WeightCalibrationResult;
 import com.example.ssds.api.calibration.WeightCalibrationService;
 import com.example.ssds.api.calibration.dto.WeightCalibrationInterpretRequest;
+import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.review.ReviewRiskService;
@@ -49,6 +53,8 @@ import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.core.domain.UserStatus;
 import com.example.ssds.core.domain.WeightVersionStatus;
 import com.example.ssds.infra.entity.AiTask;
+import com.example.ssds.infra.entity.AiTaskItem;
+import com.example.ssds.infra.entity.AiBudgetUsageDaily;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.CalibrationReport;
 import com.example.ssds.infra.entity.Category;
@@ -58,12 +64,15 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.ProductReview;
 import com.example.ssds.infra.entity.ProductScore;
 import com.example.ssds.infra.entity.ScoreFactor;
+import com.example.ssds.infra.entity.SceneClassificationLog;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import com.example.ssds.infra.entity.TrendInterpretation;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.entity.WeightProfile;
 import com.example.ssds.infra.entity.WeightVersion;
 import com.example.ssds.infra.repository.AiTaskRepository;
+import com.example.ssds.infra.repository.AiTaskItemRepository;
+import com.example.ssds.infra.repository.AiBudgetUsageDailyRepository;
 import com.example.ssds.infra.repository.AiInsightRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.CalibrationReportRepository;
@@ -75,6 +84,7 @@ import com.example.ssds.infra.repository.ProductReviewRepository;
 import com.example.ssds.infra.repository.ProductScoreRepository;
 import com.example.ssds.infra.repository.ReviewAnalysisRepository;
 import com.example.ssds.infra.repository.ScoreFactorRepository;
+import com.example.ssds.infra.repository.SceneClassificationLogRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendInterpretationRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -143,6 +153,12 @@ class AgentDatabaseIntegrationTest {
     @Autowired
     private AiTaskRepository aiTasks;
     @Autowired
+    private AiTaskItemRepository aiTaskItems;
+    @Autowired
+    private AiTaskService aiTaskService;
+    @Autowired
+    private AiBudgetUsageDailyRepository budgetUsages;
+    @Autowired
     private CategoryRepository categories;
     @Autowired
     private TrendKeywordRepository keywords;
@@ -156,6 +172,8 @@ class AgentDatabaseIntegrationTest {
     private ProductScoreRepository productScores;
     @Autowired
     private ScoreFactorRepository scoreFactors;
+    @Autowired
+    private SceneClassificationLogRepository sceneLogs;
     @Autowired
     private DecisionRecordRepository decisions;
     @Autowired
@@ -184,6 +202,140 @@ class AgentDatabaseIntegrationTest {
     private RecommendationService recommendationService;
     @Autowired
     private WeightCalibrationService weightCalibrationService;
+
+    @Test
+    void dailyAiBudgetUsageUpsertAccumulatesEveryPoolAtomically() {
+        LocalDate date = LocalDate.of(2099, 1, 1);
+
+        budgetUsages.increment(date, "TRACK_B", 1, 0);
+        budgetUsages.increment(date, "TRACK_B", 2, 1);
+        entityManager.flush();
+        entityManager.clear();
+
+        AiBudgetUsageDaily usage = budgetUsages.findByUsageDate(date).getFirst();
+        assertEquals(3, usage.getRequestCount());
+        assertEquals(1, usage.getCacheHitCount());
+        assertEquals(AiTaskType.BudgetPool.TRACK_B, usage.getBudgetPool());
+    }
+
+    @Test
+    @DisplayName("Agent 5/7: ai_task items persist their keyword and calibration-report targets")
+    void agent5And7TaskTargetsPersist() {
+        TrendKeyword keyword = keywords.saveAndFlush(
+                TrendKeyword.builder().keyword("task-target-integration").build());
+        CalibrationReport report = calibrationReports.saveAndFlush(CalibrationReport.builder()
+                .quarter("2098Q4")
+                .sampleSize(240)
+                .regressionResult("{\"factors\":[]}")
+                .backtestResult("{\"backtests\":[]}")
+                .status(CalibrationStatus.PENDING)
+                .build());
+
+        var trendTask = aiTaskService.create(new CreateAiTaskRequest(
+                AiTaskType.TREND_INTERPRET,
+                List.of(),
+                List.of(keyword.getId()),
+                List.of(),
+                new CreateAiTaskRequest.Options(false)));
+        var calibrationTask = aiTaskService.create(new CreateAiTaskRequest(
+                AiTaskType.WEIGHT_CALIBRATION,
+                List.of(),
+                List.of(),
+                List.of(report.getId()),
+                new CreateAiTaskRequest.Options(false)));
+        entityManager.flush();
+        entityManager.clear();
+
+        var trendItem = aiTaskItems.findByTaskId(trendTask.taskId()).getFirst();
+        var calibrationItem = aiTaskItems.findByTaskId(calibrationTask.taskId()).getFirst();
+        assertAll(
+                () -> assertEquals(keyword.getId(), trendItem.getKeyword().getId()),
+                () -> assertEquals(null, trendItem.getCalibrationReport()),
+                () -> assertEquals(report.getId(), calibrationItem.getCalibrationReport().getId()),
+                () -> assertEquals(true, entityManager.getEntityManagerFactory()
+                        .getPersistenceUnitUtil().isLoaded(calibrationItem, "calibrationReport")),
+                () -> assertEquals(null, calibrationItem.getKeyword()),
+                () -> assertEquals(AiTaskType.BudgetPool.RETRY,
+                        aiTasks.findById(trendTask.taskId()).orElseThrow().getBudgetPool()),
+                () -> assertEquals(AiTaskType.BudgetPool.RETRY,
+                        aiTasks.findById(calibrationTask.taskId()).orElseThrow().getBudgetPool()));
+    }
+
+    @Test
+    @DisplayName("FULL_ANALYSIS candidates exclude deleted products and prioritize new then oldest")
+    void fullAnalysisCandidatePriorityAndSoftDeleteAreEnforcedByDatabaseQuery() {
+        Category category = categories.saveAndFlush(
+                Category.builder().name("full-analysis-priority").build());
+        Product neverAnalyzed = products.saveAndFlush(candidateProduct(category, "never", null));
+        Product oldest = products.saveAndFlush(candidateProduct(category, "oldest", null));
+        Product recent = products.saveAndFlush(candidateProduct(category, "recent", null));
+        Product deleted = products.saveAndFlush(candidateProduct(
+                category, "deleted", Instant.parse("2026-09-01T00:00:00Z")));
+
+        SceneClassificationLog oldestLog = sceneLogs.saveAndFlush(sceneLog(oldest, "2026W01"));
+        SceneClassificationLog recentLog = sceneLogs.saveAndFlush(sceneLog(recent, "2026W02"));
+        entityManager.createNativeQuery(
+                        "update scene_classification_log set created_at = :createdAt where id = :id")
+                .setParameter("createdAt", Instant.parse("2026-01-01T00:00:00Z"))
+                .setParameter("id", oldestLog.getId())
+                .executeUpdate();
+        entityManager.createNativeQuery(
+                        "update scene_classification_log set created_at = :createdAt where id = :id")
+                .setParameter("createdAt", Instant.parse("2026-02-01T00:00:00Z"))
+                .setParameter("id", recentLog.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Long> ids = products.findFullAnalysisCandidates(List.of(ProductStatus.EVALUATING))
+                .stream().map(Product::getId).toList();
+
+        assertFalse(ids.contains(deleted.getId()));
+        assertTrue(ids.indexOf(neverAnalyzed.getId()) < ids.indexOf(oldest.getId()));
+        assertTrue(ids.indexOf(oldest.getId()) < ids.indexOf(recent.getId()));
+    }
+
+    @Test
+    @DisplayName("FULL_ANALYSIS continuation excludes deleted and already-succeeded products")
+    void quotaContinuationOnlyReturnsStillPendingActiveProducts() {
+        Category category = categories.saveAndFlush(
+                Category.builder().name("quota-continuation").build());
+        Product completed = products.saveAndFlush(candidateProduct(category, "completed", null));
+        Product pending = products.saveAndFlush(candidateProduct(category, "pending", null));
+        Product deleted = products.saveAndFlush(candidateProduct(
+                category, "deleted-pending", Instant.parse("2026-09-01T00:00:00Z")));
+        AiTask oldTask = aiTasks.saveAndFlush(AiTask.builder()
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.PARTIAL)
+                .totalCount(3)
+                .build());
+        aiTaskItems.saveAllAndFlush(List.of(
+                AiTaskItem.builder().task(oldTask).product(completed)
+                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build(),
+                AiTaskItem.builder().task(oldTask).product(pending)
+                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build(),
+                AiTaskItem.builder().task(oldTask).product(deleted)
+                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build()));
+        AiTask newerTask = aiTasks.saveAndFlush(AiTask.builder()
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.SUCCEEDED)
+                .totalCount(1)
+                .build());
+        aiTaskItems.saveAndFlush(AiTaskItem.builder()
+                .task(newerTask).product(completed)
+                .status(com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Product> result = aiTaskItems.findProductsPendingQuotaRetry(
+                AiTaskType.FULL_ANALYSIS,
+                com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA);
+
+        assertEquals(List.of(pending.getId()), result.stream().map(Product::getId).toList());
+    }
 
     @Test
     @DisplayName("Agent 2: stores review analysis without writing scores, factors, or decisions")
@@ -422,6 +574,34 @@ class AgentDatabaseIntegrationTest {
                 () -> assertEquals(15, reloaded.getTimeGapDays()),
                 () -> assertEquals(SourcingStatus.PENDING, reloaded.getProduct().getSourcingStatus()),
                 () -> assertEquals(conflictingTrend.getId(), reloaded.getTrendInterpretation().getId()));
+    }
+
+    private static Product candidateProduct(Category category, String suffix, Instant deletedAt) {
+        return Product.builder()
+                .name("全量候選-" + suffix)
+                .category(category)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .cost(new BigDecimal("60.00"))
+                .suggestedPrice(new BigDecimal("100.00"))
+                .deletedAt(deletedAt)
+                .build();
+    }
+
+    private static com.example.ssds.infra.entity.SceneClassificationLog sceneLog(
+            Product product, String period) {
+        return com.example.ssds.infra.entity.SceneClassificationLog.builder()
+                .product(product)
+                .aiSceneType(SceneType.REPLENISHMENT)
+                .aiConfidence(new BigDecimal("0.90"))
+                .aiReasoning("整合測試")
+                .signals(List.of("integration-test"))
+                .finalSceneType(SceneType.REPLENISHMENT)
+                .model("test-model")
+                .promptVersion("scene-test")
+                .heatBucket("MEDIUM")
+                .period(period)
+                .build();
     }
 
     private AuthorityFixture authorityFixture(String suffix) {

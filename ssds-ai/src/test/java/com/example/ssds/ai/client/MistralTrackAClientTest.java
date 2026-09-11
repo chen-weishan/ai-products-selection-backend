@@ -140,6 +140,21 @@ class MistralTrackAClientTest {
                 event -> {}));
     }
 
+    @Test
+    void disabledExternalPolicyBlocksBeforeApiKeyAndNetworkChecks() {
+        MistralTrackAClient client = new MistralTrackAClient(
+                objectMapper,
+                "http://127.0.0.1:1/v1",
+                "",
+                30,
+                10,
+                new DailyAiBudget(100, 0.7, 0.2, 0.1),
+                event -> {},
+                new ExternalLlmPolicy(false, objectMapper));
+
+        assertThrows(ExternalLlmDisabledException.class, () -> client.complete(request()));
+    }
+
     private MistralTrackAClient client() {
         return new MistralTrackAClient(
                 objectMapper,
@@ -153,7 +168,7 @@ class MistralTrackAClientTest {
                 AiTaskType.SCENE_CLASSIFY,
                 "test-model",
                 "system instructions",
-                "{\"productId\":101}",
+                "{\"productName\":\"測試商品\"}",
                 objectMapper.createObjectNode().put("type", "object"));
     }
 

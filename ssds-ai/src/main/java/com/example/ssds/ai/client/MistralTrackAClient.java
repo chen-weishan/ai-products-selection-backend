@@ -35,6 +35,7 @@ public class MistralTrackAClient implements TrackAAiClient {
     private final String apiKey;
     private final ApplicationEventPublisher eventPublisher;
     private final DailyAiBudget budget;
+    private final ExternalLlmPolicy externalLlmPolicy;
     private final Set<String> verifiedReasoningModels = ConcurrentHashMap.newKeySet();
 
     @Autowired
@@ -45,11 +46,13 @@ public class MistralTrackAClient implements TrackAAiClient {
             @Value("${mistral.timeout-seconds:30}") int timeoutSeconds,
             @Value("${mistral.connect-timeout-seconds:10}") int connectTimeoutSeconds,
             DailyAiBudget budget,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ExternalLlmPolicy externalLlmPolicy) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.eventPublisher = eventPublisher;
         this.budget = budget;
+        this.externalLlmPolicy = externalLlmPolicy;
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(
@@ -61,7 +64,20 @@ public class MistralTrackAClient implements TrackAAiClient {
 
     MistralTrackAClient(ObjectMapper objectMapper, String baseUrl, String apiKey, int timeoutSeconds) {
         this(objectMapper, baseUrl, apiKey, timeoutSeconds, defaultConnectTimeout(timeoutSeconds),
-                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), event -> {});
+                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), event -> {},
+                new ExternalLlmPolicy(true, objectMapper));
+    }
+
+    MistralTrackAClient(
+            ObjectMapper objectMapper,
+            String baseUrl,
+            String apiKey,
+            int timeoutSeconds,
+            int connectTimeoutSeconds,
+            DailyAiBudget budget,
+            ApplicationEventPublisher eventPublisher) {
+        this(objectMapper, baseUrl, apiKey, timeoutSeconds, connectTimeoutSeconds, budget, eventPublisher,
+                new ExternalLlmPolicy(true, objectMapper));
     }
 
     MistralTrackAClient(
@@ -71,7 +87,8 @@ public class MistralTrackAClient implements TrackAAiClient {
             int timeoutSeconds,
             ApplicationEventPublisher eventPublisher) {
         this(objectMapper, baseUrl, apiKey, timeoutSeconds, defaultConnectTimeout(timeoutSeconds),
-                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), eventPublisher);
+                new DailyAiBudget(1000, 0.7, 0.2, 0.1, java.time.Clock.systemUTC()), eventPublisher,
+                new ExternalLlmPolicy(true, objectMapper));
     }
 
     private static int defaultConnectTimeout(int readTimeoutSeconds) {
@@ -90,6 +107,7 @@ public class MistralTrackAClient implements TrackAAiClient {
 
     @Override
     public AiClientResponse complete(AiPromptRequest request) {
+        externalLlmPolicy.validateUserJson(request.userPrompt());
         if (apiKey.isBlank()) {
             throw new IllegalStateException("MISTRAL_API_KEY 尚未設定");
         }

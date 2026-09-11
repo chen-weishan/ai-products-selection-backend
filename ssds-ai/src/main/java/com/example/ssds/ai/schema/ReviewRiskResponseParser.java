@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewRiskResponseParser {
     private static final Set<String> ROOT_FIELDS = Set.of("reviews", "topicStatistics");
-    private static final Set<String> REVIEW_FIELDS = Set.of("reviewId", "sentiment", "riskTopic");
+    private static final Set<String> REVIEW_FIELDS = Set.of("reviewIndex", "sentiment", "riskTopic");
     private static final Set<String> STATISTIC_FIELDS = Set.of("topic", "ratio", "severity");
     private static final BigDecimal RATIO_TOLERANCE = new BigDecimal("0.02");
     private final ObjectMapper objectMapper;
@@ -31,18 +31,14 @@ public class ReviewRiskResponseParser {
             JsonNode reviewNodes = requiredArray(root, "reviews");
             JsonNode statisticNodes = requiredArray(root, "topicStatistics");
 
-            Set<Long> expectedIds = new LinkedHashSet<>();
-            input.reviews().forEach(review -> expectedIds.add(review.reviewId()));
-            if (expectedIds.size() != input.reviews().size()) fail("輸入 reviewId 不得重複");
-
             List<ReviewRiskAnalysis> reviews = new ArrayList<>();
-            Set<Long> returnedIds = new HashSet<>();
+            Set<Integer> returnedIndexes = new HashSet<>();
             EnumMap<ReviewRiskTopic, Integer> negativeCounts = new EnumMap<>(ReviewRiskTopic.class);
             for (JsonNode node : reviewNodes) {
                 requireObject(node, REVIEW_FIELDS, "reviews[]");
-                Long reviewId = integerId(node.get("reviewId"));
-                if (!expectedIds.contains(reviewId)) fail("回傳未知 reviewId: " + reviewId);
-                if (!returnedIds.add(reviewId)) fail("reviewId 重複: " + reviewId);
+                int reviewIndex = reviewIndex(node.get("reviewIndex"), input.reviews().size());
+                if (!returnedIndexes.add(reviewIndex)) fail("reviewIndex 重複: " + reviewIndex);
+                Long reviewId = input.reviews().get(reviewIndex).reviewId();
                 Sentiment sentiment = enumValue(node.get("sentiment"), Sentiment.class, "sentiment");
                 ReviewRiskTopic topic = nullableEnum(node.get("riskTopic"), ReviewRiskTopic.class, "riskTopic");
                 if (sentiment == Sentiment.NEGATIVE && topic == null) {
@@ -54,7 +50,7 @@ public class ReviewRiskResponseParser {
                 if (topic != null) negativeCounts.merge(topic, 1, Integer::sum);
                 reviews.add(new ReviewRiskAnalysis(reviewId, sentiment, topic));
             }
-            if (!returnedIds.equals(expectedIds)) fail("reviews 必須與輸入逐筆一一對應");
+            if (returnedIndexes.size() != input.reviews().size()) fail("reviews 必須與輸入逐筆一一對應");
 
             List<ReviewTopicStatistic> statistics = parseStatistics(statisticNodes);
             validateRatios(statistics, negativeCounts);
@@ -115,11 +111,12 @@ public class ReviewRiskResponseParser {
         return value;
     }
 
-    private static Long integerId(JsonNode node) {
-        if (node == null || !node.isIntegralNumber() || node.longValue() <= 0) {
-            fail("reviewId 必須是正整數");
+    private static int reviewIndex(JsonNode node, int reviewCount) {
+        if (node == null || !node.isIntegralNumber()
+                || node.intValue() < 0 || node.intValue() >= reviewCount) {
+            fail("reviewIndex 超出本次評論範圍");
         }
-        return node.longValue();
+        return node.intValue();
     }
 
     private static BigDecimal decimal(JsonNode node, String field) {

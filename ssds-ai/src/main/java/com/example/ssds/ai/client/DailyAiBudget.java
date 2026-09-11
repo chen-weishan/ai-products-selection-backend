@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /** v3.0 三個每日請求數預算池；快取命中不消耗 request quota。 */
@@ -25,6 +26,7 @@ public class DailyAiBudget {
     private final EnumMap<AiTaskType.BudgetPool, Integer> cacheHits =
             new EnumMap<>(AiTaskType.BudgetPool.class);
     private final Clock clock;
+    private final AiBudgetUsageRecorder usageRecorder;
     private LocalDate usageDate;
 
     @Autowired
@@ -32,8 +34,29 @@ public class DailyAiBudget {
             @Value("${ai.quota-daily:1000}") int dailyQuota,
             @Value("${ai.quota-share-track-a:0.7}") double trackAShare,
             @Value("${ai.quota-share-track-b:0.2}") double trackBShare,
-            @Value("${ai.quota-share-retry:0.1}") double retryShare) {
-        this(dailyQuota, trackAShare, trackBShare, retryShare, Clock.system(BUSINESS_ZONE));
+            @Value("${ai.quota-share-retry:0.1}") double retryShare,
+            ObjectProvider<AiBudgetUsageRecorder> usageRecorderProvider) {
+        this(
+                dailyQuota,
+                trackAShare,
+                trackBShare,
+                retryShare,
+                Clock.system(BUSINESS_ZONE),
+                usageRecorderProvider.getIfAvailable(() -> AiBudgetUsageRecorder.NO_OP));
+    }
+
+    public DailyAiBudget(
+            int dailyQuota,
+            double trackAShare,
+            double trackBShare,
+            double retryShare) {
+        this(
+                dailyQuota,
+                trackAShare,
+                trackBShare,
+                retryShare,
+                Clock.system(BUSINESS_ZONE),
+                AiBudgetUsageRecorder.NO_OP);
     }
 
     DailyAiBudget(
@@ -42,6 +65,16 @@ public class DailyAiBudget {
             double trackBShare,
             double retryShare,
             Clock clock) {
+        this(dailyQuota, trackAShare, trackBShare, retryShare, clock, AiBudgetUsageRecorder.NO_OP);
+    }
+
+    DailyAiBudget(
+            int dailyQuota,
+            double trackAShare,
+            double trackBShare,
+            double retryShare,
+            Clock clock,
+            AiBudgetUsageRecorder usageRecorder) {
         if (dailyQuota < 0) throw new IllegalArgumentException("AI 每日配額不得為負數");
         validateShare(trackAShare);
         validateShare(trackBShare);
@@ -51,6 +84,7 @@ public class DailyAiBudget {
         }
         this.dailyQuota = dailyQuota;
         this.clock = clock;
+        this.usageRecorder = usageRecorder;
         shares.put(AiTaskType.BudgetPool.TRACK_A, trackAShare);
         shares.put(AiTaskType.BudgetPool.TRACK_B, trackBShare);
         shares.put(AiTaskType.BudgetPool.RETRY, retryShare);
@@ -67,6 +101,7 @@ public class DailyAiBudget {
         AiTaskType.BudgetPool pool = AiBudgetExecutionContext.resolve(requestedPool, retryAttempt);
         int limit = limit(pool);
         if (used.get(pool) >= limit) throw new AiBudgetExceededException(pool, resetAt());
+        usageRecorder.record(usageDate, pool, 1, 0);
         used.put(pool, used.get(pool) + 1);
         AiBudgetExecutionContext.requestConsumed(pool);
     }
@@ -74,6 +109,7 @@ public class DailyAiBudget {
     public synchronized void recordCacheHit(AiTaskType.BudgetPool requestedPool) {
         rollDateIfNeeded();
         AiTaskType.BudgetPool pool = AiBudgetExecutionContext.resolve(requestedPool);
+        usageRecorder.record(usageDate, pool, 0, 1);
         cacheHits.put(pool, cacheHits.get(pool) + 1);
         AiBudgetExecutionContext.cacheHit();
     }
@@ -95,7 +131,7 @@ public class DailyAiBudget {
         return new Snapshot(dailyQuota, resetAt(), "CONFIGURED", pools);
     }
 
-    /** 應用重啟時由已落庫的 ai_task 計數還原；取較大值避免覆蓋啟動後的新請求。 */
+    /** 應用重啟時由每日用量帳本還原；取較大值避免覆蓋啟動後的新請求。 */
     public synchronized void restore(
             AiTaskType.BudgetPool pool, int persistedUsed, int persistedCacheHits) {
         rollDateIfNeeded();

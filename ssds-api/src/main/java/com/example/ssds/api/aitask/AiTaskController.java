@@ -41,4 +41,12 @@ public class AiTaskController {
     public ApiResponse<List<AiTaskItemResponse>> items(@PathVariable("taskId") Long taskId) {
         return ApiResponse.success(service.items(taskId));
     }
+
+    @PostMapping("/{taskId}/retry-failed")
+    @Operation(summary = "將指定任務的一般失敗項建立為新的 RETRY 任務")
+    public ResponseEntity<ApiResponse<AiTaskResponse>> retryFailed(
+            @PathVariable("taskId") Long taskId) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(service.retryFailedItems(taskId)));
+    }
 }

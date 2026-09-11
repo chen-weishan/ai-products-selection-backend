@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.insight.ProductInsightService;
+import com.example.ssds.api.calibration.WeightCalibrationService;
 import com.example.ssds.api.insight.dto.ProductInsightResponse;
 import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.recommendation.dto.RecommendationResponse;
@@ -333,6 +334,38 @@ class AiTaskWorkerTest {
         worker.run(new AiTaskCreatedEvent(708L, true));
 
         verify(trendService).interpret(31L, true);
+        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void calibrationTaskUsesReportTargetAndCompletes() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        SceneClassificationService sceneService = mock(SceneClassificationService.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ProductInsightService productInsightService = mock(ProductInsightService.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        TrendInterpretationService trendService = mock(TrendInterpretationService.class);
+        SourcingScoutService sourcingService = mock(SourcingScoutService.class);
+        WeightCalibrationService calibrationService = mock(WeightCalibrationService.class);
+        CalibrationReport report = CalibrationReport.builder().id(7L).quarter("2026Q3").build();
+        AiTask task = AiTask.builder().id(714L)
+                .taskType(AiTaskType.WEIGHT_CALIBRATION)
+                .budgetPool(AiTaskType.BudgetPool.RETRY)
+                .totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(715L).task(task)
+                .calibrationReport(report).build();
+        when(taskRepository.findById(714L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(714L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, sceneService, reviewRiskService,
+                productInsightService, recommendationService, trendService, sourcingService,
+                calibrationService);
+
+        worker.run(new AiTaskCreatedEvent(714L, true));
+
+        verify(calibrationService).interpret(7L, true);
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
     }

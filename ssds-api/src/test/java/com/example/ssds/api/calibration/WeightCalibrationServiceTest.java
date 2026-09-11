@@ -9,6 +9,7 @@ import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.calibration.dto.*;
 import com.example.ssds.infra.entity.CalibrationReport;
 import com.example.ssds.infra.repository.CalibrationReportRepository;
+import com.example.ssds.infra.repository.SceneClassificationLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.*;
@@ -40,5 +41,31 @@ class WeightCalibrationServiceTest {
         assertTrue(report.getAdjustmentAdvice().contains("TREND"));
         assertEquals("calibration-v1",report.getPromptVersion());
         assertFalse(response.fallbackApplied());
+    }
+
+    @Test
+    void taskEntryLoadsAuthoritativeOverrideStatisticsFromReportQuarter() {
+        CalibrationReportRepository repository=mock(CalibrationReportRepository.class);
+        SceneClassificationLogRepository scenes=mock(SceneClassificationLogRepository.class);
+        WeightCalibrationAgent agent=mock(WeightCalibrationAgent.class);
+        CalibrationReport report=CalibrationReport.builder().id(7L).quarter("2026Q3").sampleSize(200)
+                .regressionResult("{\"method\":\"pearson\",\"factors\":[]}")
+                .backtestResult("{\"backtests\":[]}").build();
+        when(repository.findById(7L)).thenReturn(Optional.of(report));
+        when(scenes.findByCreatedAtBetween(any(),any())).thenReturn(List.of());
+        when(agent.interpret(any(),eq(true))).thenReturn(new WeightCalibrationResult(
+                new WeightCalibrationOutput("統計解讀",List.of(),List.of()),
+                false,null,false,"test-model","calibration-v1",10,5,1));
+        WeightCalibrationService service=new WeightCalibrationService(
+                repository,scenes,new PromptSanitizer(),agent,new ObjectMapper());
+
+        service.interpret(7L,true);
+
+        verify(scenes).findByCreatedAtBetween(
+                java.time.Instant.parse("2026-06-30T16:00:00Z"),
+                java.time.Instant.parse("2026-09-30T16:00:00Z"));
+        ArgumentCaptor<WeightCalibrationInput> input=ArgumentCaptor.forClass(WeightCalibrationInput.class);
+        verify(agent).interpret(input.capture(),eq(true));
+        assertEquals(0,input.getValue().sceneOverrides().totalClassifications());
     }
 }

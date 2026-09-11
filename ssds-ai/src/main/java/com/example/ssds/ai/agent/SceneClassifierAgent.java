@@ -5,6 +5,9 @@ import com.example.ssds.ai.client.AiBudgetExceededException;
 import com.example.ssds.ai.client.AiModelNotFoundException;
 import com.example.ssds.ai.client.AiPromptRequest;
 import com.example.ssds.ai.client.AiRateLimitException;
+import com.example.ssds.ai.client.ExternalLlmDisabledException;
+import com.example.ssds.ai.client.OutboundDataPolicyException;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
@@ -47,8 +50,7 @@ public class SceneClassifierAgent {
             SceneClassifierPromptFactory promptFactory,
             SceneClassifierResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-classify-primary:mistral-medium-3-5}") String primaryModel,
-            @Value("${mistral.model-classify-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbackModels,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -56,8 +58,8 @@ public class SceneClassifierAgent {
                 promptFactory,
                 parser,
                 objectMapper,
-                primaryModel,
-                fallbackModels,
+                modelCatalog.classify().primary(),
+                modelCatalog.classify().fallbacks(),
                 retryMax,
                 cacheDays,
                 Thread::sleep);
@@ -81,6 +83,19 @@ public class SceneClassifierAgent {
         this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
         this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays)).maximumSize(10_000).build();
+    }
+
+    public SceneClassifierAgent(
+            AiAccessRouter router,
+            SceneClassifierPromptFactory promptFactory,
+            SceneClassifierResponseParser parser,
+            ObjectMapper objectMapper,
+            String primaryModel,
+            String fallbackModels,
+            int retryMax,
+            long cacheDays) {
+        this(router, promptFactory, parser, objectMapper, primaryModel, fallbackModels,
+                retryMax, cacheDays, Thread::sleep);
     }
 
     public SceneClassificationResult classify(SceneClassifierInput input, boolean forceRefresh) {
@@ -202,6 +217,10 @@ public class SceneClassifierAgent {
                     continue;
                 }
                 return unavailableFallback(raw, model);
+            } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
+                log.warn("SceneClassifier external request blocked by policy: productId={}, reason={}",
+                        input.productId(), safeLogMessage(exception.getMessage()));
+                return unavailableFallback(raw, "policy-blocked");
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {

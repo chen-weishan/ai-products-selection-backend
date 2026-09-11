@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.RecommendationPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
@@ -46,8 +47,7 @@ public class RecommendationAgent {
             RecommendationPromptFactory promptFactory,
             RecommendationResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-short-gen-primary:mistral-small-latest}") String primaryModel,
-            @Value("${mistral.model-short-gen-fallbacks:mistral-medium-3-5,magistral-medium-latest}") String fallbackModels,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days:6}") long cacheDays) {
         this(
@@ -55,8 +55,8 @@ public class RecommendationAgent {
                 promptFactory,
                 parser,
                 objectMapper,
-                primaryModel,
-                fallbackModels,
+                modelCatalog.shortGeneration().primary(),
+                modelCatalog.shortGeneration().fallbacks(),
                 retryMax,
                 cacheDays,
                 Thread::sleep);
@@ -181,6 +181,11 @@ public class RecommendationAgent {
                     continue;
                 }
                 return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
+                log.warn("Recommendation external request blocked by policy: productId={}, reason={}",
+                        input.productId(), safeLogMessage(exception.getMessage()));
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, "policy-blocked",
+                        Math.max(0, requestCount - 1));
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {

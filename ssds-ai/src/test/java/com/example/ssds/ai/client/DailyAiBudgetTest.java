@@ -6,6 +6,8 @@ import com.example.ssds.core.domain.AiTaskType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -118,5 +120,20 @@ class DailyAiBudgetTest {
         DailyAiBudget.PoolSnapshot trackA = budget.snapshot().pools().getFirst();
         assertEquals(5, trackA.used());
         assertEquals(3, trackA.cacheHits());
+    }
+
+    @Test
+    void persistsResolvedRequestAndCachePoolBeforeUpdatingMemory() {
+        var records = new ArrayList<String>();
+        AiBudgetUsageRecorder recorder = (date, pool, requests, cacheHits) ->
+                records.add(pool + ":" + requests + ":" + cacheHits);
+        DailyAiBudget budget = new DailyAiBudget(10, 0.7, 0.2, 0.1, CLOCK, recorder);
+        AiBudgetExecutionContext.begin(AiTaskType.BudgetPool.TRACK_A);
+
+        budget.acquire(AiTaskType.BudgetPool.TRACK_A, false);
+        budget.acquire(AiTaskType.BudgetPool.TRACK_A, true);
+        budget.recordCacheHit(AiTaskType.BudgetPool.TRACK_A);
+
+        assertEquals(List.of("TRACK_A:1:0", "RETRY:1:0", "TRACK_A:0:1"), records);
     }
 }

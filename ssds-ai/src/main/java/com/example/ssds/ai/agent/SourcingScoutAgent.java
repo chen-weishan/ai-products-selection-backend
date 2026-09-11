@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.SourcingScoutPromptFactory;
 import com.example.ssds.ai.prompt.SourcingKeywordNormalizer;
@@ -34,12 +35,12 @@ public class SourcingScoutAgent {
             MistralSourcingClient client, SourcingScoutPromptFactory promptFactory,
             SourcingScoutResponseParser parser, ObjectMapper mapper,
             TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
-            @Value("${mistral.model-reasoning-primary:mistral-medium-3-5}") String primary,
-            @Value("${mistral.model-reasoning-fallbacks:mistral-small-latest,magistral-medium-latest}") String fallbacks,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax,
-            @Value("${ai.cache-days-sourcing:3}") long cacheDays) {
-        this(client, promptFactory, parser, mapper, budget, rateLimiter, primary, fallbacks,
-                retryMax, cacheDays, Thread::sleep);
+            @Value("${ai.cache-days-sourcing:3}") String cacheDays) {
+        this(client, promptFactory, parser, mapper, budget, rateLimiter,
+                modelCatalog.reasoning().primary(), modelCatalog.reasoning().fallbacks(),
+                retryMax, cacheSetting(cacheDays), Thread::sleep);
     }
 
     SourcingScoutAgent(
@@ -56,27 +57,48 @@ public class SourcingScoutAgent {
             SourcingScoutResponseParser parser, ObjectMapper mapper,
             TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
             String primary, String fallbacks,
+            int retryMax, String cacheDays) {
+        this(client, promptFactory, parser, mapper, budget, rateLimiter, primary, fallbacks,
+                retryMax, cacheSetting(cacheDays), Thread::sleep);
+    }
+
+    SourcingScoutAgent(
+            MistralSourcingClient client, SourcingScoutPromptFactory promptFactory,
+            SourcingScoutResponseParser parser, ObjectMapper mapper,
+            TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
+            String primary, String fallbacks,
             int retryMax, long cacheDays, RetrySleeper retrySleeper) {
+        this(client, promptFactory, parser, mapper, budget, rateLimiter, primary, fallbacks,
+                retryMax, cacheSetting(cacheDays), retrySleeper);
+    }
+
+    private SourcingScoutAgent(
+            MistralSourcingClient client, SourcingScoutPromptFactory promptFactory,
+            SourcingScoutResponseParser parser, ObjectMapper mapper,
+            TrackBSourcingBudget budget, GlobalAiRateLimiter rateLimiter,
+            String primary, String fallbacks,
+            int retryMax, CacheSetting cacheSetting, RetrySleeper retrySleeper) {
         this.client = client; this.promptFactory = promptFactory; this.parser = parser; this.mapper = mapper; this.budget = budget;
         this.rateLimiter = rateLimiter;
         this.models = parseModels(primary, fallbacks); this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
-        this.configurationError = cacheDays < 0 ? "AI_CACHE_DAYS_SOURCING 不得小於 0" : null;
-        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(Math.max(0, cacheDays)))
+        this.configurationError = cacheSetting.error();
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheSetting.days()))
                 .maximumSize(10_000).build();
     }
 
     public SourcingScoutResult scout(SourcingScoutInput input, boolean forceRefresh) {
-        if (configurationError != null) throw new SourcingConfigurationException(configurationError);
-        if (models.isEmpty()) {
-            throw new SourcingConfigurationException("B 軌未設定任何 MODEL_REASONING 模型");
-        }
         CacheKey key = new CacheKey(SourcingKeywordNormalizer.normalize(input.keyword()), input.categoryId(),
                 SourcingScoutPromptFactory.PROMPT_VERSION);
         if (!forceRefresh) {
             SourcingScoutResult cached = cache.getIfPresent(key);
             if (cached != null) return cached.asCacheHit();
         }
+        if (configurationError != null) throw new SourcingConfigurationException(configurationError);
+        if (models.isEmpty()) {
+            throw new SourcingConfigurationException("B 軌未設定任何 MODEL_REASONING 模型");
+        }
+        client.preflight();
         int modelIndex = 0, schemaRetries = 0, rateRetries = 0, requests = 0;
         String retryInstruction = null;
         while (true) {
@@ -162,6 +184,18 @@ public class SourcingScoutAgent {
         if (fallbacks != null) Arrays.stream(fallbacks.split(",")).map(String::trim).filter(v -> !v.isBlank()).forEach(values::add);
         return List.copyOf(values);
     }
+    private static CacheSetting cacheSetting(long days) {
+        return days < 0
+                ? new CacheSetting(0, "AI_CACHE_DAYS_SOURCING 不得小於 0")
+                : new CacheSetting(days, null);
+    }
+    private static CacheSetting cacheSetting(String raw) {
+        try {
+            return cacheSetting(Long.parseLong(raw == null ? "" : raw.trim()));
+        } catch (NumberFormatException exception) {
+            return new CacheSetting(0, "AI_CACHE_DAYS_SOURCING 必須是非負整數");
+        }
+    }
     private boolean hasFallbackModel(int modelIndex) {
         return modelIndex + 1 < models.size();
     }
@@ -176,6 +210,7 @@ public class SourcingScoutAgent {
         return message != null && message.contains("report") ? "REPORT_INVALID" : "SCHEMA_INVALID";
     }
     private record CacheKey(String keyword, Long categoryId, String promptVersion) {}
+    private record CacheSetting(long days, String error) {}
 
     @FunctionalInterface
     interface RetrySleeper {

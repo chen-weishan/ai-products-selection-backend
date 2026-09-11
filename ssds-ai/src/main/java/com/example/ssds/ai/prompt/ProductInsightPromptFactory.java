@@ -3,11 +3,12 @@ package com.example.ssds.ai.prompt;
 import com.example.ssds.ai.model.ProductInsightInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProductInsightPromptFactory {
-    public static final String PROMPT_VERSION = "product-insight-v2";
+    public static final String PROMPT_VERSION = "product-insight-v3";
     private final ObjectMapper objectMapper;
 
     public ProductInsightPromptFactory(ObjectMapper objectMapper) {
@@ -49,9 +50,18 @@ public class ProductInsightPromptFactory {
 
     public String userPrompt(ProductInsightInput input) {
         try {
-            return objectMapper.writeValueAsString(input);
+            return objectMapper.writeValueAsString(new PromptPayload(
+                    input.product(),
+                    input.reviews().stream().map(review -> new ReviewPayload(review.content())).toList(),
+                    input.penalties()));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法序列化 ProductInsight 輸入", exception);
         }
     }
+
+    private record PromptPayload(
+            ProductInsightInput.ProductBasic product,
+            List<ReviewPayload> reviews,
+            List<ProductInsightInput.PenaltyDetail> penalties) {}
+    private record ReviewPayload(String content) {}
 }

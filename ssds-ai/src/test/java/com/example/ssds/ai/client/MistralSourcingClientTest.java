@@ -14,6 +14,18 @@ import org.springframework.web.client.HttpClientErrorException;
 
 class MistralSourcingClientTest {
     @Test
+    void disabledExternalPolicyFailsDuringPreflightWithoutNetworkAccess() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = new MistralSourcingClient(
+                mapper,
+                new SourcingToolPolicy("exa_search", event -> {}),
+                "http://127.0.0.1:1", "test-key", "90", "10", "exa_search", event -> {},
+                new ExternalLlmPolicy(false, mapper));
+
+        assertThrows(ExternalLlmDisabledException.class, client::preflight);
+    }
+
+    @Test
     void validToolBackedResponseCompletesWithoutAdditionalNetworkRoundTrip() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1/models/test-model", exchange -> respond(
@@ -33,7 +45,8 @@ class MistralSourcingClientTest {
                     "test-key", 2, "exa_search", event -> {});
 
             ScoutClientResponse response = assertTimeoutPreemptively(
-                    Duration.ofSeconds(2), () -> client.complete("test-model", "test-prompt"));
+                    Duration.ofSeconds(2), () -> client.complete(
+                            "test-model", "system\n\nINPUT_JSON:\n{\"keyword\":\"低糖零食\"}"));
 
             assertEquals("{}", response.content());
             assertTrue(response.searchedWeb());
@@ -86,7 +99,20 @@ class MistralSourcingClientTest {
         SourcingConfigurationException exception = assertThrows(
                 SourcingConfigurationException.class,
                 () -> client.complete("test-model", "test-prompt"));
-        assertEquals("LLM_CONNECT_TIMEOUT_SECONDS 必須大於 0", exception.getMessage());
+        assertEquals("LLM_CONNECT_TIMEOUT_SCOUT_SECONDS 必須大於 0", exception.getMessage());
+    }
+
+    @Test
+    void nonNumericTimeoutSettingsAreIsolatedUntilBTrackInvocation() {
+        MistralSourcingClient client = assertDoesNotThrow(() -> new MistralSourcingClient(
+                new ObjectMapper(),
+                new SourcingToolPolicy("exa_search", event -> {}),
+                "http://127.0.0.1:1", "test-key", "not-a-number", "also-invalid",
+                "exa_search", event -> {}));
+
+        SourcingConfigurationException exception = assertThrows(
+                SourcingConfigurationException.class, client::preflight);
+        assertEquals("MISTRAL_SOURCING_TIMEOUT_SECONDS 必須是正整數", exception.getMessage());
     }
 
     @Test

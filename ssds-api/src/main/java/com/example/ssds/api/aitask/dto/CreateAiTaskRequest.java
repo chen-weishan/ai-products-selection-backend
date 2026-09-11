@@ -14,15 +14,26 @@ public record CreateAiTaskRequest(
         @NotNull AiTaskType taskType,
         @Size(max = 150) List<@NotNull Long> productIds,
         @Size(max = 100) List<@NotNull Long> keywordIds,
+        @Size(max = 20) List<@NotNull Long> calibrationReportIds,
         @Valid Options options
 ) {
     public CreateAiTaskRequest(AiTaskType taskType, List<Long> productIds, Options options) {
-        this(taskType, productIds, List.of(), options);
+        this(taskType, productIds, List.of(), List.of(), options);
+    }
+
+    public CreateAiTaskRequest(
+            AiTaskType taskType,
+            List<Long> productIds,
+            List<Long> keywordIds,
+            Options options) {
+        this(taskType, productIds, keywordIds, List.of(), options);
     }
 
     public CreateAiTaskRequest {
         productIds = productIds == null ? List.of() : List.copyOf(productIds);
         keywordIds = keywordIds == null ? List.of() : List.copyOf(keywordIds);
+        calibrationReportIds = calibrationReportIds == null
+                ? List.of() : List.copyOf(calibrationReportIds);
     }
 
     public boolean forceRefresh() {

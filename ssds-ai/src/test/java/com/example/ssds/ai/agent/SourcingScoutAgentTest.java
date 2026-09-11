@@ -92,6 +92,30 @@ class SourcingScoutAgentTest {
     }
 
     @Test
+    void nonNumericSourcingCacheSettingDoesNotFailConstruction() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        SourcingScoutAgent agent = assertDoesNotThrow(() -> new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                mock(GlobalAiRateLimiter.class),
+                "fake/primary",
+                "",
+                0,
+                "not-a-number"));
+
+        SourcingConfigurationException exception = assertThrows(
+                SourcingConfigurationException.class,
+                () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
+        assertEquals("AI_CACHE_DAYS_SOURCING 必須是非負整數", exception.getMessage());
+        verifyNoInteractions(budget, client);
+    }
+
+    @Test
     void globalLimitStopsBeforeBTrackBudgetAndHttpClient() {
         ObjectMapper mapper = new ObjectMapper();
         MistralSourcingClient client = mock(MistralSourcingClient.class);
@@ -116,7 +140,39 @@ class SourcingScoutAgentTest {
                 () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
 
         verify(rateLimiter).acquire();
-        verifyNoInteractions(budget, client);
+        verify(client).preflight();
+        verifyNoInteractions(budget);
+        verifyNoMoreInteractions(client);
+    }
+
+    @Test
+    void clientConfigurationFailsBeforeRateLimitBudgetAndHttpAttempt() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        GlobalAiRateLimiter rateLimiter = mock(GlobalAiRateLimiter.class);
+        doThrow(new SourcingConfigurationException("invalid setting"))
+                .when(client).preflight();
+        SourcingScoutAgent agent = new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                rateLimiter,
+                "fake/primary",
+                "",
+                0,
+                3,
+                millis -> {});
+
+        assertThrows(
+                SourcingConfigurationException.class,
+                () -> agent.scout(new SourcingScoutInput("巧克力", 10L, "零食"), true));
+
+        verify(client).preflight();
+        verifyNoInteractions(rateLimiter, budget);
+        verifyNoMoreInteractions(client);
     }
 
     @Test

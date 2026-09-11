@@ -109,8 +109,8 @@ class ReviewRiskAgentTest {
     private static String validJson() {
         return """
                 {"reviews":[
-                  {"reviewId":1,"sentiment":"NEGATIVE","riskTopic":"SHIPPING_DAMAGE"},
-                  {"reviewId":2,"sentiment":"POSITIVE","riskTopic":null}],
+                  {"reviewIndex":0,"sentiment":"NEGATIVE","riskTopic":"SHIPPING_DAMAGE"},
+                  {"reviewIndex":1,"sentiment":"POSITIVE","riskTopic":null}],
                  "topicStatistics":[
                   {"topic":"QUALITY","ratio":0,"severity":"LOW"},
                   {"topic":"FOOD_SAFETY","ratio":0,"severity":"LOW"},

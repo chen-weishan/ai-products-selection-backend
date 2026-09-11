@@ -1,6 +1,7 @@
 package com.example.ssds.ai.agent;
 
 import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
 import com.example.ssds.ai.routing.AiAccessRouter;
@@ -34,11 +35,11 @@ public class TrendInterpreterAgent {
             TrendInterpreterPromptFactory promptFactory,
             TrendInterpreterResponseParser parser,
             ObjectMapper objectMapper,
-            @Value("${mistral.model-numeric-primary:mistral-small-latest}") String primaryModel,
-            @Value("${mistral.model-numeric-fallbacks:mistral-medium-3-5,magistral-medium-latest}") String fallbackModels,
+            MistralModelCatalog modelCatalog,
             @Value("${ai.retry-max:3}") int retryMax,
             @Value("${ai.cache-days-trend:3}") long cacheDays) {
-        this(router, promptFactory, parser, objectMapper, primaryModel, fallbackModels,
+        this(router, promptFactory, parser, objectMapper,
+                modelCatalog.numeric().primary(), modelCatalog.numeric().fallbacks(),
                 retryMax, cacheDays, Thread::sleep);
     }
 
@@ -156,6 +157,11 @@ public class TrendInterpreterAgent {
                     continue;
                 }
                 return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+            } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
+                log.warn("TrendInterpreter external request blocked by policy: keywordId={}, reason={}",
+                        input.keywordId(), safeLogMessage(exception.getMessage()));
+                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, "policy-blocked",
+                        Math.max(0, requestCount - 1));
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
