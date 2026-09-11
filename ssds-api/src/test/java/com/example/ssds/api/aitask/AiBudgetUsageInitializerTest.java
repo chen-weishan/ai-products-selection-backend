@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.example.ssds.ai.client.DailyAiBudget;
+import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.infra.entity.AiBudgetUsageDaily;
 import com.example.ssds.infra.repository.AiBudgetUsageDailyRepository;

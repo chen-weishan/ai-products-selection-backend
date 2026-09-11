@@ -5,12 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.agent.SceneClassifierAgent;
-import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.access.tracka.AiClientResponse;
+import com.example.ssds.ai.access.tracka.TrackAAiClient;
 import com.example.ssds.ai.model.SceneClassifierInput;
 import com.example.ssds.ai.model.SceneCode;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
-import com.example.ssds.ai.routing.AiAccessRouter;
+import com.example.ssds.ai.access.tracka.AiAccessRouter;
 import com.example.ssds.ai.schema.SceneClassifierResponseParser;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.FactorCode;

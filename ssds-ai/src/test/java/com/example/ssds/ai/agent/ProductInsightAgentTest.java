@@ -2,10 +2,13 @@ package com.example.ssds.ai.agent;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.access.tracka.AiClientResponse;
+import com.example.ssds.ai.access.tracka.AiPromptRequest;
+import com.example.ssds.ai.access.tracka.TrackAAiClient;
+import com.example.ssds.ai.resilience.AiRateLimitException;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.ProductInsightPromptFactory;
-import com.example.ssds.ai.routing.AiAccessRouter;
+import com.example.ssds.ai.access.tracka.AiAccessRouter;
 import com.example.ssds.ai.schema.ProductInsightResponseParser;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;

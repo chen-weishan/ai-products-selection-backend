@@ -1,10 +1,16 @@
 package com.example.ssds.ai.agent;
 
-import com.example.ssds.ai.client.*;
+import com.example.ssds.ai.access.common.AiModelNotFoundException;
+import com.example.ssds.ai.access.tracka.AiClientResponse;
+import com.example.ssds.ai.access.tracka.AiPromptRequest;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
+import com.example.ssds.ai.policy.ExternalLlmDisabledException;
+import com.example.ssds.ai.policy.OutboundDataPolicyException;
+import com.example.ssds.ai.resilience.AiRateLimitException;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.ProductInsightPromptFactory;
-import com.example.ssds.ai.routing.AiAccessRouter;
+import com.example.ssds.ai.access.tracka.AiAccessRouter;
 import com.example.ssds.ai.schema.*;
 import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.databind.ObjectMapper;

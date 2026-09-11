@@ -1,6 +1,6 @@
 package com.example.ssds.api.sourcing;
 
-import com.example.ssds.ai.client.SourcingToolRejectedEvent;
+import com.example.ssds.ai.access.trackb.SourcingToolRejectedEvent;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;

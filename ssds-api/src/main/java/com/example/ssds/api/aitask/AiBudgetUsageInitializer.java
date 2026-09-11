@@ -1,6 +1,6 @@
 package com.example.ssds.api.aitask;
 
-import com.example.ssds.ai.client.DailyAiBudget;
+import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.infra.repository.AiBudgetUsageDailyRepository;
 import java.time.LocalDate;
 import java.time.ZoneId;

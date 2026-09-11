@@ -1,6 +1,6 @@
 package com.example.ssds.api.aitask;
 
-import com.example.ssds.ai.client.AiBudgetUsageRecorder;
+import com.example.ssds.ai.budget.AiBudgetUsageRecorder;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.infra.repository.AiBudgetUsageDailyRepository;
 import java.time.LocalDate;

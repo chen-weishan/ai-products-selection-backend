@@ -1,6 +1,6 @@
 package com.example.ssds.api.aitask;
 
-import com.example.ssds.ai.client.AiModelUnavailableEvent;
+import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;

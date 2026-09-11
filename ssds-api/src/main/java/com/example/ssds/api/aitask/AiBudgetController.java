@@ -1,6 +1,6 @@
 package com.example.ssds.api.aitask;
 
-import com.example.ssds.ai.client.DailyAiBudget;
+import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.api.common.response.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

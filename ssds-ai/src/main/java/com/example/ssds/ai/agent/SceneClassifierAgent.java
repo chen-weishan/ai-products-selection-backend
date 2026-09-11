@@ -1,16 +1,16 @@
 package com.example.ssds.ai.agent;
 
-import com.example.ssds.ai.client.AiClientResponse;
-import com.example.ssds.ai.client.AiBudgetExceededException;
-import com.example.ssds.ai.client.AiModelNotFoundException;
-import com.example.ssds.ai.client.AiPromptRequest;
-import com.example.ssds.ai.client.AiRateLimitException;
-import com.example.ssds.ai.client.ExternalLlmDisabledException;
-import com.example.ssds.ai.client.OutboundDataPolicyException;
+import com.example.ssds.ai.access.tracka.AiClientResponse;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
+import com.example.ssds.ai.access.common.AiModelNotFoundException;
+import com.example.ssds.ai.access.tracka.AiPromptRequest;
+import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.policy.ExternalLlmDisabledException;
+import com.example.ssds.ai.policy.OutboundDataPolicyException;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.*;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
-import com.example.ssds.ai.routing.AiAccessRouter;
+import com.example.ssds.ai.access.tracka.AiAccessRouter;
 import com.example.ssds.ai.schema.AiSchemaValidationException;
 import com.example.ssds.ai.schema.SceneClassifierResponseParser;
 import com.example.ssds.ai.schema.SceneClassifierSchema;

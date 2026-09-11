@@ -1,4 +1,4 @@
-// ssds-ai：AiOrchestrator、PromptTemplate、MistralClient、MCP client
+// ssds-ai：Agent、Prompt/Schema、Mistral A/B 軌存取與 AI 配額／外送治理
 // 依賴 ssds-core（讀領域型別、寫回分析結果的型別），不依賴 ssds-infra。
 dependencies {
 	implementation project(':ssds-core')
