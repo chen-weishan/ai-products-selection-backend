@@ -60,8 +60,6 @@ public class AuthService {
         if (user.getLockedUntil() != null && Instant.now().isBefore(user.getLockedUntil())) {
             return ResponseEntity.status(403).body(new ApiError("AUTH_LOCKED", "嘗試次數過多，帳號已被鎖定，請稍後再試。"));
         }
-        System.out.println(password+" "+user.getPasswordHash()+(!passwordEncoder.matches(password, user.getPasswordHash())));
-
 	
         // 5. 密碼比對與計數邏輯
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {

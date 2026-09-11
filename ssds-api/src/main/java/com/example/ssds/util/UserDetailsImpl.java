@@ -2,6 +2,7 @@ package com.example.ssds.util;
 import java.util.Collection;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 
@@ -46,7 +47,9 @@ public class UserDetailsImpl implements UserDetails {
 
 	public static UserDetailsImpl build(AppUser user) {
 
-		List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRoles()));
+		List<GrantedAuthority> authorities = user.getRoles().stream()
+				.map(role -> new SimpleGrantedAuthority(role.toAuthority()))
+				.collect(Collectors.toList());
 
 		return new UserDetailsImpl(user.getId(), user.getEmail(), user.getDisplayName(), user.getPasswordHash(), authorities);
 

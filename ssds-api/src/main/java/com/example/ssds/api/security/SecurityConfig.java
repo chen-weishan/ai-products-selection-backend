@@ -1,4 +1,4 @@
-package com.example.ssds.api.common.config;
+package com.example.ssds.api.security;
 
 import java.util.Arrays;
 
