@@ -1,5 +1,6 @@
 HELP.md
 .gradle
+.gradle-user-home/
 build/
 
 ### 代理工作區 ###
@@ -47,3 +48,4 @@ out/
 
 ### VS Code ###
 .vscode/
+.DS_Store

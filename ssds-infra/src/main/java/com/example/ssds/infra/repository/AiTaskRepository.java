@@ -10,8 +10,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
 
 /** AI 任務（規格書 §7.2 ai_task、FR-07）。 */
 @Repository
@@ -22,6 +24,18 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
     List<AiTask> findByStatus(TaskStatus status);
 
     List<AiTask> findByTaskTypeOrderByStartedAtDesc(AiTaskType taskType);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select t from AiTask t
+            where t.taskType = :taskType and t.status = :status
+            order by t.id
+            """)
+    List<AiTask> findNextForUpdate(
+            @Param("taskType") AiTaskType taskType,
+            @Param("status") TaskStatus status,
+            Pageable pageable
+    );
 
     /**
      * 某段期間某組任務類型的累計花費，供 FR-07 的預算池計算。
