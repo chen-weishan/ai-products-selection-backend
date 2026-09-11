@@ -33,6 +33,8 @@ import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -339,6 +341,8 @@ public class ProductCommandService {
     }
 
     /** 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。 */
+    // TODO FR-11：決策模組完成後，觀察／採納／淘汰應由共用決策服務
+    // 在同一交易建立 decision_record 並更新品項；目前僅更新狀態及 AuditLog。
     public ProductStatusUpdateResponse changeStatus(
             Long productId,
             ProductStatusUpdateRequest request,
@@ -603,8 +607,8 @@ public class ProductCommandService {
                 product.getShelfLifeDays(),
                 timeGapDays,
                 Collections.unmodifiableSet(keywordIds),
-                product.getCreatedAt(),
-                product.getUpdatedAt()
+                toDisplayTime(product.getCreatedAt()),
+                toDisplayTime(product.getUpdatedAt())
         );
     }
 
@@ -712,5 +716,9 @@ public class ProductCommandService {
 
     private String statusJson(ProductStatus status) {
         return "{\"status\":\"" + status.name() + "\"}";
+    }
+    /** §8.1：API 時間統一以 +08:00 回傳。 */
+    private static OffsetDateTime toDisplayTime(Instant value) {
+        return value == null ? null : value.atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime();
     }
 }

@@ -10,7 +10,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
@@ -19,7 +18,8 @@ import org.hibernate.annotations.SQLRestriction;
 /**
  * 品項主檔（規格書 §7.2 product）。
  *
- * <p>A/B 雙軌共用一張表，以 {@link #trackType} 區分：
+ * <p>
+ * A/B 雙軌共用一張表，以 {@link #trackType} 區分：
  * A 軌已有供應商與成本，跑完整因子評分；B 軌只看到熱度、還沒找到貨，
  * 不產生選品分數，改以時效落差排序（§5.8）。
  * 成案後由 B 改 A，探索期間累積的熱度資料一併帶入、不需重抓（AC-16-5）。
@@ -117,6 +117,9 @@ public class Product extends BaseAuditEntity {
     /** 最近一次已完成評分嘗試時間（UTC）。 */
     @Column(name = "last_scoring_attempted_at")
     private Instant lastScoringAttemptedAt;
+    /** 軟刪除時間（§7.2.2）。非 NULL 者不出現在任何清單、排行、評分批次與報表； */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
@@ -124,8 +127,6 @@ public class Product extends BaseAuditEntity {
 
     /** FR-03-2 軟刪除；非 null 的品項由 SQLRestriction 自動排除。 */
     /** 軟刪除品項不得進入清單、排程或冪等重用範圍。 */
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deleted_by")
@@ -136,10 +137,7 @@ public class Product extends BaseAuditEntity {
      * 一個品項可綁多個關鍵字，熱度取合成值（§5.3.2）。
      */
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "product_keyword",
-            joinColumns = @JoinColumn(name = "product_id"),
-            inverseJoinColumns = @JoinColumn(name = "keyword_id"))
+    @JoinTable(name = "product_keyword", joinColumns = @JoinColumn(name = "product_id"), inverseJoinColumns = @JoinColumn(name = "keyword_id"))
     @Builder.Default
     private Set<TrendKeyword> keywords = new LinkedHashSet<>();
 
@@ -166,11 +164,13 @@ public class Product extends BaseAuditEntity {
     /**
      * FR-03-2 例外條件：成本 ≥ 售價 → 阻擋儲存並提示。
      *
-     * <p>注意是<b>嚴格大於</b>：成本等於售價同樣要擋，因為毛利率會是 0，
+     * <p>
+     * 注意是<b>嚴格大於</b>：成本等於售價同樣要擋，因為毛利率會是 0，
      * 評分沒有意義。資料庫端的 ck_product_price 是同一條規則的最後一道防線，
      * 這裡先擋是為了能回傳可讀的錯誤訊息，而不是丟出約束違反例外。
      *
-     * <p>成本或售價尚未填寫時回傳 true —— 「必填」由表單驗證負責，
+     * <p>
+     * 成本或售價尚未填寫時回傳 true —— 「必填」由表單驗證負責，
      * 不是這條規則的職責。
      */
     public boolean isPricingAcceptable() {

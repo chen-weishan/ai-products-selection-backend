@@ -176,7 +176,7 @@ class ProductQueryServiceTest {
         assertEquals(21, response.timeGapDays());
         assertEquals(LastScoringStatus.INSUFFICIENT_DATA, response.lastScoringStatus());
         assertEquals(
-                Instant.parse("2026-08-20T01:00:00Z"),
+                java.time.OffsetDateTime.parse("2026-08-20T09:00:00+08:00"),
                 response.lastScoringAttemptedAt()
         );
     }

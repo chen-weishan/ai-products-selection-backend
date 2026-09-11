@@ -16,6 +16,9 @@ import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -151,8 +154,8 @@ public class ProductQueryService {
                 product.getShelfLifeDays(),
                 timeGapDays,
                 Collections.unmodifiableSet(keywordIds),
-                product.getCreatedAt(),
-                product.getUpdatedAt()
+                toDisplayTime(product.getCreatedAt()),
+                toDisplayTime(product.getUpdatedAt())
         );
     }
 
@@ -266,9 +269,9 @@ public class ProductQueryService {
                 row.sourcingStatus(),
                 row.status(),
                 row.lastScoringStatus(),
-                row.lastScoringAttemptedAt(),
+                toDisplayTime(row.lastScoringAttemptedAt()),
                 row.hasRisk(),
-                row.updatedAt()
+                toDisplayTime(row.updatedAt())
         );
     }
 
@@ -297,5 +300,9 @@ public class ProductQueryService {
             String field,
             boolean ascending
     ) {
+    }
+    /** §8.1：API 時間統一以 +08:00 回傳。 */
+    private static OffsetDateTime toDisplayTime(Instant value) {
+        return value == null ? null : value.atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime();
     }
 }

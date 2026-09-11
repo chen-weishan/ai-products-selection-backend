@@ -6,7 +6,7 @@ import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.OffsetDateTime;
 
 /**
  * FR-03 品項清單的單筆回應。
@@ -28,8 +28,8 @@ public record ProductListItemResponse(
         SourcingStatus sourcingStatus,
         ProductStatus status,
         LastScoringStatus lastScoringStatus,
-        Instant lastScoringAttemptedAt,
+        OffsetDateTime lastScoringAttemptedAt,
         boolean hasRisk,
-        Instant updatedAt
+        OffsetDateTime updatedAt
 ) {
 }

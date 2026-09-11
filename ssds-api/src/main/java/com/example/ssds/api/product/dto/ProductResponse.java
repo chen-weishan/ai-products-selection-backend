@@ -6,8 +6,8 @@ import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Set;
 
 /** FR-03 品項詳情及新增／修改後的單筆回應。 */
@@ -34,7 +34,7 @@ public record ProductResponse(
         Integer shelfLifeDays,
         Integer timeGapDays,
         Set<Long> keywordIds,
-        Instant createdAt,
-        Instant updatedAt
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
 }
