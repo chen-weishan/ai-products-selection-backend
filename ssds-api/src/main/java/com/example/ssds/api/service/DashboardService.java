@@ -10,7 +10,6 @@ import com.example.ssds.api.dto.HeatSourceDto;
 import com.example.ssds.api.dto.KpiDto;
 import com.example.ssds.api.dto.OverdueCampaignDto;
 import com.example.ssds.api.dto.RankingItemDto;
-import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.Severity;
 import com.example.ssds.core.domain.SceneType;
@@ -76,7 +75,7 @@ public class DashboardService {
         KpiDto kpi = new KpiDto(
                         totalCandidates,
                         productScoreRepository.countAGradeByPeriod(period, track),
-                        riskAlertRepository.countByStatusAndSeverity(AlertStatus.OPEN, Severity.HIGH, track),
+                        riskAlertRepository.countActiveBySeverityAndTrackType(Severity.HIGH, track),
                         overdueCount);
 
         boolean scoringExecuted = productScoreRepository.existsByPeriodAndActiveTrue(period, track);
