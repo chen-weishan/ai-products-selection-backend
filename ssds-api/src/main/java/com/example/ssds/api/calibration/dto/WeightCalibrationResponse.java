@@ -1,6 +1,7 @@
 package com.example.ssds.api.calibration.dto;
 
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.FallbackReason;
+import com.example.ssds.ai.model.calibration.*;
 import com.example.ssds.infra.entity.CalibrationReport;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.*;

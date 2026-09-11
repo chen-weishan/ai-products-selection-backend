@@ -5,7 +5,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.agent.ProductInsightAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.FallbackReason;
+import com.example.ssds.ai.model.insight.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;

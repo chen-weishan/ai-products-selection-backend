@@ -1,6 +1,6 @@
 package com.example.ssds.ai.schema;
 
-import com.example.ssds.ai.model.SourcingScoutOutput;
+import com.example.ssds.ai.model.sourcing.SourcingScoutOutput;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import java.io.IOException;

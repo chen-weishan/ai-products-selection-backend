@@ -1,6 +1,6 @@
 package com.example.ssds.ai.prompt;
 
-import com.example.ssds.ai.model.ReviewRiskInput;
+import com.example.ssds.ai.model.review.ReviewRiskInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;

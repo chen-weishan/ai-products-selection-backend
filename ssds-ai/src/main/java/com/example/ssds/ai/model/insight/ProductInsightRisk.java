@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.insight;
 
 import com.example.ssds.core.domain.InsightRiskType;
 import com.example.ssds.core.domain.Severity;

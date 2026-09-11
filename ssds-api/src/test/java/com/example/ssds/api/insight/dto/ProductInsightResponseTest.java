@@ -3,8 +3,8 @@ package com.example.ssds.api.insight.dto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.example.ssds.ai.model.FallbackReason;
-import com.example.ssds.ai.model.ProductInsightOutput;
-import com.example.ssds.ai.model.ProductInsightResult;
+import com.example.ssds.ai.model.insight.ProductInsightOutput;
+import com.example.ssds.ai.model.insight.ProductInsightResult;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;

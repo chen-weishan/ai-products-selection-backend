@@ -3,8 +3,8 @@ package com.example.ssds.api.review.dto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.example.ssds.ai.model.FallbackReason;
-import com.example.ssds.ai.model.ReviewRiskOutput;
-import com.example.ssds.ai.model.ReviewRiskResult;
+import com.example.ssds.ai.model.review.ReviewRiskOutput;
+import com.example.ssds.ai.model.review.ReviewRiskResult;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;

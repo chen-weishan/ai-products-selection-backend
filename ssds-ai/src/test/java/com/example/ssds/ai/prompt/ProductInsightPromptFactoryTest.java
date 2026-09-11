@@ -2,7 +2,7 @@ package com.example.ssds.ai.prompt;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.model.ProductInsightInput;
+import com.example.ssds.ai.model.insight.ProductInsightInput;
 import com.example.ssds.core.domain.Season;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;

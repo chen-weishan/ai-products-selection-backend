@@ -1,7 +1,7 @@
 package com.example.ssds.api.calibration;
 
 import com.example.ssds.ai.agent.WeightCalibrationAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.calibration.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.calibration.dto.*;
 import com.example.ssds.api.common.error.*;

@@ -12,7 +12,7 @@ import com.example.ssds.ai.budget.TrackBSourcingBudget;
 import com.example.ssds.ai.resilience.AiRateLimitException;
 import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
 import com.example.ssds.ai.config.MistralModelCatalog;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.sourcing.*;
 import com.example.ssds.ai.prompt.SourcingScoutPromptFactory;
 import com.example.ssds.ai.prompt.SourcingKeywordNormalizer;
 import com.example.ssds.ai.schema.*;

@@ -3,11 +3,11 @@ package com.example.ssds.ai.schema;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.example.ssds.ai.model.SceneClassifierOutput;
-import com.example.ssds.ai.model.SceneClassifierInput;
-import com.example.ssds.ai.model.FestivalMatch;
-import com.example.ssds.ai.model.HeatBucket;
-import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.model.scene.SceneClassifierOutput;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
+import com.example.ssds.ai.model.scene.FestivalMatch;
+import com.example.ssds.ai.model.scene.HeatBucket;
+import com.example.ssds.ai.model.scene.SceneCode;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;

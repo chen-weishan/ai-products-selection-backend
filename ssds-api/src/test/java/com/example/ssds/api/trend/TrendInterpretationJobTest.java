@@ -3,7 +3,7 @@ package com.example.ssds.api.trend;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-import com.example.ssds.ai.model.TrendInterpreterInput;
+import com.example.ssds.ai.model.trend.TrendInterpreterInput;
 import com.example.ssds.api.aitask.AiTaskService;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;

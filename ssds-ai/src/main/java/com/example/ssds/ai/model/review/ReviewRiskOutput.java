@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.review;
 
 import java.util.List;
 

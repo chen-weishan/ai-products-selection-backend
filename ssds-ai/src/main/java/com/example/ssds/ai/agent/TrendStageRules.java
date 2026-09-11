@@ -1,6 +1,6 @@
 package com.example.ssds.ai.agent;
 
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.trend.*;
 import com.example.ssds.core.domain.HeatStage;
 import java.math.BigDecimal;
 import java.time.LocalDate;

@@ -1,7 +1,7 @@
 package com.example.ssds.api.scene;
 
 import com.example.ssds.ai.agent.SceneClassifierAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.scene.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;

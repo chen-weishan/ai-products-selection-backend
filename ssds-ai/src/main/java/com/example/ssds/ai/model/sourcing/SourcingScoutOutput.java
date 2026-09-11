@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.sourcing;
 
 import java.util.List;
 

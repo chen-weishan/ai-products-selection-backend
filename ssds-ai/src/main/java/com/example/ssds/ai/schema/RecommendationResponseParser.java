@@ -1,7 +1,7 @@
 package com.example.ssds.ai.schema;
 
-import com.example.ssds.ai.model.RecommendationInput;
-import com.example.ssds.ai.model.RecommendationOutput;
+import com.example.ssds.ai.model.recommendation.RecommendationInput;
+import com.example.ssds.ai.model.recommendation.RecommendationOutput;
 import com.example.ssds.core.domain.DecisionType;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;

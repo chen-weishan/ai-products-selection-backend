@@ -5,7 +5,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.agent.TrendInterpreterAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.FallbackReason;
+import com.example.ssds.ai.model.trend.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
 import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;

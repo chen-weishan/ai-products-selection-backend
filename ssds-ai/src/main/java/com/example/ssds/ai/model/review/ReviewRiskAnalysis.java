@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.review;
 
 import com.example.ssds.core.domain.ReviewRiskTopic;
 import com.example.ssds.core.domain.Sentiment;

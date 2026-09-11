@@ -7,8 +7,8 @@ import static org.mockito.Mockito.*;
 import com.example.ssds.ai.agent.SceneClassifierAgent;
 import com.example.ssds.ai.access.tracka.AiClientResponse;
 import com.example.ssds.ai.access.tracka.TrackAAiClient;
-import com.example.ssds.ai.model.SceneClassifierInput;
-import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
+import com.example.ssds.ai.model.scene.SceneCode;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
@@ -208,7 +208,7 @@ class SceneClassificationServiceTest {
         ArgumentCaptor<SceneClassifierInput> input = ArgumentCaptor.forClass(SceneClassifierInput.class);
         verify(promptSanitizer).sanitizeSceneClassifier(input.capture());
         assertNull(input.getValue().heatStage());
-        assertEquals(com.example.ssds.ai.model.HeatBucket.UNKNOWN, input.getValue().heatBucket());
+        assertEquals(com.example.ssds.ai.model.scene.HeatBucket.UNKNOWN, input.getValue().heatBucket());
     }
 
     private void stubClassificationDependencies(Product product) {

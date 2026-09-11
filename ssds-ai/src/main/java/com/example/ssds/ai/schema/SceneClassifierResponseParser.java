@@ -1,8 +1,8 @@
 package com.example.ssds.ai.schema;
 
-import com.example.ssds.ai.model.SceneClassifierOutput;
-import com.example.ssds.ai.model.SceneClassifierInput;
-import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.model.scene.SceneClassifierOutput;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
+import com.example.ssds.ai.model.scene.SceneCode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

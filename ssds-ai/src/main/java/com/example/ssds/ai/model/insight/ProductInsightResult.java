@@ -1,7 +1,9 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.insight;
 
-public record RecommendationResult(
-        RecommendationOutput output,
+import com.example.ssds.ai.model.FallbackReason;
+
+public record ProductInsightResult(
+        ProductInsightOutput output,
         boolean fallbackApplied,
         FallbackReason fallbackReason,
         boolean cacheHit,
@@ -11,8 +13,8 @@ public record RecommendationResult(
         Integer completionTokens,
         int requestCount) {
 
-    public RecommendationResult asCacheHit() {
-        return new RecommendationResult(
+    public ProductInsightResult asCacheHit() {
+        return new ProductInsightResult(
                 output,
                 fallbackApplied,
                 fallbackReason,

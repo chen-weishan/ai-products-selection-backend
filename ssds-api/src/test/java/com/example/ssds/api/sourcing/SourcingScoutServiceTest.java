@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.agent.SourcingScoutAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.sourcing.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.aitask.AiTaskService;
 import com.example.ssds.api.aitask.dto.AiTaskResponse;

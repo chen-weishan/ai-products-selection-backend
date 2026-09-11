@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.recommendation;
 
 import com.example.ssds.core.domain.DecisionType;
 

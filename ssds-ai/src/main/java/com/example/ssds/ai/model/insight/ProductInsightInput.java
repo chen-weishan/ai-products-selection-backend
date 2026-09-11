@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.insight;
 
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.Season;

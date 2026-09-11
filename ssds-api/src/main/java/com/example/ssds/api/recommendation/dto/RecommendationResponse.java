@@ -1,6 +1,6 @@
 package com.example.ssds.api.recommendation.dto;
 
-import com.example.ssds.ai.model.RecommendationResult;
+import com.example.ssds.ai.model.recommendation.RecommendationResult;
 import com.example.ssds.core.domain.DecisionType;
 import java.time.OffsetDateTime;
 

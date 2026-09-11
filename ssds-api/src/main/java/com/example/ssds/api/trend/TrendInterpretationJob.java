@@ -1,6 +1,6 @@
 package com.example.ssds.api.trend;
 
-import com.example.ssds.ai.model.TrendInterpreterInput;
+import com.example.ssds.ai.model.trend.TrendInterpreterInput;
 import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
 import com.example.ssds.api.aitask.AiTaskService;
 import com.example.ssds.infra.entity.*;

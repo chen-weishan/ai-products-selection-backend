@@ -5,6 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.calibration.*;
+import com.example.ssds.ai.model.insight.*;
+import com.example.ssds.ai.model.recommendation.*;
+import com.example.ssds.ai.model.review.*;
+import com.example.ssds.ai.model.scene.*;
+import com.example.ssds.ai.model.sourcing.*;
+import com.example.ssds.ai.model.trend.*;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

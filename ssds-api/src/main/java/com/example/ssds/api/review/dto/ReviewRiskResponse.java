@@ -1,8 +1,8 @@
 package com.example.ssds.api.review.dto;
 
-import com.example.ssds.ai.model.ReviewRiskAnalysis;
-import com.example.ssds.ai.model.ReviewRiskResult;
-import com.example.ssds.ai.model.ReviewTopicStatistic;
+import com.example.ssds.ai.model.review.ReviewRiskAnalysis;
+import com.example.ssds.ai.model.review.ReviewRiskResult;
+import com.example.ssds.ai.model.review.ReviewTopicStatistic;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;

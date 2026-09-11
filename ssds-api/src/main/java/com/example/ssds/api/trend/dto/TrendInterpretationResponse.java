@@ -1,6 +1,6 @@
 package com.example.ssds.api.trend.dto;
 
-import com.example.ssds.ai.model.TrendInterpreterResult;
+import com.example.ssds.ai.model.trend.TrendInterpreterResult;
 import com.example.ssds.core.domain.HeatStage;
 import java.time.OffsetDateTime;
 

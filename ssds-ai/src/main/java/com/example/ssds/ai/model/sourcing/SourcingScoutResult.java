@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.sourcing;
 
 public record SourcingScoutResult(
         SourcingScoutOutput output,

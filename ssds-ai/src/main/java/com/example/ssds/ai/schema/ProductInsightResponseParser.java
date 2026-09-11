@@ -1,6 +1,6 @@
 package com.example.ssds.ai.schema;
 
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.insight.*;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.InsightRiskType;
 import com.example.ssds.core.domain.Severity;

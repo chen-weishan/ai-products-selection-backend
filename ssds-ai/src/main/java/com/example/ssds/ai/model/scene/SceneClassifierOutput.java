@@ -1,4 +1,4 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.scene;
 
 import java.math.BigDecimal;
 import java.util.List;

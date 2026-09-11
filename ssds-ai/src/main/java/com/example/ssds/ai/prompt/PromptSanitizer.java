@@ -1,13 +1,13 @@
 package com.example.ssds.ai.prompt;
 
-import com.example.ssds.ai.model.FestivalMatch;
-import com.example.ssds.ai.model.ProductInsightInput;
-import com.example.ssds.ai.model.RecommendationInput;
-import com.example.ssds.ai.model.ReviewRiskInput;
-import com.example.ssds.ai.model.SceneClassifierInput;
-import com.example.ssds.ai.model.TrendInterpreterInput;
-import com.example.ssds.ai.model.SourcingScoutInput;
-import com.example.ssds.ai.model.WeightCalibrationInput;
+import com.example.ssds.ai.model.scene.FestivalMatch;
+import com.example.ssds.ai.model.insight.ProductInsightInput;
+import com.example.ssds.ai.model.recommendation.RecommendationInput;
+import com.example.ssds.ai.model.review.ReviewRiskInput;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
+import com.example.ssds.ai.model.trend.TrendInterpreterInput;
+import com.example.ssds.ai.model.sourcing.SourcingScoutInput;
+import com.example.ssds.ai.model.calibration.WeightCalibrationInput;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;

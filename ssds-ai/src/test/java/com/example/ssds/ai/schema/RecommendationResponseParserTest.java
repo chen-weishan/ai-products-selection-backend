@@ -2,7 +2,7 @@ package com.example.ssds.ai.schema;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.recommendation.*;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;

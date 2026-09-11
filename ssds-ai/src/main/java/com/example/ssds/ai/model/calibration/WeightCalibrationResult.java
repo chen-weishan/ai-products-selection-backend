@@ -1,4 +1,6 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.calibration;
+
+import com.example.ssds.ai.model.FallbackReason;
 
 public record WeightCalibrationResult(
         WeightCalibrationOutput output,

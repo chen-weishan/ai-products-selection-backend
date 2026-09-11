@@ -2,7 +2,7 @@ package com.example.ssds.ai.schema;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.model.ReviewRiskInput;
+import com.example.ssds.ai.model.review.ReviewRiskInput;
 import com.example.ssds.core.domain.ReviewRiskTopic;
 import com.example.ssds.core.domain.Sentiment;
 import com.fasterxml.jackson.databind.ObjectMapper;

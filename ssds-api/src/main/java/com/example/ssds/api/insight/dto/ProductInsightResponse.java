@@ -1,8 +1,8 @@
 package com.example.ssds.api.insight.dto;
 
-import com.example.ssds.ai.model.ProductInsightResult;
-import com.example.ssds.ai.model.ProductInsightRisk;
-import com.example.ssds.ai.model.SellingPoint;
+import com.example.ssds.ai.model.insight.ProductInsightResult;
+import com.example.ssds.ai.model.insight.ProductInsightRisk;
+import com.example.ssds.ai.model.insight.SellingPoint;
 import java.time.OffsetDateTime;
 import java.util.List;
 

@@ -2,13 +2,13 @@ package com.example.ssds.ai.prompt;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.model.ProductInsightInput;
-import com.example.ssds.ai.model.RecommendationInput;
-import com.example.ssds.ai.model.ReviewRiskInput;
-import com.example.ssds.ai.model.SourcingScoutInput;
-import com.example.ssds.ai.model.FestivalMatch;
-import com.example.ssds.ai.model.HeatBucket;
-import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.ai.model.insight.ProductInsightInput;
+import com.example.ssds.ai.model.recommendation.RecommendationInput;
+import com.example.ssds.ai.model.review.ReviewRiskInput;
+import com.example.ssds.ai.model.sourcing.SourcingScoutInput;
+import com.example.ssds.ai.model.scene.FestivalMatch;
+import com.example.ssds.ai.model.scene.HeatBucket;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
 import com.example.ssds.ai.schema.TrendInterpreterResponseParserTest;
 import com.example.ssds.ai.agent.WeightCalibrationAgentTest;
 import com.example.ssds.ai.schema.RecommendationResponseParserTest;

@@ -2,7 +2,7 @@ package com.example.ssds.ai.prompt;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.model.SourcingScoutInput;
+import com.example.ssds.ai.model.sourcing.SourcingScoutInput;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 

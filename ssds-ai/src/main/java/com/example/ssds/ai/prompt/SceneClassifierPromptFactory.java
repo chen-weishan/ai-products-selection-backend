@@ -1,7 +1,7 @@
 package com.example.ssds.ai.prompt;
 
-import com.example.ssds.ai.model.FestivalMatch;
-import com.example.ssds.ai.model.SceneClassifierInput;
+import com.example.ssds.ai.model.scene.FestivalMatch;
+import com.example.ssds.ai.model.scene.SceneClassifierInput;
 import com.example.ssds.core.domain.HeatStage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

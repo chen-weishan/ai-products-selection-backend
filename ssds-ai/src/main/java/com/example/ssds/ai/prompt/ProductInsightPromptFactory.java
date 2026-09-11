@@ -1,6 +1,6 @@
 package com.example.ssds.ai.prompt;
 
-import com.example.ssds.ai.model.ProductInsightInput;
+import com.example.ssds.ai.model.insight.ProductInsightInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;

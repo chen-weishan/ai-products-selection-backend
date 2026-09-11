@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.model.scene.SceneCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.Grade;

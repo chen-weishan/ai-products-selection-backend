@@ -1,7 +1,7 @@
 package com.example.ssds.api.scene.dto;
 
-import com.example.ssds.ai.model.SceneClassificationResult;
-import com.example.ssds.ai.model.SceneCode;
+import com.example.ssds.ai.model.scene.SceneClassificationResult;
+import com.example.ssds.ai.model.scene.SceneCode;
 import com.example.ssds.infra.entity.SceneClassificationLog;
 import java.math.BigDecimal;
 import java.time.Instant;

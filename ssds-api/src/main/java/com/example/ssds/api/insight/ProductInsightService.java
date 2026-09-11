@@ -1,7 +1,7 @@
 package com.example.ssds.api.insight;
 
 import com.example.ssds.ai.agent.ProductInsightAgent;
-import com.example.ssds.ai.model.*;
+import com.example.ssds.ai.model.insight.*;
 import com.example.ssds.ai.prompt.ProductInsightPromptFactory;
 import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.common.error.BusinessException;

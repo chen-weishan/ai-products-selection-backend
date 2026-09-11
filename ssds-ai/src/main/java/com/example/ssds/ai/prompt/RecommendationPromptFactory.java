@@ -1,6 +1,6 @@
 package com.example.ssds.ai.prompt;
 
-import com.example.ssds.ai.model.RecommendationInput;
+import com.example.ssds.ai.model.recommendation.RecommendationInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;

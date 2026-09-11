@@ -1,4 +1,6 @@
-package com.example.ssds.ai.model;
+package com.example.ssds.ai.model.scene;
+
+import com.example.ssds.ai.model.FallbackReason;
 
 public record SceneClassificationResult(
         SceneClassifierOutput output,
