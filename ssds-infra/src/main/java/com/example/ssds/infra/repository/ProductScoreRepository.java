@@ -39,7 +39,30 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
 
         long countByPeriodAndConfidenceLessThan(String period, int confidence);
 
-        boolean existsByProductIdAndPeriod(Long productId, String period);
+    boolean existsByProductIdAndPeriod(Long productId, String period);
+
+    @Modifying
+    @Query("""
+            update ProductScore s set s.active = false
+            where s.product.id = :productId
+              and s.period = :period
+              and s.sceneType = :sceneType
+              and s.active = true
+            """)
+    int deactivateCurrent(
+            @Param("productId") Long productId,
+            @Param("period") String period,
+            @Param("sceneType") com.example.ssds.core.domain.SceneType sceneType
+    );
+
+    /** 品項的評分輸入已改變時，先讓所有現行快照失效。 */
+    @Modifying
+    @Query("""
+            update ProductScore s set s.active = false
+            where s.product.id = :productId
+              and s.active = true
+            """)
+    int deactivateAllCurrent(@Param("productId") Long productId);
 
         /**
          * FR-02 KPI「A 級主推品項數」。AC-02-6：同一品項可同時上多榜，

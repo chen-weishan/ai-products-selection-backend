@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -31,9 +32,14 @@ import org.springframework.stereotype.Repository;
 public interface ProductRepository
                 extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
-        /** 品項清單：類別與供應商同時取出，避免逐列觸發 lazy 查詢。 */
-        @EntityGraph(attributePaths = { "category", "supplier" })
-        Page<Product> findByStatus(ProductStatus status, Pageable pageable);
+    /** 上傳圖片前鎖定品項列，避免並行請求突破最多五張限制。 */
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") Long id);
+
+    /** 品項清單：類別與供應商同時取出，避免逐列觸發 lazy 查詢。 */
+    @EntityGraph(attributePaths = {"category", "supplier"})
+    Page<Product> findByStatus(ProductStatus status, Pageable pageable);
 
         @EntityGraph(attributePaths = { "category", "supplier" })
         Page<Product> findByCategoryIdAndStatus(Long categoryId, ProductStatus status, Pageable pageable);

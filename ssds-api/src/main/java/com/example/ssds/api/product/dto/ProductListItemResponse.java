@@ -1,6 +1,7 @@
 package com.example.ssds.api.product.dto;
 
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -22,9 +23,12 @@ public record ProductListItemResponse(
         BigDecimal marginRate,
         BigDecimal latestScore,
         Grade grade,
+        Integer timeGapDays,
         TrackType trackType,
         SourcingStatus sourcingStatus,
         ProductStatus status,
+        LastScoringStatus lastScoringStatus,
+        OffsetDateTime lastScoringAttemptedAt,
         boolean hasRisk,
         OffsetDateTime updatedAt
 ) {

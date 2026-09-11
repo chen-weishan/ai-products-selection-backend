@@ -16,6 +16,7 @@ dependencies {
 	implementation libs.spring.boot.starter.aspectj
 	// 規格書 §3.3：後端為 OpenAPI 契約的單一事實來源
 	implementation libs.springdoc.openapi
+	implementation libs.commons.csv
 
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql

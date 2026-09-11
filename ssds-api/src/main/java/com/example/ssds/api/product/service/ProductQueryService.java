@@ -4,17 +4,26 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.product.dto.ProductListItemResponse;
+import com.example.ssds.api.product.dto.ProductResponse;
 import com.example.ssds.api.product.dto.ProductSearchRequest;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.dao.ProductListDao;
 import com.example.ssds.infra.dao.projection.ProductListRow;
 import com.example.ssds.infra.dao.query.ProductListCriteria;
+import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.OffsetDateTime;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -24,9 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class ProductQueryService {
-
-    /** §8.1：回應一律以 +08:00 呈現。 */
-    private static final ZoneId DISPLAY_ZONE = ZoneId.of("Asia/Taipei");
 
     private static final Set<Integer> ALLOWED_PAGE_SIZES =
             Set.of(20, 50, 100);
@@ -41,6 +47,7 @@ public class ProductQueryService {
                     "marginRate",
                     "latestScore",
                     "grade",
+                    "timeGapDays",
                     "trackType",
                     "sourcingStatus",
                     "status",
@@ -53,24 +60,31 @@ public class ProductQueryService {
     private static final BigDecimal MAX_SCORE =
             BigDecimal.valueOf(100);
 
-    private static final SortValue DEFAULT_SORT =
-            new SortValue("latestScore", false);
-
     private final ProductListDao productListDao;
+    private final ProductRepository productRepository;
+    private final SourcingCandidateRepository sourcingCandidateRepository;
 
-    public ProductQueryService(ProductListDao productListDao) {
+    public ProductQueryService(
+            ProductListDao productListDao,
+            ProductRepository productRepository,
+            SourcingCandidateRepository sourcingCandidateRepository
+    ) {
         this.productListDao = productListDao;
+        this.productRepository = productRepository;
+        this.sourcingCandidateRepository = sourcingCandidateRepository;
     }
 
     public PageResponse<ProductListItemResponse> search(
             ProductSearchRequest request,
             Pageable pageable
     ) {
-        validate(request);
-        validatePageable(pageable);
+        validate(request, pageable);
 
-        SortValue sortValue =
-                resolveSort(pageable);
+        SortValue sortValue = parseSort(pageable.getSort());
+        if (request.trackType() == TrackType.B
+                && "latestScore".equals(sortValue.field())) {
+            sortValue = new SortValue("timeGapDays", true);
+        }
 
         ProductListCriteria criteria =
                 new ProductListCriteria(
@@ -98,7 +112,70 @@ public class ProductQueryService {
         return PageResponse.from(result);
     }
 
-    private void validate(ProductSearchRequest request) {
+    /** 取得品項完整資料；Repository 以 EntityGraph 一次載入關聯資料。 */
+    public ProductResponse getById(Long productId) {
+        Product product = productRepository.findWithDetailsById(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+
+        Supplier supplier = product.getSupplier();
+        boolean trackB = product.getTrackType() == TrackType.B;
+        Integer timeGapDays = trackB
+                ? sourcingCandidateRepository.findByProductId(productId)
+                        .map(candidate -> candidate.getTimeGapDays())
+                        .orElse(null)
+                : null;
+        Set<Long> keywordIds = product.getKeywords().stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        return new ProductResponse(
+                product.getId(),
+                product.getName(),
+                product.getCategory().getId(),
+                product.getCategory().getName(),
+                supplier == null ? null : supplier.getId(),
+                supplier == null ? null : supplier.getName(),
+                product.getCost(),
+                product.getSuggestedPrice(),
+                product.getMarginRate(),
+                product.getMoq(),
+                product.getSeason(),
+                product.getStatus(),
+                product.getRejectReason(),
+                product.getListedAt(),
+                product.getTrackType(),
+                product.getSourcingStatus(),
+                ProductLogisticsConditionMapper.decode(product.getLogisticsCondition()),
+                product.getIdealTempMin(),
+                product.getIdealTempMax(),
+                product.getShelfLifeDays(),
+                timeGapDays,
+                Collections.unmodifiableSet(keywordIds),
+                toDisplayTime(product.getCreatedAt()),
+                toDisplayTime(product.getUpdatedAt())
+        );
+    }
+
+    private void validate(ProductSearchRequest request, Pageable pageable) {
+        if (pageable.getPageNumber() < 0) {
+            throw validationException(
+                    "page",
+                    "page 不可小於 0"
+            );
+        }
+
+        if (!ALLOWED_PAGE_SIZES.contains(
+                pageable.getPageSize()
+        )) {
+            throw validationException(
+                    "size",
+                    "size 只允許 20、50 或 100"
+            );
+        }
+
         validateScore(
                 "minScore",
                 request.minScore()
@@ -120,24 +197,6 @@ public class ProductQueryService {
         }
     }
 
-    private void validatePageable(Pageable pageable) {
-        if (pageable.getPageNumber() < 0) {
-            throw validationException(
-                    "page",
-                    "page 不可小於 0"
-            );
-        }
-
-        if (!ALLOWED_PAGE_SIZES.contains(
-                pageable.getPageSize()
-        )) {
-            throw validationException(
-                    "size",
-                    "size 只允許 20、50 或 100"
-            );
-        }
-    }
-
     private void validateScore(
             String field,
             BigDecimal score
@@ -155,20 +214,22 @@ public class ProductQueryService {
         }
     }
 
-    /**
-     * 排序方向由 Spring 解析成 Sort.Direction，只需再驗證欄位白名單；
-     * 多重排序鍵目前不支援，取第一個。
-     */
-    private SortValue resolveSort(Pageable pageable) {
-        Sort sort = pageable.getSort();
-
-        if (!sort.isSorted()) {
-            return DEFAULT_SORT;
+    private SortValue parseSort(Sort sort) {
+        if (sort.isUnsorted()) {
+            return new SortValue("latestScore", false);
         }
 
-        Sort.Order order = sort.iterator().next();
+        List<Sort.Order> orders = sort.stream().toList();
+        if (orders.size() != 1) {
+            throw validationException(
+                    "sort",
+                    "一次只允許一個排序欄位"
+            );
+        }
 
+        Sort.Order order = orders.getFirst();
         String field = order.getProperty();
+
         if (!ALLOWED_SORT_FIELDS.contains(field)) {
             throw validationException(
                     "sort",
@@ -176,7 +237,10 @@ public class ProductQueryService {
             );
         }
 
-        return new SortValue(field, order.isAscending());
+        return new SortValue(
+                field,
+                order.isAscending()
+        );
     }
 
     private ProductListItemResponse toResponse(
@@ -198,11 +262,14 @@ public class ProductQueryService {
                 trackB ? null : row.cost(),
                 trackB ? null : row.suggestedPrice(),
                 trackB ? null : row.marginRate(),
-                row.latestScore(),
-                row.grade(),
+                trackB ? null : row.latestScore(),
+                trackB ? null : row.grade(),
+                trackB ? row.timeGapDays() : null,
                 row.trackType(),
                 row.sourcingStatus(),
                 row.status(),
+                row.lastScoringStatus(),
+                toDisplayTime(row.lastScoringAttemptedAt()),
                 row.hasRisk(),
                 toDisplayTime(row.updatedAt())
         );
@@ -229,15 +296,13 @@ public class ProductQueryService {
         );
     }
 
-    private static OffsetDateTime toDisplayTime(Instant instant) {
-        return instant == null
-                ? null
-                : instant.atZone(DISPLAY_ZONE).toOffsetDateTime();
-    }
-
     private record SortValue(
             String field,
             boolean ascending
     ) {
+    }
+    /** §8.1：API 時間統一以 +08:00 回傳。 */
+    private static OffsetDateTime toDisplayTime(Instant value) {
+        return value == null ? null : value.atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime();
     }
 }

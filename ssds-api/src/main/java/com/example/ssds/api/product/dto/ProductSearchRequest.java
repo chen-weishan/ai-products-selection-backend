@@ -7,7 +7,7 @@ import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 
 /**
- * GET /products 的查詢條件。分頁與排序由 Pageable 提供。
+ * GET /products 的查詢條件。分頁與排序由 Spring Pageable 統一解析。
  */
 public record ProductSearchRequest(
         String keyword,

@@ -1,5 +1,6 @@
 package com.example.ssds.infra.dao;
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -35,23 +36,28 @@ public class ProductListDao {
             Map.entry("marginRate", "p.margin_rate"),
             Map.entry("latestScore", "latest_score.final_score"),
             Map.entry("grade", "latest_score.grade"),
+            Map.entry("timeGapDays", "sourcing.time_gap_days"),
             Map.entry("trackType", "p.track_type"),
             Map.entry("sourcingStatus", "p.sourcing_status"),
             Map.entry("status", "p.status"),
             Map.entry("updatedAt", "p.updated_at"));
 
-    private static final String FROM_SQL = """
+    static final String FROM_SQL = """
             FROM product p
             JOIN category c
               ON c.id = p.category_id
             LEFT JOIN supplier supplier
               ON supplier.id = p.supplier_id
+            LEFT JOIN sourcing_candidate sourcing
+              ON sourcing.product_id = p.id
             LEFT JOIN LATERAL (
                 SELECT ps.final_score,
                        ps.grade,
                        ps.calculated_at
                 FROM product_score ps
                 WHERE ps.product_id = p.id
+                  AND ps.is_primary = TRUE
+                  AND ps.is_active = TRUE
                 ORDER BY ps.calculated_at DESC, ps.id DESC
                 LIMIT 1
             ) latest_score ON TRUE
@@ -87,9 +93,12 @@ public class ProductListDao {
                        p.margin_rate,
                        latest_score.final_score AS latest_score,
                        latest_score.grade,
+                       sourcing.time_gap_days,
                        p.track_type,
                        p.sourcing_status,
                        p.status,
+                       p.last_scoring_status,
+                       p.last_scoring_attempted_at,
                        EXISTS (
                            SELECT 1
                            FROM risk_alert risk
@@ -141,7 +150,7 @@ public class ProductListDao {
     }
 
     private SqlFilter buildFilter(ProductListCriteria criteria) {
-        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        StringBuilder where = new StringBuilder(" WHERE p.deleted_at IS NULL ");
         Map<String, Object> parameters = new HashMap<>();
 
         if (criteria.keyword() != null
@@ -193,7 +202,9 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.grade() != null) {
+        boolean scoreFiltersApply = criteria.trackType() != TrackType.B;
+
+        if (scoreFiltersApply && criteria.grade() != null) {
             where.append(" AND latest_score.grade = :grade ");
             parameters.put(
                     "grade",
@@ -201,7 +212,7 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.minScore() != null) {
+        if (scoreFiltersApply && criteria.minScore() != null) {
             where.append(
                     " AND latest_score.final_score >= :minScore "
             );
@@ -211,7 +222,7 @@ public class ProductListDao {
             );
         }
 
-        if (criteria.maxScore() != null) {
+        if (scoreFiltersApply && criteria.maxScore() != null) {
             where.append(
                     " AND latest_score.final_score <= :maxScore "
             );
@@ -251,6 +262,12 @@ public class ProductListDao {
 
         String gradeValue = resultSet.getString("grade");
         String sourcingStatusValue = resultSet.getString("sourcing_status");
+        String lastScoringStatusValue = resultSet.getString("last_scoring_status");
+
+        OffsetDateTime lastScoringAttemptedAt = resultSet.getObject(
+                "last_scoring_attempted_at",
+                OffsetDateTime.class
+        );
 
         OffsetDateTime updatedAt = resultSet.getObject(
                 "updated_at",
@@ -274,6 +291,10 @@ public class ProductListDao {
                 gradeValue == null
                         ? null
                         : Grade.valueOf(gradeValue),
+                resultSet.getObject(
+                        "time_gap_days",
+                        Integer.class
+                ),
                 TrackType.valueOf(
                         resultSet.getString("track_type")
                 ),
@@ -283,6 +304,12 @@ public class ProductListDao {
                 ProductStatus.valueOf(
                         resultSet.getString("status")
                 ),
+                lastScoringStatusValue == null
+                        ? null
+                        : LastScoringStatus.valueOf(lastScoringStatusValue),
+                lastScoringAttemptedAt == null
+                        ? null
+                        : lastScoringAttemptedAt.toInstant(),
                 resultSet.getBoolean("has_risk"),
                 updatedAt.toInstant()
         );
