@@ -8,16 +8,14 @@ import org.springframework.web.client.RestClient;
 /**
  * Instagram adapter 的 Spring 組態。
  *
- * <p>2026-09-01 改版：改用 RapidAPI 的 instagram-social 服務，見
- * {@link InstagramIngestProperties} 的類別註解。這支服務一次查詢就直接
- * 回傳 hashtag 的 media_count，不需要「先查 hashtag_id 再查 media」的
- * 兩步式流程，也沒有 Meta 官方版「7 天 30 個新 hashtag」的限制，
- * 因此原本用來快取 hashtag_id 的 Caffeine CacheManager 一併拿掉，
- * 架構單純很多。
+ * <p>2026-09-07 改版：改用 Apify 平台的官方 actor
+ * {@code apify/instagram-hashtag-scraper}，取代原本的 RapidAPI
+ * instagram-social。baseUrl 固定指向 Apify API v2，實際 actor 路徑
+ * （含 run-sync-get-dataset-items）由 {@link InstagramHashtagClient} 組裝。
  *
- * <p>唯一要注意的新限制：RapidAPI 免費方案是 <b>總共 100 次請求</b>
- * （不是每天，reset 週期看起來約 30 天），見
- * {@code InstagramHeatIngestJob} 的排程頻率說明。
+ * <p>與 RapidAPI 版最大的差異：Apify 這支 actor 回傳的是「實際抓到的
+ * 貼文明細」（最多 resultsLimit 篇），不是「hashtag 的總貼文數」，因此
+ * 熱度值的定義也跟著改變——見 {@link InstagramHashtagClient} 類別註解。
  */
 @Configuration
 @EnableConfigurationProperties(InstagramIngestProperties.class)
@@ -26,7 +24,7 @@ public class InstagramIngestConfig {
     @Bean
     public RestClient instagramRestClient() {
         return RestClient.builder()
-                .baseUrl("https://instagram-social.p.rapidapi.com")
+                .baseUrl("https://api.apify.com/v2")
                 .build();
     }
 }

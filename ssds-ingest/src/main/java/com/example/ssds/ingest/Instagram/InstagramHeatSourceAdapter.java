@@ -18,9 +18,11 @@ import org.springframework.stereotype.Component;
  *
  * <p>target 為 hashtag 名稱（對應 hashtag→品類名稱的設定檔對照，見
  * {@code InstagramHashtagMapping}，由呼叫端在 ssds-api 決定要查哪些品類、
- * 傳進來）。每個 hashtag 查一次 {@code media_count} 當熱度值，單一 hashtag
- * 失敗（含「查不到完全相符的 hashtag」）只記警告並跳過，不影響其餘
- * hashtag（見 {@link HeatSourceAdapter#fetch} 的介面約定）。
+ * 傳進來）。每個 hashtag 查一次「實際抓回的貼文篇數」（見
+ * {@link InstagramHashtagClient} 的熱度換算說明——2026-09-07 實測發現該
+ * actor 的按讚/留言數固定為 0，改用篇數）當熱度值，單一 hashtag
+ * 失敗（含「查無任何貼文」）只記警告並跳過，不影響其餘 hashtag（見
+ * {@link HeatSourceAdapter#fetch} 的介面約定）。
  */
 @Component
 public class InstagramHeatSourceAdapter implements HeatSourceAdapter {
@@ -44,18 +46,18 @@ public class InstagramHeatSourceAdapter implements HeatSourceAdapter {
     public List<HeatDataPoint> fetch(List<String> targets, LocalDate date) {
         if (!properties.configured()) {
             throw new IllegalStateException(
-                    "Instagram 未設定 RapidAPI key（SSDS_IG_RAPIDAPI_KEY），無法採集。");
+                    "Instagram 未設定 Apify token（SSDS_IG_APIFY_TOKEN），無法採集。");
         }
 
         List<HeatDataPoint> results = new ArrayList<>();
         for (String hashtag : targets) {
             try {
-                Long mediaCount = client.fetchMediaCount(hashtag);
-                if (mediaCount == null) {
-                    log.warn("Instagram 查無完全相符的 hashtag，跳過：{}", hashtag);
+                Long postCount = client.fetchPostCount(hashtag);
+                if (postCount == null) {
+                    log.warn("Instagram 查無任何貼文，跳過：{}", hashtag);
                     continue;
                 }
-                results.add(new HeatDataPoint(hashtag, BigDecimal.valueOf(mediaCount)));
+                results.add(new HeatDataPoint(hashtag, BigDecimal.valueOf(postCount)));
             } catch (Exception e) {
                 // 單一 hashtag 失敗不中斷整批，只跳過並記警告——整批一起失敗
                 // 才拋例外（見介面說明）。
