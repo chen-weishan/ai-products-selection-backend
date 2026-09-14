@@ -16,7 +16,9 @@ dependencies {
 	implementation libs.spring.boot.starter.aspectj
 	// 規格書 §3.3：後端為 OpenAPI 契約的單一事實來源
 	implementation libs.springdoc.openapi
+    implementation 'com.auth0:java-jwt:4.4.0'
 	implementation libs.commons.csv
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
 
 	// JWT 簽發與解析（FR-01）。BCryptPasswordEncoder 已隨
 	// spring-boot-starter-security 帶入，不需另外加 crypto 依賴。
@@ -26,6 +28,8 @@ dependencies {
 
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
 
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security

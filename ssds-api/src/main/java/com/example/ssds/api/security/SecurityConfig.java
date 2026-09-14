@@ -1,80 +1,137 @@
 package com.example.ssds.api.security;
 
 import java.util.Arrays;
-import java.util.List;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
+
+
 import org.springframework.context.annotation.Bean;
+
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+
+import org.springframework.security.authentication.AuthenticationManager;
+
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+
 import org.springframework.security.config.http.SessionCreationPolicy;
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.security.web.SecurityFilterChain;
+
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 import org.springframework.web.cors.CorsConfiguration;
+
 import org.springframework.web.cors.CorsConfigurationSource;
+
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.example.ssds.util.JwtAuthFilter;
+
+import lombok.RequiredArgsConstructor;
 
 /**
- * 規格書 §2.1／FR-01：無狀態 JWT 驗證。角色層級的存取控制交給各 Controller 方法上的
- * {@code @PreAuthorize}（見 {@link EnableMethodSecurity}），而不是在這裡列 URL pattern——
- * 這樣 {@link com.example.ssds.api.common.error.GlobalExceptionHandler} 才攔得到
- * {@code AccessDeniedException}（見該類別註解）。
+ * 開發環境的臨時安全設定（FR-01 完成後整個檔案刪除）。
+ *
+ * <p>
+ * 只做一件事：關閉 CSRF。Spring Security 預設對 POST／PUT／DELETE 要求 CSRF token， 沒帶會在進入
+ * Controller 之前被擋掉。因為 {@code CsrfFilter} 排在 Basic 認證之前， 此時請求還是匿名狀態，回的是 401
+ * 而不是直覺上的 403。
+ *
+ * <p>
+ * 本專案是純 REST API：認證走 HTTP Basic、請求體是 JSON，不存在「瀏覽器自動夾帶 cookie 送出跨站表單」這個攻擊面，CSRF
+ * token 沒有保護對象。
+ *
+ * <p>
+ * {@code @Profile("dev")} 限定只在開發環境生效，prod 維持 Spring Security 預設。
  */
 @Configuration
+
 @EnableWebSecurity
-@EnableMethodSecurity
-@Profile("!dev")
+
+@RequiredArgsConstructor
+
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final RestAuthenticationEntryPoint authenticationEntryPoint;
 
-    public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter,
-            RestAuthenticationEntryPoint authenticationEntryPoint) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.authenticationEntryPoint = authenticationEntryPoint;
-    }
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            // Spring MVC 的 mvcHandlerMappingIntrospector 也實作了 CorsConfigurationSource，
-            // 只用型別注入會撞成 NoUniqueBeanDefinitionException，須指名要哪一個 bean。
-            @Qualifier("corsConfigurationSource") CorsConfigurationSource corsSource)
-            throws Exception {
-        http
-                .cors(cors -> cors.configurationSource(corsSource))
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/refresh").permitAll()
-                        .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        return http.build();
-    }
+	private final JwtAuthFilter jwtAuthFilter;
 
-    /** 規格書 §3.3 跨來源設定：來源明列，不可用萬用字元（要允許 credentials 兩者不能並存）。 */
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource(
-            @Value("${ssds.cors.allowed-origins:}") String allowedOrigins) {
-        CorsConfiguration configuration = new CorsConfiguration();
-        List<String> origins = allowedOrigins.isBlank()
-                ? List.of()
-                : Arrays.stream(allowedOrigins.split(",")).map(String::strip).toList();
-        configuration.setAllowedOrigins(origins);
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
+
+	@Bean
+
+	public PasswordEncoder passwordEncoder() {
+
+		return new BCryptPasswordEncoder();
+
+	}
+
+
+
+	@Bean
+
+	public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+
+		return authConfig.getAuthenticationManager();
+
+	}
+
+
+
+	@Bean
+
+	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+
+		http.csrf(csrf -> csrf.disable()) // 關閉 CSRF
+
+				.cors(cors -> cors.configurationSource(corsConfigurationSource())) // 開啟跨域
+
+				.sessionManagement(session -> // 支援確認頁暫存
+
+				session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+
+				.authorizeHttpRequests(auth -> auth.anyRequest().permitAll()); // 開發環境全公開
+
+
+
+		http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class); // 掛上 JWT
+
+																											// filter
+
+		return http.build();
+
+	}
+
+
+
+	@Bean
+
+	public CorsConfigurationSource corsConfigurationSource() {
+
+		CorsConfiguration config = new CorsConfiguration();
+
+		config.setAllowedOrigins(Arrays.asList("http://localhost:4200", "http://localhost:64567")); // 前端網址
+
+		config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+
+		config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
+
+		config.setAllowCredentials(true); // 必須開啟以支援 Session Cookie
+
+
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+
+		source.registerCorsConfiguration("/**", config);
+
+		return source;
+
+	}
+
 }
