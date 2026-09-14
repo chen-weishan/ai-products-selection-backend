@@ -19,6 +19,10 @@ public interface HeatReadingRepository extends JpaRepository<HeatReading, Long> 
     Optional<HeatReading> findByKeywordIdAndSourceIdAndReadingDate(
             Long keywordId, Long sourceId, LocalDate readingDate);
 
+/** 品類級來源（如 INSTAGRAM）用，對應 keyword 版本的查詢（見 §7.2.3 V17 裁決）。 */
+    Optional<HeatReading> findByCategoryIdAndSourceIdAndReadingDate(
+            Long categoryId, Long sourceId, LocalDate readingDate);
+
     /** 某日某來源的全部讀值，供「同來源內百分位化」批次計算（§5.3.2）。 */
     List<HeatReading> findBySourceIdAndReadingDate(Long sourceId, LocalDate readingDate);
 }
