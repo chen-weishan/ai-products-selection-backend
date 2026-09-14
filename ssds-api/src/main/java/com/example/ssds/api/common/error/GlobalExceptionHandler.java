@@ -72,13 +72,13 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.VALIDATION_FAILED, "請求內容格式不正確", null);
     }
 
-    /** multipart 檔案超過上限時，仍回傳統一驗證錯誤，避免落入 500 兜底。 */
+    /** multipart 檔案超過全域上限時回傳通用訊息；各功能的小上限由自己的服務驗證。 */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(
             MaxUploadSizeExceededException e) {
-        FieldError fieldError = new FieldError("file", "圖片大小不可超過 2MB");
+        FieldError fieldError = new FieldError("file", "上傳檔案不可超過 50MB");
         return toResponse(ErrorCode.VALIDATION_FAILED,
-                "圖片驗證失敗", List.of(fieldError));
+                "檔案上傳失敗", List.of(fieldError));
     }
 
     /** Spring Security 判定權限不足。不單獨攔會被兜底吃成 500。 */

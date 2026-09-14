@@ -12,4 +12,6 @@ public interface ImportErrorRepository extends JpaRepository<ImportError, Long> 
     List<ImportError> findByBatchIdOrderByRowNumberAsc(Long batchId);
 
     long countByBatchId(Long batchId);
+
+    void deleteByBatchId(Long batchId);
 }
