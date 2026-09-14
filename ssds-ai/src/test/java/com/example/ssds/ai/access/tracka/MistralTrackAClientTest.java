@@ -4,6 +4,7 @@ import com.example.ssds.ai.access.common.AiExecutionWarningContext;
 import com.example.ssds.ai.access.common.AiModelNotFoundException;
 import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.ai.budget.DailyAiBudget;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.policy.ExternalLlmDisabledException;
 import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.resilience.AiRateLimitException;
@@ -17,10 +18,13 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 class MistralTrackAClientTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -160,6 +164,36 @@ class MistralTrackAClientTest {
                 new ExternalLlmPolicy(false, objectMapper));
 
         assertThrows(ExternalLlmDisabledException.class, () -> client.complete(request()));
+    }
+
+    @Test
+    void exhaustedBudgetStopsBeforeConversationRequest() throws Exception {
+        AtomicInteger conversations = new AtomicInteger();
+        startServer(exchange -> {
+            if (exchange.getRequestURI().getPath().startsWith("/v1/models/")) {
+                respond(exchange, 200, """
+                        {"id":"test-model","capabilities":{"reasoning":true}}
+                        """);
+                return;
+            }
+            conversations.incrementAndGet();
+            respond(exchange, 500, "{}");
+        });
+        DailyAiBudget budget = mock(DailyAiBudget.class);
+        doThrow(new AiBudgetExceededException(
+                AiTaskType.BudgetPool.TRACK_A, OffsetDateTime.parse("2026-09-15T00:00:00+08:00")))
+                .when(budget).acquire(AiTaskType.BudgetPool.TRACK_A, false);
+        MistralTrackAClient client = new MistralTrackAClient(
+                objectMapper,
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
+                "test-key",
+                5,
+                5,
+                budget,
+                event -> {});
+
+        assertThrows(AiBudgetExceededException.class, () -> client.complete(request()));
+        assertEquals(0, conversations.get());
     }
 
     private MistralTrackAClient client() {

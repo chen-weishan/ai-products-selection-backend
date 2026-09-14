@@ -5,16 +5,19 @@ import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.access.common.AiModelNotFoundException;
 import com.example.ssds.ai.access.tracka.AiPromptRequest;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.resilience.RetryExecutionState;
+import com.example.ssds.ai.resilience.RetrySleeper;
+import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.policy.ExternalLlmDisabledException;
 import com.example.ssds.ai.policy.OutboundDataPolicyException;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.scene.*;
-import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
+import com.example.ssds.ai.prompt.scene.SceneClassifierPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
 import com.example.ssds.ai.schema.AiSchemaValidationException;
-import com.example.ssds.ai.schema.SceneClassifierResponseParser;
-import com.example.ssds.ai.schema.SceneClassifierSchema;
+import com.example.ssds.ai.schema.scene.SceneClassifierResponseParser;
+import com.example.ssds.ai.schema.scene.SceneClassifierSchema;
 import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -23,8 +26,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.OptionalLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,7 +83,7 @@ public class SceneClassifierAgent {
         this.promptFactory = promptFactory;
         this.parser = parser;
         this.objectMapper = objectMapper;
-        this.models = parseModels(primaryModel, fallbackModels);
+        this.models = new MistralModelCatalog.ModelChain(primaryModel, fallbackModels).models();
         this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
         this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays)).maximumSize(10_000).build();
@@ -120,12 +123,9 @@ public class SceneClassifierAgent {
     }
 
     private SceneClassificationResult classifyWithRetry(SceneClassifierInput input) {
-        int modelIndex = 0;
-        int rateLimitRetries = 0;
-        int schemaRetries = 0;
-        int requestCount = 0;
+        RetryExecutionState retry = new RetryExecutionState(models, retryMax);
         while (true) {
-            String model = models.get(modelIndex);
+            String model = retry.model();
             String raw = null;
             try {
                 log.info(
@@ -134,11 +134,12 @@ public class SceneClassifierAgent {
                 AiPromptRequest request = new AiPromptRequest(
                         AiTaskType.SCENE_CLASSIFY,
                         model,
-                        promptFactory.systemPrompt(),
+                        promptFactory.systemPrompt()
+                                + (retry.retryInstruction() == null ? "" : "\n\n" + retry.retryInstruction()),
                         promptFactory.userPrompt(input),
                         SceneClassifierSchema.create(objectMapper),
-                        requestCount > 0);
-                requestCount++;
+                        retry.isRetryAttempt());
+                retry.recordRequest();
                 AiClientResponse response = router.route(request);
                 raw = response.content();
                 SceneClassifierOutput output = parser.parse(raw, input);
@@ -149,7 +150,10 @@ public class SceneClassifierAgent {
                                 output.reasoning(),
                                 output.signals(),
                                 raw,
-                                response.model())
+                                response.model(),
+                                response.promptTokens(),
+                                response.completionTokens(),
+                                retry.requestCount())
                         : new SceneClassificationResult(
                                 output,
                                 false,
@@ -157,71 +161,64 @@ public class SceneClassifierAgent {
                                 false,
                                 raw,
                                 response.model(),
-                                SceneClassifierPromptFactory.PROMPT_VERSION);
+                                SceneClassifierPromptFactory.PROMPT_VERSION,
+                                response.promptTokens(),
+                                response.completionTokens(),
+                                retry.requestCount());
             } catch (AiSchemaValidationException exception) {
                 log.warn(
                         "SceneClassifier schema validation failed: productId={}, model={}, errorType={}, reason={}",
                         input.productId(),
                         model,
                         exception.getClass().getSimpleName(),
-                        safeLogMessage(exception.getMessage()));
-                if (schemaRetries == 0) {
-                    schemaRetries++;
+                        SafeLogMessage.sanitize(exception.getMessage()));
+                retry.retryInstruction(promptFactory.retryInstruction(validationCode(exception)));
+                if (retry.beginSchemaRetry()) {
                     if (pauseBeforeRetry(2_000L, input.productId(), model)) continue;
-                    return unavailableFallback(raw, model);
+                    return unavailableFallback(raw, model, retry.requestCount());
                 }
-                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
-                    schemaRetries++;
-                    modelIndex++;
-                    continue;
-                }
+                if (retry.moveToSchemaFallback()) continue;
                 return fallback(
                         FallbackReason.SCHEMA_INVALID,
                         null,
                         "AI 回應格式驗證失敗",
                         List.of("fallback: schema_invalid"),
                         raw,
-                        model);
+                        model,
+                        null,
+                        null,
+                        retry.requestCount());
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax) {
-                    long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
-                    rateLimitRetries++;
+                OptionalLong delay = retry.nextRateLimitDelay();
+                if (delay.isPresent()) {
+                    long backoffMillis = delay.getAsLong();
                     log.warn(
                             "SceneClassifier rate limited; retrying same model: productId={}, model={}, retry={}/{}, backoffMs={}",
                             input.productId(),
                             model,
-                            rateLimitRetries,
-                            retryMax,
+                            retry.rateLimitRetryCount(),
+                            retry.rateLimitRetryMax(),
                             backoffMillis);
                     if (pauseBeforeRetry(backoffMillis, input.productId(), model)) continue;
-                    return unavailableFallback(raw, model);
+                    return unavailableFallback(raw, model, retry.requestCount());
                 }
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return unavailableFallback(raw, model);
+                if (retry.moveToNextModel()) continue;
+                return unavailableFallback(raw, model, retry.requestCount());
             } catch (AiModelNotFoundException exception) {
                 log.warn("SceneClassifier model unavailable; switching fallback: productId={}, model={}",
                         input.productId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return unavailableFallback(raw, model);
+                if (retry.moveToNextModel()) continue;
+                return unavailableFallback(raw, model, retry.requestCount());
             } catch (ResourceAccessException exception) {
                 log.warn(
                         "SceneClassifier timed out; switching fallback: productId={}, model={}",
                         input.productId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return unavailableFallback(raw, model);
+                if (retry.moveToNextModel()) continue;
+                return unavailableFallback(raw, model, retry.requestCount());
             } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
                 log.warn("SceneClassifier external request blocked by policy: productId={}, reason={}",
-                        input.productId(), safeLogMessage(exception.getMessage()));
-                return unavailableFallback(raw, "policy-blocked");
+                        input.productId(), SafeLogMessage.sanitize(exception.getMessage()));
+                return unavailableFallback(raw, "policy-blocked", Math.max(0, retry.requestCount() - 1));
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
@@ -230,17 +227,10 @@ public class SceneClassifierAgent {
                         input.productId(),
                         model,
                         exception.getClass().getSimpleName());
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return unavailableFallback(raw, model);
+                if (retry.moveToNextModel()) continue;
+                return unavailableFallback(raw, model, retry.requestCount());
             }
         }
-    }
-
-    private boolean hasNextModel(int modelIndex) {
-        return modelIndex + 1 < models.size();
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {
@@ -254,30 +244,17 @@ public class SceneClassifierAgent {
         }
     }
 
-    private static SceneClassificationResult unavailableFallback(String raw, String model) {
+    private static SceneClassificationResult unavailableFallback(String raw, String model, int requestCount) {
         return fallback(
                 FallbackReason.AI_UNAVAILABLE,
                 null,
                 "AI 服務暫時無法使用",
                 List.of("fallback: ai_unavailable"),
                 raw,
-                model);
-    }
-
-    private static List<String> parseModels(String primaryModel, String fallbackModels) {
-        LinkedHashSet<String> configured = new LinkedHashSet<>();
-        addModel(configured, primaryModel);
-        if (fallbackModels != null) {
-            for (String model : fallbackModels.split(",")) addModel(configured, model);
-        }
-        if (configured.isEmpty()) {
-            throw new IllegalArgumentException("至少必須設定一個 Mistral SceneClassifier 模型");
-        }
-        return List.copyOf(configured);
-    }
-
-    private static void addModel(LinkedHashSet<String> configured, String model) {
-        if (model != null && !model.isBlank()) configured.add(model.trim());
+                model,
+                null,
+                null,
+                requestCount);
     }
 
     private static SceneClassificationResult fallback(
@@ -286,7 +263,10 @@ public class SceneClassifierAgent {
             String reasoning,
             List<String> signals,
             String raw,
-            String model) {
+            String model,
+            Integer promptTokens,
+            Integer completionTokens,
+            int requestCount) {
         SceneClassifierOutput fallback = new SceneClassifierOutput(
                 SceneCode.REPLENISHMENT,
                 confidence,
@@ -294,13 +274,16 @@ public class SceneClassifierAgent {
                 null,
                 signals);
         return new SceneClassificationResult(
-                fallback, true, reason, false, raw, model, SceneClassifierPromptFactory.PROMPT_VERSION);
-    }
-
-    private static String safeLogMessage(String message) {
-        if (message == null) return "unavailable";
-        String sanitized = message.replace('\r', ' ').replace('\n', ' ');
-        return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
+                fallback,
+                true,
+                reason,
+                false,
+                raw,
+                model,
+                SceneClassifierPromptFactory.PROMPT_VERSION,
+                promptTokens,
+                completionTokens,
+                requestCount);
     }
 
     private static Integer slopeBucket(BigDecimal slope7d) {
@@ -308,6 +291,23 @@ public class SceneClassifierAgent {
         return slope7d.multiply(BigDecimal.TEN)
                 .setScale(0, RoundingMode.FLOOR)
                 .intValueExact();
+    }
+
+    private static String validationCode(AiSchemaValidationException exception) {
+        String message = exception.getMessage();
+        if (message == null) return "SCHEMA_INVALID";
+        if (isShapeError(message)) return "SHAPE_INVALID";
+        if (message.contains("confidence")) return "CONFIDENCE_INVALID";
+        if (message.contains("signals")) return "SIGNALS_INVALID";
+        if (message.contains("數字")) return "NUMBER_NOT_IN_INPUT";
+        if (message.contains("情境") || message.contains("scene")) return "SCENE_ENUM_INVALID";
+        return "SCHEMA_INVALID";
+    }
+
+    private static boolean isShapeError(String message) {
+        return message.contains("根物件") || message.contains("根節點")
+                || message.contains("不得包含欄位") || message.contains("缺少欄位")
+                || message.contains("欄位必須");
     }
 
     private static List<FestivalKey> festivalFingerprint(List<FestivalMatch> matches) {
@@ -330,8 +330,4 @@ public class SceneClassifierAgent {
             List<FestivalKey> festivalMatches,
             String promptVersion) {}
 
-    @FunctionalInterface
-    interface RetrySleeper {
-        void sleep(long millis) throws InterruptedException;
-    }
 }

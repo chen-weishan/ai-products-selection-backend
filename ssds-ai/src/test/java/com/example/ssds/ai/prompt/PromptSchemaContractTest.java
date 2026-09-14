@@ -2,7 +2,20 @@ package com.example.ssds.ai.prompt;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.example.ssds.ai.schema.*;
+import com.example.ssds.ai.prompt.calibration.WeightCalibrationPromptFactory;
+import com.example.ssds.ai.prompt.insight.ProductInsightPromptFactory;
+import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
+import com.example.ssds.ai.prompt.review.ReviewRiskPromptFactory;
+import com.example.ssds.ai.prompt.scene.SceneClassifierPromptFactory;
+import com.example.ssds.ai.prompt.sourcing.SourcingScoutPromptFactory;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
+import com.example.ssds.ai.schema.calibration.WeightCalibrationSchema;
+import com.example.ssds.ai.schema.insight.ProductInsightSchema;
+import com.example.ssds.ai.schema.recommendation.RecommendationSchema;
+import com.example.ssds.ai.schema.review.ReviewRiskSchema;
+import com.example.ssds.ai.schema.scene.SceneClassifierSchema;
+import com.example.ssds.ai.schema.sourcing.SourcingScoutSchema;
+import com.example.ssds.ai.schema.trend.TrendInterpreterSchema;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;

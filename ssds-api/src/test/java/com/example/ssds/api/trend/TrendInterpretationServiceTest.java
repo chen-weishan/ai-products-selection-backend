@@ -8,7 +8,7 @@ import com.example.ssds.ai.agent.TrendInterpreterAgent;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.trend.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
-import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
 import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;
@@ -114,7 +114,7 @@ class TrendInterpretationServiceTest {
         ArgumentCaptor<TrendInterpretation> historyCaptor =
                 ArgumentCaptor.forClass(TrendInterpretation.class);
         verify(interpretationRepository).save(historyCaptor.capture());
-        assertEquals("trend-v2", historyCaptor.getValue().getPromptVersion());
+        assertEquals("trend-v3", historyCaptor.getValue().getPromptVersion());
         assertTrue(historyCaptor.getValue().getInputSnapshot().contains("compositeSeries"));
         assertEquals("MODEL_NUMERIC", response.modelAlias());
         verify(timeGapService).recalculateAffectedByKeyword(31L);

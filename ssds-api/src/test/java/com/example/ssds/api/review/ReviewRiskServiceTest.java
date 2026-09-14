@@ -35,7 +35,10 @@ class ReviewRiskServiceTest {
                 FallbackReason.AI_UNAVAILABLE,
                 false,
                 "rule-fallback",
-                "review-risk-v1");
+                "review-risk-v1",
+                null,
+                null,
+                1);
         when(products.findById(101L)).thenReturn(Optional.of(product));
         when(reviews.countByProductId(101L)).thenReturn(76L);
         when(reviews.findByProductId(eq(101L), any())).thenReturn(new PageImpl<>(List.of(latest, older)));
@@ -103,7 +106,10 @@ class ReviewRiskServiceTest {
                         FallbackReason.AI_UNAVAILABLE,
                         false,
                         "rule-fallback",
-                        "review-risk-v1"));
+                        "review-risk-v1",
+                        null,
+                        null,
+                        1));
 
         var response = fixture.service.analyze(104L, false);
 
@@ -123,7 +129,10 @@ class ReviewRiskServiceTest {
                 null,
                 false,
                 "fake/model",
-                "review-risk-v1");
+                "review-risk-v1",
+                100,
+                30,
+                1);
     }
 
     private static Fixture fixture(Long productId, List<ProductReview> source, long totalCount) {

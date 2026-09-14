@@ -10,6 +10,6 @@ public record SourcingScoutResult(
         int requestCount) {
     public SourcingScoutResult asCacheHit() {
         return new SourcingScoutResult(output, true, model, promptVersion,
-                promptTokens, completionTokens, requestCount);
+                null, null, 0);
     }
 }

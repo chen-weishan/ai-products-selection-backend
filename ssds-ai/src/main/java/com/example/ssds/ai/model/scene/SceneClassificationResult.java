@@ -9,10 +9,22 @@ public record SceneClassificationResult(
         boolean cacheHit,
         String rawResponse,
         String model,
-        String promptVersion
+        String promptVersion,
+        Integer promptTokens,
+        Integer completionTokens,
+        int requestCount
 ) {
     public SceneClassificationResult asCacheHit() {
         return new SceneClassificationResult(
-                output, fallbackApplied, fallbackReason, true, rawResponse, model, promptVersion);
+                output,
+                fallbackApplied,
+                fallbackReason,
+                true,
+                rawResponse,
+                model,
+                promptVersion,
+                null,
+                null,
+                0);
     }
 }

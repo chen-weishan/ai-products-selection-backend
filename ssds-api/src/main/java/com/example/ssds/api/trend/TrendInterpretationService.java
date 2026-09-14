@@ -2,7 +2,8 @@ package com.example.ssds.api.trend;
 
 import com.example.ssds.ai.agent.TrendInterpreterAgent;
 import com.example.ssds.ai.model.trend.*;
-import com.example.ssds.ai.prompt.*;
+import com.example.ssds.ai.prompt.PromptSanitizer;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
 import com.example.ssds.api.common.error.*;
 import com.example.ssds.api.trend.dto.TrendInterpretationResponse;
 import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;

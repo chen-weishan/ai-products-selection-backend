@@ -1,5 +1,8 @@
 package com.example.ssds.ai.config;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -23,11 +26,11 @@ public class MistralModelCatalog {
             @Value("${mistral.model-numeric-fallbacks}") String numericFallbacks,
             @Value("${mistral.model-reasoning-primary}") String reasoningPrimary,
             @Value("${mistral.model-reasoning-fallbacks}") String reasoningFallbacks) {
-        classify = new ModelChain(classifyPrimary, classifyFallbacks);
-        longText = new ModelChain(longTextPrimary, longTextFallbacks);
-        shortGeneration = new ModelChain(shortGenerationPrimary, shortGenerationFallbacks);
-        numeric = new ModelChain(numericPrimary, numericFallbacks);
-        reasoning = new ModelChain(reasoningPrimary, reasoningFallbacks);
+        classify = required(new ModelChain(classifyPrimary, classifyFallbacks));
+        longText = required(new ModelChain(longTextPrimary, longTextFallbacks));
+        shortGeneration = required(new ModelChain(shortGenerationPrimary, shortGenerationFallbacks));
+        numeric = required(new ModelChain(numericPrimary, numericFallbacks));
+        reasoning = required(new ModelChain(reasoningPrimary, reasoningFallbacks));
     }
 
     public ModelChain classify() { return classify; }
@@ -36,13 +39,28 @@ public class MistralModelCatalog {
     public ModelChain numeric() { return numeric; }
     public ModelChain reasoning() { return reasoning; }
 
+    private static ModelChain required(ModelChain chain) {
+        if (chain.primary().isBlank()) {
+            throw new IllegalArgumentException("Mistral primary model must not be blank");
+        }
+        return chain;
+    }
+
     public record ModelChain(String primary, String fallbacks) {
         public ModelChain {
-            if (primary == null || primary.isBlank()) {
-                throw new IllegalArgumentException("Mistral primary model must not be blank");
-            }
-            primary = primary.trim();
+            primary = primary == null ? "" : primary.trim();
             fallbacks = fallbacks == null ? "" : fallbacks.trim();
+        }
+
+        public List<String> models() {
+            LinkedHashSet<String> configured = new LinkedHashSet<>();
+            add(configured, primary);
+            Arrays.stream(fallbacks.split(",")).forEach(model -> add(configured, model));
+            return List.copyOf(configured);
+        }
+
+        private static void add(LinkedHashSet<String> configured, String model) {
+            if (model != null && !model.isBlank()) configured.add(model.trim());
         }
     }
 }

@@ -7,10 +7,10 @@ import com.example.ssds.ai.access.tracka.AiPromptRequest;
 import com.example.ssds.ai.access.tracka.TrackAAiClient;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.recommendation.*;
-import com.example.ssds.ai.prompt.RecommendationPromptFactory;
+import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.RecommendationResponseParser;
-import com.example.ssds.ai.schema.RecommendationResponseParserTest;
+import com.example.ssds.ai.schema.recommendation.RecommendationResponseParser;
+import com.example.ssds.ai.schema.recommendation.RecommendationResponseParserTest;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.Grade;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +31,8 @@ class RecommendationAgentTest {
         assertFalse(first.cacheHit());
         assertEquals(1, first.requestCount());
         assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
         assertEquals(0, cached.requestCount());
         assertEquals(1, client.calls.get());
     }
@@ -45,6 +47,9 @@ class RecommendationAgentTest {
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
         assertEquals(List.of("fake/primary", "fake/primary"), client.models);
+        assertFalse(client.systemPrompts.get(0).contains("修正要求"));
+        assertTrue(client.systemPrompts.get(1).contains("Recommendation Schema"));
+        assertTrue(client.systemPrompts.get(1).contains("SHAPE_INVALID"));
         assertEquals(List.of(false, true), client.retryAttempts);
     }
 
@@ -120,6 +125,7 @@ class RecommendationAgentTest {
         private final AtomicInteger calls = new AtomicInteger();
         private final List<String> models = new ArrayList<>();
         private final List<Boolean> retryAttempts = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
 
         private FakeClient(Object... outcomes) {
             this.outcomes = List.of(outcomes);
@@ -130,6 +136,7 @@ class RecommendationAgentTest {
             int index = calls.getAndIncrement();
             models.add(request.model());
             retryAttempts.add(request.retryAttempt());
+            systemPrompts.add(request.systemPrompt());
             Object outcome = outcomes.get(Math.min(index, outcomes.size() - 1));
             if (outcome instanceof RuntimeException exception) throw exception;
             return new AiClientResponse((String) outcome, request.model(), 100, 30);

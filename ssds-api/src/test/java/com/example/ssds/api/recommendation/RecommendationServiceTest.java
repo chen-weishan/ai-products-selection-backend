@@ -8,7 +8,7 @@ import com.example.ssds.ai.agent.RecommendationAgent;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.recommendation.*;
 import com.example.ssds.ai.prompt.PromptSanitizer;
-import com.example.ssds.ai.prompt.RecommendationPromptFactory;
+import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;

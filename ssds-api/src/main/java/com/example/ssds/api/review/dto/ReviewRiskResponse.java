@@ -22,6 +22,9 @@ public record ReviewRiskResponse(
         boolean cacheHit,
         String model,
         String promptVersion,
+        Integer promptTokens,
+        Integer completionTokens,
+        int requestCount,
         OffsetDateTime analyzedAt) {
 
     private static final int MINIMUM_REVIEW_SAMPLE = 20;
@@ -51,6 +54,9 @@ public record ReviewRiskResponse(
                 result.cacheHit(),
                 result.model(),
                 result.promptVersion(),
+                result.promptTokens(),
+                result.completionTokens(),
+                result.requestCount(),
                 toApiTime(analyzedAt));
     }
 

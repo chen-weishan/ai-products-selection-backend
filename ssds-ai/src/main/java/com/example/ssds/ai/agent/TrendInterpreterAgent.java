@@ -7,12 +7,17 @@ import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.policy.ExternalLlmDisabledException;
 import com.example.ssds.ai.policy.OutboundDataPolicyException;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.resilience.RetryExecutionState;
+import com.example.ssds.ai.resilience.RetrySleeper;
+import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.trend.*;
-import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.*;
+import com.example.ssds.ai.schema.AiSchemaValidationException;
+import com.example.ssds.ai.schema.trend.TrendInterpreterResponseParser;
+import com.example.ssds.ai.schema.trend.TrendInterpreterSchema;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.*;
@@ -64,7 +69,7 @@ public class TrendInterpreterAgent {
         this.promptFactory = promptFactory;
         this.parser = parser;
         this.objectMapper = objectMapper;
-        this.models = parseModels(primaryModel, fallbackModels);
+        this.models = new MistralModelCatalog.ModelChain(primaryModel, fallbackModels).models();
         this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
         this.cache = Caffeine.newBuilder()
@@ -95,12 +100,9 @@ public class TrendInterpreterAgent {
 
     private TrendInterpreterResult interpretWithRetry(
             TrendInterpreterInput input, TrendInterpreterOutput ruleOutput) {
-        int modelIndex = 0;
-        int rateLimitRetries = 0;
-        int schemaRetries = 0;
-        int requestCount = 0;
+        RetryExecutionState retry = new RetryExecutionState(models, retryMax);
         while (true) {
-            String model = models.get(modelIndex);
+            String model = retry.model();
             try {
                 log.info(
                         "TrendInterpreter request: keywordId={}, modelAlias=MODEL_NUMERIC, model={}, promptVersion={}",
@@ -108,78 +110,63 @@ public class TrendInterpreterAgent {
                 AiPromptRequest request = new AiPromptRequest(
                         AiTaskType.TREND_INTERPRET,
                         model,
-                        promptFactory.systemPrompt(),
+                        promptFactory.systemPrompt()
+                                + (retry.retryInstruction() == null ? "" : "\n\n" + retry.retryInstruction()),
                         promptFactory.userPrompt(input),
                         TrendInterpreterSchema.create(objectMapper),
-                        requestCount > 0);
-                requestCount++;
+                        retry.isRetryAttempt());
+                retry.recordRequest();
                 AiClientResponse response = router.route(request);
                 TrendInterpreterOutput output = parser.parse(response.content(), input);
                 return new TrendInterpreterResult(
                         output, false, null, false, response.model(),
                         TrendInterpreterPromptFactory.PROMPT_VERSION,
-                        response.promptTokens(), response.completionTokens(), requestCount);
+                        response.promptTokens(), response.completionTokens(), retry.requestCount());
             } catch (AiSchemaValidationException exception) {
                 log.warn(
                         "TrendInterpreter schema validation failed: keywordId={}, model={}, reason={}",
-                        input.keywordId(), model, safeLogMessage(exception.getMessage()));
-                if (schemaRetries == 0) {
-                    schemaRetries++;
+                        input.keywordId(), model, SafeLogMessage.sanitize(exception.getMessage()));
+                retry.retryInstruction(promptFactory.retryInstruction(validationCode(exception)));
+                if (retry.beginSchemaRetry()) {
                     if (pause(2_000L, input.keywordId(), model)) continue;
                 }
-                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
-                    schemaRetries++;
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(ruleOutput, FallbackReason.SCHEMA_INVALID, model, requestCount);
+                if (retry.moveToSchemaFallback()) continue;
+                return fallback(ruleOutput, FallbackReason.SCHEMA_INVALID, model, retry.requestCount());
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax) {
-                    long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
-                    rateLimitRetries++;
+                OptionalLong delay = retry.nextRateLimitDelay();
+                if (delay.isPresent()) {
+                    long backoffMillis = delay.getAsLong();
                     log.warn(
                             "TrendInterpreter rate limited; retrying same model: keywordId={}, model={}, retry={}/{}, backoffMs={}",
-                            input.keywordId(), model, rateLimitRetries, retryMax, backoffMillis);
+                            input.keywordId(), model, retry.rateLimitRetryCount(), retry.rateLimitRetryMax(), backoffMillis);
                     if (pause(backoffMillis, input.keywordId(), model)) continue;
                 }
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (AiModelNotFoundException exception) {
                 log.warn("TrendInterpreter model unavailable; switching fallback: keywordId={}, model={}",
                         input.keywordId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (ResourceAccessException exception) {
                 log.warn(
                         "TrendInterpreter timed out; switching fallback: keywordId={}, model={}",
                         input.keywordId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
                 log.warn("TrendInterpreter external request blocked by policy: keywordId={}, reason={}",
-                        input.keywordId(), safeLogMessage(exception.getMessage()));
+                        input.keywordId(), SafeLogMessage.sanitize(exception.getMessage()));
                 return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, "policy-blocked",
-                        Math.max(0, requestCount - 1));
+                        Math.max(0, retry.requestCount() - 1));
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "TrendInterpreter request failed: keywordId={}, model={}, errorType={}",
                         input.keywordId(), model, exception.getClass().getSimpleName());
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             }
         }
     }
@@ -207,10 +194,6 @@ public class TrendInterpreterAgent {
                         && candidate.estimatedLifespanDays() == output.estimatedLifespanDays());
     }
 
-    private boolean hasNextModel(int index) {
-        return index + 1 < models.size();
-    }
-
     private boolean pause(long millis, Long keywordId, String model) {
         try {
             retrySleeper.sleep(millis);
@@ -222,31 +205,23 @@ public class TrendInterpreterAgent {
         }
     }
 
-    private static List<String> parseModels(String primary, String fallbacks) {
-        LinkedHashSet<String> configured = new LinkedHashSet<>();
-        addModel(configured, primary);
-        if (fallbacks != null) {
-            for (String model : fallbacks.split(",")) addModel(configured, model);
-        }
-        if (configured.isEmpty()) throw new IllegalArgumentException("至少必須設定一個 TrendInterpreter 模型");
-        return List.copyOf(configured);
+    private static String validationCode(AiSchemaValidationException exception) {
+        String message = exception.getMessage();
+        if (message == null) return "SCHEMA_INVALID";
+        if (isShapeError(message)) return "SHAPE_INVALID";
+        if (message.contains("allowedOutputs") || message.contains("完整匹配")) return "OUTPUT_NOT_ALLOWED";
+        if (message.contains("stage") && message.contains("列舉")) return "STAGE_INVALID";
+        if (message.contains("整數")) return "INTEGER_INVALID";
+        return "SCHEMA_INVALID";
     }
 
-    private static void addModel(Set<String> configured, String model) {
-        if (model != null && !model.isBlank()) configured.add(model.trim());
-    }
-
-    private static String safeLogMessage(String message) {
-        if (message == null) return "unavailable";
-        String sanitized = message.replace('\r', ' ').replace('\n', ' ');
-        return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
+    private static boolean isShapeError(String message) {
+        return message.contains("根物件") || message.contains("根節點")
+                || message.contains("不得包含欄位") || message.contains("缺少欄位")
+                || message.contains("欄位必須");
     }
 
     private record CacheKey(
             Long keywordId, HeatStage stage, int slope30Bucket, String promptVersion) {}
 
-    @FunctionalInterface
-    interface RetrySleeper {
-        void sleep(long millis) throws InterruptedException;
-    }
 }

@@ -2,6 +2,7 @@ package com.example.ssds.ai.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class MistralModelCatalogTest {
@@ -30,5 +31,13 @@ class MistralModelCatalogTest {
                 "short-primary", "short-backup",
                 "numeric-primary", "numeric-backup",
                 "reasoning-primary", "reasoning-backup"));
+    }
+
+    @Test
+    void modelChainTrimsDropsBlanksAndPreservesUniqueOrder() {
+        MistralModelCatalog.ModelChain chain = new MistralModelCatalog.ModelChain(
+                " primary ", " fallback, primary, , second ");
+
+        assertEquals(List.of("primary", "fallback", "second"), chain.models());
     }
 }

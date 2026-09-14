@@ -95,7 +95,7 @@ class ProductInsightServiceTest {
         assertEquals(120, insights.getFirst().getPromptTokens());
         assertNull(insights.get(1).getPromptTokens());
         assertEquals("MODEL_LONG_TEXT", insights.getFirst().getModelAlias());
-        assertEquals("product-insight-v3", insights.getFirst().getPromptVersion());
+        assertEquals("product-insight-v4", insights.getFirst().getPromptVersion());
         assertTrue(response.analysisCompleted());
     }
 }

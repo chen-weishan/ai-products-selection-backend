@@ -356,7 +356,7 @@ class AgentDatabaseIntegrationTest {
                                 List.of(new ReviewRiskAnalysis(
                                         review.getId(), Sentiment.POSITIVE, null)),
                                 List.of()),
-                        false, null, false, "review-test-model", "review-risk-v1"));
+                        false, null, false, "review-test-model", "review-risk-v1", 100, 30, 1));
 
         reviewRiskService.analyze(fixture.product().getId(), false);
         entityManager.flush();

@@ -8,10 +8,21 @@ public record ReviewRiskResult(
         FallbackReason fallbackReason,
         boolean cacheHit,
         String model,
-        String promptVersion
+        String promptVersion,
+        Integer promptTokens,
+        Integer completionTokens,
+        int requestCount
 ) {
     public ReviewRiskResult asCacheHit() {
         return new ReviewRiskResult(
-                output, fallbackApplied, fallbackReason, true, model, promptVersion);
+                output,
+                fallbackApplied,
+                fallbackReason,
+                true,
+                model,
+                promptVersion,
+                null,
+                null,
+                0);
     }
 }

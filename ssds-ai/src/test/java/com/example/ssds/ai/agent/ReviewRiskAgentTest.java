@@ -9,9 +9,9 @@ import com.example.ssds.ai.access.tracka.TrackAAiClient;
 import com.example.ssds.ai.resilience.AiRateLimitException;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.review.*;
-import com.example.ssds.ai.prompt.ReviewRiskPromptFactory;
+import com.example.ssds.ai.prompt.review.ReviewRiskPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.ReviewRiskResponseParser;
+import com.example.ssds.ai.schema.review.ReviewRiskResponseParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -22,13 +22,34 @@ import org.springframework.web.client.ResourceAccessException;
 
 class ReviewRiskAgentTest {
     @Test
+    void noReviewsDoesNotCallModelAndReportsZeroRequests() {
+        FakeClient client = new FakeClient(validJson());
+
+        ReviewRiskResult result = agent(client).analyze(
+                new ReviewRiskInput(101L, List.of()), 0, null, false);
+
+        assertEquals(0, client.calls.get());
+        assertNull(result.promptTokens());
+        assertNull(result.completionTokens());
+        assertEquals(0, result.requestCount());
+    }
+
+    @Test
     void validResponseIsCachedUntilReviewVersionChanges() {
         FakeClient client = new FakeClient(validJson());
         ReviewRiskAgent agent = agent(client);
 
         LocalDate date = LocalDate.of(2026, 8, 20);
-        assertFalse(agent.analyze(input(), 0, date, false).cacheHit());
-        assertTrue(agent.analyze(input(), 0, date, false).cacheHit());
+        ReviewRiskResult fresh = agent.analyze(input(), 0, date, false);
+        ReviewRiskResult cached = agent.analyze(input(), 0, date, false);
+        assertFalse(fresh.cacheHit());
+        assertEquals(100, fresh.promptTokens());
+        assertEquals(30, fresh.completionTokens());
+        assertEquals(1, fresh.requestCount());
+        assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
+        assertEquals(0, cached.requestCount());
         assertFalse(agent.analyze(input(), 1, date, false).cacheHit());
         assertFalse(agent.analyze(input(), 1, date.plusDays(1), false).cacheHit());
         assertEquals(3, client.calls.get());
@@ -42,7 +63,12 @@ class ReviewRiskAgentTest {
 
         assertTrue(result.fallbackApplied());
         assertEquals(FallbackReason.SCHEMA_INVALID, result.fallbackReason());
+        assertEquals(3, result.requestCount());
         assertEquals(List.of("fake/primary", "fake/primary", "fake/fallback"), client.models);
+        assertFalse(client.systemPrompts.get(0).contains("修正要求"));
+        assertTrue(client.systemPrompts.get(1).contains("ReviewRisk Schema"));
+        assertTrue(client.systemPrompts.get(1).contains("SHAPE_INVALID"));
+        assertTrue(client.systemPrompts.get(2).contains("ReviewRisk Schema"));
     }
 
     @Test
@@ -129,6 +155,7 @@ class ReviewRiskAgentTest {
         private final List<Object> outcomes;
         private final AtomicInteger calls = new AtomicInteger();
         private final List<String> models = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
 
         private FakeClient(Object... outcomes) {
             this.outcomes = List.of(outcomes);
@@ -138,6 +165,7 @@ class ReviewRiskAgentTest {
         public AiClientResponse complete(AiPromptRequest request) {
             int index = calls.getAndIncrement();
             models.add(request.model());
+            systemPrompts.add(request.systemPrompt());
             Object outcome = outcomes.get(Math.min(index, outcomes.size() - 1));
             if (outcome instanceof RuntimeException exception) throw exception;
             return new AiClientResponse((String) outcome, request.model(), 100, 30);

@@ -127,6 +127,9 @@ public class ReviewRiskService {
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(null),
+                null,
+                null,
+                0,
                 latestAnalyzedAt == null ? null : latestAnalyzedAt.atZone(API_ZONE).toOffsetDateTime());
     }
 

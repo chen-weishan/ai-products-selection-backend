@@ -12,9 +12,10 @@ import com.example.ssds.ai.budget.TrackBSourcingBudget;
 import com.example.ssds.ai.resilience.AiRateLimitException;
 import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
 import com.example.ssds.ai.model.sourcing.*;
-import com.example.ssds.ai.prompt.SourcingScoutPromptFactory;
-import com.example.ssds.ai.schema.SourcingScoutResponseParser;
+import com.example.ssds.ai.prompt.sourcing.SourcingScoutPromptFactory;
+import com.example.ssds.ai.schema.sourcing.SourcingScoutResponseParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -46,8 +47,19 @@ class SourcingScoutAgentTest {
                 3,
                 millis -> {});
 
-        assertFalse(agent.scout(new SourcingScoutInput("熟凍帝王蟹", 10L, "水產"), false).cacheHit());
-        assertTrue(agent.scout(new SourcingScoutInput(" 熟凍  帝王蟹", 10L, "水產"), false).cacheHit());
+        SourcingScoutResult fresh =
+                agent.scout(new SourcingScoutInput("熟凍帝王蟹", 10L, "水產"), false);
+        SourcingScoutResult cached =
+                agent.scout(new SourcingScoutInput(" 熟凍  帝王蟹", 10L, "水產"), false);
+
+        assertFalse(fresh.cacheHit());
+        assertEquals(10, fresh.promptTokens());
+        assertEquals(5, fresh.completionTokens());
+        assertEquals(1, fresh.requestCount());
+        assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
+        assertEquals(0, cached.requestCount());
         verify(client, times(1)).complete(anyString(), anyString());
     }
 
@@ -209,6 +221,75 @@ class SourcingScoutAgentTest {
         assertEquals(0, sleeps.get());
         verify(client, times(1)).complete(eq("fake/primary"), anyString());
         verify(budget).acquire(false);
+    }
+
+    @Test
+    void schemaFailureRetriesPrimaryThenFallbackInContractOrder() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        when(client.complete(anyString(), anyString())).thenReturn(new ScoutClientResponse(
+                "{\"unexpected\":true}", "fake/model", 10, 5, true, true));
+        List<Long> delays = new ArrayList<>();
+        SourcingScoutAgent agent = new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                "fake/primary",
+                "fake/fallback,fake/third",
+                3,
+                3,
+                delays::add);
+
+        assertThrows(IllegalStateException.class, () -> agent.scout(
+                new SourcingScoutInput("巧克力", 10L, "零食"), true));
+
+        ArgumentCaptor<String> models = ArgumentCaptor.forClass(String.class);
+        verify(client, times(3)).complete(models.capture(), anyString());
+        assertEquals(List.of("fake/primary", "fake/primary", "fake/fallback"), models.getAllValues());
+        assertEquals(List.of(2_000L), delays);
+        var budgetOrder = inOrder(budget);
+        budgetOrder.verify(budget).acquire(false);
+        budgetOrder.verify(budget, times(2)).acquire(true);
+    }
+
+    @Test
+    void rateLimitUsesThreeBackoffsBeforeSwitchingModel() {
+        ObjectMapper mapper = new ObjectMapper();
+        MistralSourcingClient client = mock(MistralSourcingClient.class);
+        TrackBSourcingBudget budget = mock(TrackBSourcingBudget.class);
+        when(client.complete(anyString(), anyString()))
+                .thenThrow(new AiRateLimitException("limited", null))
+                .thenThrow(new AiRateLimitException("limited", null))
+                .thenThrow(new AiRateLimitException("limited", null))
+                .thenReturn(new ScoutClientResponse(
+                        """
+                        {"report":"搜尋資料顯示此關鍵字具有可持續觀察的市場訊號與風險變化。",
+                         "opportunitySignals":["搜尋熱度可供觀察"],
+                         "riskSignals":["來源資訊仍有限"]}
+                        """,
+                        "fake/primary", 10, 5, true, true));
+        List<Long> delays = new ArrayList<>();
+        SourcingScoutAgent agent = new SourcingScoutAgent(
+                client,
+                new SourcingScoutPromptFactory(mapper),
+                new SourcingScoutResponseParser(mapper),
+                mapper,
+                budget,
+                "fake/primary",
+                "fake/fallback",
+                3,
+                3,
+                delays::add);
+
+        SourcingScoutResult result = agent.scout(
+                new SourcingScoutInput("巧克力", 10L, "零食"), true);
+
+        assertEquals(4, result.requestCount());
+        assertEquals(List.of(1_000L, 2_000L, 4_000L), delays);
+        verify(client, times(4)).complete(eq("fake/primary"), anyString());
     }
 
     @Test

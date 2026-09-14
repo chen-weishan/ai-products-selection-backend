@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.model.trend.TrendInterpreterInput;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
 import com.example.ssds.api.aitask.AiTaskService;
 import com.example.ssds.core.domain.*;
 import com.example.ssds.infra.entity.*;
@@ -59,7 +60,7 @@ class TrendInterpretationJobTest {
                 List.of(new TrendInterpreterInput.AllowedOutput(HeatStage.RISING, 4, 56)));
         TrendInterpretation previous = TrendInterpretation.builder()
                 .heatStage(HeatStage.RISING)
-                .promptVersion("trend-v2")
+                .promptVersion(TrendInterpreterPromptFactory.PROMPT_VERSION)
                 .inputSnapshot(mapper.writeValueAsString(previousInput))
                 .build();
         when(keywordRepository.findByEnabledTrue()).thenReturn(List.of(keyword));
@@ -96,7 +97,7 @@ class TrendInterpretationJobTest {
                 List.of(new TrendInterpreterInput.AllowedOutput(HeatStage.PLATEAU, 2, 42)));
         TrendInterpretation previous = TrendInterpretation.builder()
                 .heatStage(HeatStage.PLATEAU)
-                .promptVersion("trend-v2")
+                .promptVersion(TrendInterpreterPromptFactory.PROMPT_VERSION)
                 .inputSnapshot(mapper.writeValueAsString(previousInput))
                 .build();
         when(keywordRepository.findByEnabledTrue()).thenReturn(List.of(keyword));

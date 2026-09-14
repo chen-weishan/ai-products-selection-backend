@@ -7,9 +7,10 @@ import com.example.ssds.ai.access.tracka.AiPromptRequest;
 import com.example.ssds.ai.access.tracka.TrackAAiClient;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.trend.*;
-import com.example.ssds.ai.prompt.TrendInterpreterPromptFactory;
+import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.*;
+import com.example.ssds.ai.schema.trend.TrendInterpreterResponseParser;
+import com.example.ssds.ai.schema.trend.TrendInterpreterResponseParserTest;
 import com.example.ssds.core.domain.HeatStage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
@@ -28,6 +29,8 @@ class TrendInterpreterAgentTest {
 
         assertFalse(first.cacheHit());
         assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
         assertEquals(0, cached.requestCount());
         assertEquals(1, client.calls.get());
     }
@@ -42,6 +45,9 @@ class TrendInterpreterAgentTest {
 
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
+        assertFalse(client.systemPrompts.get(0).contains("修正要求"));
+        assertTrue(client.systemPrompts.get(1).contains("TrendInterpreter Schema"));
+        assertTrue(client.systemPrompts.get(1).contains("SHAPE_INVALID"));
         assertEquals(List.of("fake/primary", "fake/primary"), client.models);
         assertEquals(List.of(false, true), client.retryAttempts);
     }
@@ -92,6 +98,7 @@ class TrendInterpreterAgentTest {
         private final AtomicInteger calls = new AtomicInteger();
         private final List<String> models = new ArrayList<>();
         private final List<Boolean> retryAttempts = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
 
         private FakeClient(Object... outcomes) {
             this.outcomes = List.of(outcomes);
@@ -102,6 +109,7 @@ class TrendInterpreterAgentTest {
             int index = calls.getAndIncrement();
             models.add(request.model());
             retryAttempts.add(request.retryAttempt());
+            systemPrompts.add(request.systemPrompt());
             Object outcome = outcomes.get(Math.min(index, outcomes.size() - 1));
             if (outcome instanceof RuntimeException exception) throw exception;
             return new AiClientResponse((String) outcome, request.model(), 100, 20);

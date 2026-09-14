@@ -24,6 +24,9 @@ public record SceneClassificationResponse(
         String model,
         String modelAlias,
         String promptVersion,
+        Integer promptTokens,
+        Integer completionTokens,
+        int requestCount,
         OffsetDateTime classifiedAt
 ) {
     private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
@@ -46,6 +49,9 @@ public record SceneClassificationResponse(
                 result.model(),
                 "MODEL_CLASSIFY",
                 result.promptVersion(),
+                result.promptTokens(),
+                result.completionTokens(),
+                result.requestCount(),
                 toApiTime(log.getCreatedAt()));
     }
 
@@ -65,6 +71,9 @@ public record SceneClassificationResponse(
                 log.getModel(),
                 "MODEL_CLASSIFY",
                 log.getPromptVersion(),
+                null,
+                null,
+                0,
                 toApiTime(log.getCreatedAt()));
     }
 

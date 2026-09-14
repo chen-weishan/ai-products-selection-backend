@@ -7,12 +7,17 @@ import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.policy.ExternalLlmDisabledException;
 import com.example.ssds.ai.policy.OutboundDataPolicyException;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.resilience.RetryExecutionState;
+import com.example.ssds.ai.resilience.RetrySleeper;
+import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.recommendation.*;
-import com.example.ssds.ai.prompt.RecommendationPromptFactory;
+import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.*;
+import com.example.ssds.ai.schema.AiSchemaValidationException;
+import com.example.ssds.ai.schema.recommendation.RecommendationResponseParser;
+import com.example.ssds.ai.schema.recommendation.RecommendationSchema;
 import com.example.ssds.core.domain.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -83,7 +88,7 @@ public class RecommendationAgent {
         this.promptFactory = promptFactory;
         this.parser = parser;
         this.objectMapper = objectMapper;
-        this.models = parseModels(primaryModel, fallbackModels);
+        this.models = new MistralModelCatalog.ModelChain(primaryModel, fallbackModels).models();
         this.retryMax = Math.max(0, retryMax);
         this.retrySleeper = retrySleeper;
         this.cache = Caffeine.newBuilder()
@@ -113,12 +118,9 @@ public class RecommendationAgent {
     }
 
     private RecommendationResult recommendWithRetry(RecommendationInput input) {
-        int modelIndex = 0;
-        int rateLimitRetries = 0;
-        int schemaRetries = 0;
-        int requestCount = 0;
+        RetryExecutionState retry = new RetryExecutionState(models, retryMax);
         while (true) {
-            String model = models.get(modelIndex);
+            String model = retry.model();
             try {
                 log.info(
                         "Recommendation request: productId={}, modelAlias=MODEL_SHORT_GEN, model={}, promptVersion={}",
@@ -126,11 +128,12 @@ public class RecommendationAgent {
                 AiPromptRequest request = new AiPromptRequest(
                         AiTaskType.RECOMMENDATION,
                         model,
-                        promptFactory.systemPrompt(),
+                        promptFactory.systemPrompt()
+                                + (retry.retryInstruction() == null ? "" : "\n\n" + retry.retryInstruction()),
                         promptFactory.userPrompt(input),
                         RecommendationSchema.create(objectMapper),
-                        requestCount > 0);
-                requestCount++;
+                        retry.isRetryAttempt());
+                retry.recordRequest();
                 AiClientResponse response = router.route(request);
                 RecommendationOutput output = parser.parse(response.content(), input);
                 return new RecommendationResult(
@@ -142,68 +145,52 @@ public class RecommendationAgent {
                         RecommendationPromptFactory.PROMPT_VERSION,
                         response.promptTokens(),
                         response.completionTokens(),
-                        requestCount);
+                        retry.requestCount());
             } catch (AiSchemaValidationException exception) {
                 log.warn(
                         "Recommendation schema validation failed: productId={}, model={}, reason={}",
-                        input.productId(), model, safeLogMessage(exception.getMessage()));
-                if (schemaRetries == 0) {
-                    schemaRetries++;
+                        input.productId(), model, SafeLogMessage.sanitize(exception.getMessage()));
+                retry.retryInstruction(promptFactory.retryInstruction(validationCode(exception)));
+                if (retry.beginSchemaRetry()) {
                     if (pause(2_000L, input.productId(), model)) continue;
                 }
-                if (schemaRetries == 1 && hasNextModel(modelIndex)) {
-                    schemaRetries++;
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(input, FallbackReason.SCHEMA_INVALID, model, requestCount);
+                if (retry.moveToSchemaFallback()) continue;
+                return fallback(input, FallbackReason.SCHEMA_INVALID, model, retry.requestCount());
             } catch (AiRateLimitException exception) {
-                if (rateLimitRetries < retryMax) {
-                    long backoffMillis = 1_000L << Math.min(rateLimitRetries, 10);
-                    rateLimitRetries++;
+                OptionalLong delay = retry.nextRateLimitDelay();
+                if (delay.isPresent()) {
+                    long backoffMillis = delay.getAsLong();
                     log.warn(
                             "Recommendation rate limited; retrying same model: productId={}, model={}, retry={}/{}, backoffMs={}",
-                            input.productId(), model, rateLimitRetries, retryMax, backoffMillis);
+                            input.productId(), model, retry.rateLimitRetryCount(), retry.rateLimitRetryMax(), backoffMillis);
                     if (pause(backoffMillis, input.productId(), model)) continue;
                 }
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (AiModelNotFoundException exception) {
                 log.warn("Recommendation model unavailable; switching fallback: productId={}, model={}",
                         input.productId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (ResourceAccessException exception) {
                 log.warn(
                         "Recommendation timed out; switching fallback: productId={}, model={}",
                         input.productId(), model);
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             } catch (ExternalLlmDisabledException | OutboundDataPolicyException exception) {
                 log.warn("Recommendation external request blocked by policy: productId={}, reason={}",
-                        input.productId(), safeLogMessage(exception.getMessage()));
+                        input.productId(), SafeLogMessage.sanitize(exception.getMessage()));
                 return fallback(input, FallbackReason.AI_UNAVAILABLE, "policy-blocked",
-                        Math.max(0, requestCount - 1));
+                        Math.max(0, retry.requestCount() - 1));
             } catch (AiBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 log.warn(
                         "Recommendation request failed: productId={}, model={}, errorType={}",
                         input.productId(), model, exception.getClass().getSimpleName());
-                if (hasNextModel(modelIndex)) {
-                    modelIndex++;
-                    continue;
-                }
-                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, requestCount);
+                if (retry.moveToNextModel()) continue;
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             }
         }
     }
@@ -269,10 +256,6 @@ public class RecommendationAgent {
         return bonusSubtotal.divide(BigDecimal.valueOf(5), 0, RoundingMode.FLOOR).intValue();
     }
 
-    private boolean hasNextModel(int index) {
-        return index + 1 < models.size();
-    }
-
     private boolean pause(long millis, Long productId, String model) {
         try {
             retrySleeper.sleep(millis);
@@ -284,24 +267,23 @@ public class RecommendationAgent {
         }
     }
 
-    private static List<String> parseModels(String primary, String fallbacks) {
-        LinkedHashSet<String> configured = new LinkedHashSet<>();
-        addModel(configured, primary);
-        if (fallbacks != null) {
-            for (String model : fallbacks.split(",")) addModel(configured, model);
+    private static String validationCode(AiSchemaValidationException exception) {
+        String message = exception.getMessage();
+        if (message == null) return "SCHEMA_INVALID";
+        if (isShapeError(message)) return "SHAPE_INVALID";
+        if (message.contains("qty") || message.contains("allowedQuantities")
+                || message.contains("quantityText") || message.contains("REJECT")) {
+            return "QUANTITY_INVALID";
         }
-        if (configured.isEmpty()) throw new IllegalArgumentException("至少必須設定一個 Recommendation 模型");
-        return List.copyOf(configured);
+        if (message.contains("數字")) return "NUMBER_NOT_IN_INPUT";
+        if (message.contains("action")) return "ACTION_INVALID";
+        return "SCHEMA_INVALID";
     }
 
-    private static void addModel(LinkedHashSet<String> configured, String model) {
-        if (model != null && !model.isBlank()) configured.add(model.trim());
-    }
-
-    private static String safeLogMessage(String message) {
-        if (message == null) return "unavailable";
-        String sanitized = message.replace('\r', ' ').replace('\n', ' ');
-        return sanitized.length() <= 160 ? sanitized : sanitized.substring(0, 160);
+    private static boolean isShapeError(String message) {
+        return message.contains("根物件") || message.contains("根節點")
+                || message.contains("不得包含欄位") || message.contains("缺少欄位")
+                || message.contains("欄位必須");
     }
 
     private record CacheKey(
@@ -312,8 +294,4 @@ public class RecommendationAgent {
             BigDecimal penaltySubtotal,
             String promptVersion) {}
 
-    @FunctionalInterface
-    interface RetrySleeper {
-        void sleep(long millis) throws InterruptedException;
-    }
 }

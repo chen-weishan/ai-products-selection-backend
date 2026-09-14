@@ -51,6 +51,9 @@ class ScoreRecalculationServiceTest {
                 "model",
                 "MODEL_CLASSIFY",
                 "v3",
+                null,
+                null,
+                0,
                 null);
 
         List<ProductScore> result = new ScoreRecalculationService(scores, versions)

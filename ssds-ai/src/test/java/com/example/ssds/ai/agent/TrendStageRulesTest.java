@@ -3,7 +3,7 @@ package com.example.ssds.ai.agent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.example.ssds.ai.model.trend.*;
-import com.example.ssds.ai.schema.TrendInterpreterResponseParserTest;
+import com.example.ssds.ai.schema.trend.TrendInterpreterResponseParserTest;
 import com.example.ssds.core.domain.HeatStage;
 import java.math.BigDecimal;
 import java.util.List;

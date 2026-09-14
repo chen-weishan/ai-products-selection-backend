@@ -6,11 +6,14 @@ import com.example.ssds.ai.access.tracka.AiClientResponse;
 import com.example.ssds.ai.access.tracka.AiPromptRequest;
 import com.example.ssds.ai.access.tracka.TrackAAiClient;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
+import com.example.ssds.ai.resilience.RetrySleeper;
+import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.scene.*;
-import com.example.ssds.ai.prompt.SceneClassifierPromptFactory;
+import com.example.ssds.ai.prompt.scene.SceneClassifierPromptFactory;
 import com.example.ssds.ai.access.tracka.AiAccessRouter;
-import com.example.ssds.ai.schema.SceneClassifierResponseParser;
+import com.example.ssds.ai.schema.scene.SceneClassifierResponseParser;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.HeatStage;
@@ -41,6 +44,9 @@ class SceneClassifierAgentTest {
         assertEquals(SceneCode.VIRAL, result.output().sceneType());
         assertEquals(new BigDecimal("0.82"), result.output().confidence());
         assertFalse(result.fallbackApplied());
+        assertEquals(100, result.promptTokens());
+        assertEquals(30, result.completionTokens());
+        assertEquals(1, result.requestCount());
         assertEquals(1, fake.calls.get());
     }
 
@@ -82,6 +88,7 @@ class SceneClassifierAgentTest {
 
         assertEquals(SceneCode.REPLENISHMENT, first.output().sceneType());
         assertEquals(FallbackReason.SCHEMA_INVALID, first.fallbackReason());
+        assertEquals(3, first.requestCount());
         assertFalse(second.cacheHit());
         assertEquals(6, fake.calls.get());
     }
@@ -100,6 +107,9 @@ class SceneClassifierAgentTest {
 
         assertFalse(result.fallbackApplied());
         assertEquals(List.of("fake/primary", "fake/primary"), fake.models);
+        assertFalse(fake.systemPrompts.get(0).contains("修正要求"));
+        assertTrue(fake.systemPrompts.get(1).contains("SceneClassifier Schema"));
+        assertTrue(fake.systemPrompts.get(1).contains("SHAPE_INVALID"));
     }
 
     @Test
@@ -148,10 +158,13 @@ class SceneClassifierAgentTest {
     @Test
     void rateLimitStopsAfterThreeRetries() {
         CountingFakeClient fake = new CountingFakeClient(new AiRateLimitException("rate limited", null));
+        List<Long> delays = new ArrayList<>();
 
-        SceneClassificationResult result = agent(fake).classify(input(101L, HeatBucket.MEDIUM), false);
+        SceneClassificationResult result = agent(fake, delays::add)
+                .classify(input(101L, HeatBucket.MEDIUM), false);
 
         assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
+        assertEquals(List.of(1_000L, 2_000L, 4_000L), delays);
         assertEquals(
                 List.of(
                         "fake/primary", "fake/primary", "fake/primary", "fake/primary",
@@ -172,8 +185,16 @@ class SceneClassifierAgentTest {
                 """);
         SceneClassifierAgent agent = agent(fake);
 
-        assertFalse(agent.classify(input(101L, HeatStage.PLATEAU, "0.034", "MID_AUTUMN"), false).cacheHit());
-        assertTrue(agent.classify(input(101L, HeatStage.PLATEAU, "0.039", "MID_AUTUMN"), false).cacheHit());
+        SceneClassificationResult fresh =
+                agent.classify(input(101L, HeatStage.PLATEAU, "0.034", "MID_AUTUMN"), false);
+        SceneClassificationResult cached =
+                agent.classify(input(101L, HeatStage.PLATEAU, "0.039", "MID_AUTUMN"), false);
+        assertFalse(fresh.cacheHit());
+        assertEquals(1, fresh.requestCount());
+        assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
+        assertEquals(0, cached.requestCount());
         assertFalse(agent.classify(input(101L, HeatStage.PLATEAU, "0.104", "MID_AUTUMN"), false).cacheHit());
         assertFalse(agent.classify(input(101L, HeatStage.RISING, "0.104", "MID_AUTUMN"), false).cacheHit());
         assertFalse(agent.classify(input(101L, HeatStage.RISING, "0.104", "LUNAR_NEW_YEAR"), false).cacheHit());
@@ -218,7 +239,38 @@ class SceneClassifierAgentTest {
         assertEquals(0, fake.calls.get());
     }
 
+    @Test
+    void policyBlockedRequestDoesNotCountAsExternalRequest() {
+        ObjectMapper mapper = new ObjectMapper();
+        CountingFakeClient fake = new CountingFakeClient("{}");
+        AiAccessRouter router = new AiAccessRouter(
+                fake,
+                GlobalAiRateLimiter.unrestrictedForTests(),
+                new ExternalLlmPolicy(false, mapper));
+        SceneClassifierAgent agent = new SceneClassifierAgent(
+                router,
+                new SceneClassifierPromptFactory(mapper),
+                new SceneClassifierResponseParser(mapper),
+                mapper,
+                "fake/primary",
+                "fake/fallback",
+                3,
+                7,
+                millis -> {});
+
+        SceneClassificationResult result = agent.classify(input(101L, HeatBucket.MEDIUM), true);
+
+        assertTrue(result.fallbackApplied());
+        assertEquals(0, result.requestCount());
+        assertEquals("policy-blocked", result.model());
+        assertEquals(0, fake.calls.get());
+    }
+
     private static SceneClassifierAgent agent(TrackAAiClient client) {
+        return agent(client, millis -> {});
+    }
+
+    private static SceneClassifierAgent agent(TrackAAiClient client, RetrySleeper sleeper) {
         ObjectMapper mapper = new ObjectMapper();
         return new SceneClassifierAgent(
                 new AiAccessRouter(client),
@@ -229,7 +281,7 @@ class SceneClassifierAgentTest {
                 "fake/fallback,fake/third",
                 3,
                 7,
-                millis -> {});
+                sleeper);
     }
 
     private static SceneClassifierInput input(Long productId, HeatBucket bucket) {
@@ -266,6 +318,7 @@ class SceneClassifierAgentTest {
         private final List<Object> outcomes;
         private final AtomicInteger calls = new AtomicInteger();
         private final List<String> models = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
 
         private CountingFakeClient(Object... outcomes) {
             this.outcomes = List.of(outcomes);
@@ -275,6 +328,7 @@ class SceneClassifierAgentTest {
         public AiClientResponse complete(AiPromptRequest request) {
             int call = calls.getAndIncrement();
             models.add(request.model());
+            systemPrompts.add(request.systemPrompt());
             Object outcome = outcomes.get(Math.min(call, outcomes.size() - 1));
             if (outcome instanceof RuntimeException exception) throw exception;
             return new AiClientResponse((String) outcome, request.model(), 100, 30);
