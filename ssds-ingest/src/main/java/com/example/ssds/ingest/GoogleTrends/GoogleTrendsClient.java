@@ -30,7 +30,9 @@ class GoogleTrendsClient {
     private final RestClient restClient;
     private final GoogleTrendsIngestProperties properties;
 
-    GoogleTrendsClient(RestClient googleTrendsRestClient, GoogleTrendsIngestProperties properties) {
+    GoogleTrendsClient(
+            @org.springframework.beans.factory.annotation.Qualifier("googleTrendsRestClient") RestClient googleTrendsRestClient,
+            GoogleTrendsIngestProperties properties) {
         this.restClient = googleTrendsRestClient;
         this.properties = properties;
     }

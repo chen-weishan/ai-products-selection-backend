@@ -33,7 +33,9 @@ class ThreadsSearchClient {
     private final RestClient restClient;
     private final ThreadsIngestProperties properties;
 
-    ThreadsSearchClient(RestClient threadsRestClient, ThreadsIngestProperties properties) {
+    ThreadsSearchClient(
+            @org.springframework.beans.factory.annotation.Qualifier("threadsRestClient") RestClient threadsRestClient,
+            ThreadsIngestProperties properties) {
         this.restClient = threadsRestClient;
         this.properties = properties;
     }

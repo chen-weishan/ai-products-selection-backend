@@ -33,7 +33,9 @@ class InstagramHashtagClient {
     private final RestClient restClient;
     private final InstagramIngestProperties properties;
 
-    InstagramHashtagClient(RestClient instagramRestClient, InstagramIngestProperties properties) {
+    InstagramHashtagClient(
+            @org.springframework.beans.factory.annotation.Qualifier("instagramRestClient") RestClient instagramRestClient,
+            InstagramIngestProperties properties) {
         this.restClient = instagramRestClient;
         this.properties = properties;
     }
