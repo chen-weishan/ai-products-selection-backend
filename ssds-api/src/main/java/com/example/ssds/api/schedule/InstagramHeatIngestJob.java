@@ -65,7 +65,7 @@ public class InstagramHeatIngestJob {
      * 用量。品類數量或 resultsLimit 若之後明顯增加，要留意 Apify 帳號的
      * 用量額度／預算（見 CONTEXT.md §7）。
      */
-    @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
+    // @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
     @Transactional
     public void run() {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.INSTAGRAM).orElse(null);

@@ -1,6 +1,7 @@
 package com.example.ssds.ingest.Threads;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
@@ -9,18 +10,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /**
- * Apify 第三方 actor「easyapi/threads-search-scraper」的包裝
- * ({@code POST /actors/easyapi~threads-search-scraper/run-sync-get-dataset-items?token=...}，
+ * Apify 第三方 actor「futurizerush/meta-threads-scraper-zh-tw」的包裝
+ * ({@code POST /actors/futurizerush~meta-threads-scraper-zh-tw/run-sync-get-dataset-items?token=...}，
  * actor 名稱中的 {@code /} 在 URL 上要改寫成 {@code ~}，見 Apify API 慣例）。
  *
- * <p>熱度值採「實際搜到的貼文篇數」，理由同 Instagram（見
- * InstagramHashtagClient 類別註解）：比互動數更不容易查無/固定為 0，
- * 篇數本身仍帶有相對熱度訊號。
+ * <p>2026-09-11 改版：原本串接的 easyapi/threads-search-scraper 改為此 actor。
+ * 輸入格式跟舊 actor 不同：需多帶 {@code mode=search}，排序欄位改名為
+ * {@code search_filter}（值為 {@code top}/{@code recent}），篇數上限欄位改名為
+ * {@code max_posts}。
  *
- * <p><b>此 actor 的確切回應欄位尚未經過真實 token 實測確認。</b>目前只取
- * 陣列長度、不解析個別欄位，所以欄位命名對不對不影響運作；但如果之後
- * 想解析互動數等細節，需要先用真實 token 實測一次確認 schema（比照
- * Instagram 2026-09-07 那次的修正模式）。
+ * <p>熱度值改採「讚+留言+轉發+引用+分享」加總（舊版是單純算搜到的篇數）。
+ * 新 actor 的 output schema 有完整互動數欄位，比篇數更能反映真實熱度，
+ * 且已排除轉發／回覆列（見 {@code record_type}／{@code is_repost}／
+ * {@code is_reply}），避免這些非原創內容灌水。完整欄位表見
+ * {@link Post} 的說明。
  */
 @Component
 class ThreadsSearchClient {
@@ -35,18 +38,19 @@ class ThreadsSearchClient {
         this.properties = properties;
     }
 
-    /** 查詢關鍵字最近的貼文，回傳實際抓回的篇數。查無資料回傳 null。 */
-    Long fetchPostCount(String keyword) {
+    /** 查詢關鍵字最近的貼文，回傳互動熱度加總（讚+留言+轉發+引用+分享）。查無資料回傳 null。 */
+    Long fetchEngagementHeat(String keyword) {
         String json = restClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/actors/easyapi~threads-search-scraper/run-sync-get-dataset-items")
+                        .path("/actors/futurizerush~meta-threads-scraper-zh-tw/run-sync-get-dataset-items")
                         .queryParam("token", properties.apifyToken())
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
+                        "mode", "search",
                         "keywords", List.of(keyword),
-                        "sortBy", "top",
-                        "maxPostsPerKeyword", properties.resultsLimitOrDefault()))
+                        "search_filter", "top",
+                        "max_posts", properties.resultsLimitOrDefault()))
                 .retrieve()
                 .body(String.class);
 
@@ -54,7 +58,13 @@ class ThreadsSearchClient {
         if (posts == null || posts.isEmpty()) {
             return null;
         }
-        return (long) posts.size();
+
+        // record_type 會混雜原創貼文／轉發／回覆，只算原創貼文，避免熱度被灌水。
+        long heat = posts.stream()
+                .filter(p -> !Boolean.TRUE.equals(p.isRepost()) && !Boolean.TRUE.equals(p.isReply()))
+                .mapToLong(Post::engagementTotal)
+                .sum();
+        return heat == 0 ? null : heat;
     }
 
     private static List<Post> readValue(String json) {
@@ -66,10 +76,60 @@ class ThreadsSearchClient {
                     json,
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Post.class));
         } catch (Exception e) {
-            throw new IllegalStateException("Apify threads-search-scraper 回應解析失敗", e);
+            throw new IllegalStateException("Apify meta-threads-scraper-zh-tw 回應解析失敗", e);
         }
     }
 
+    /**
+     * 對應官方 output schema（節錄與熱度計算相關的欄位；完整欄位表見
+     * https://apify.com/futurizerush/meta-threads-scraper-zh-tw/output-schema）：
+     *
+     * <pre>
+     * record_type          類型（post／repost／reply 等）
+     * post_code            貼文代碼
+     * username             用戶名稱
+     * user_id              帳號 ID
+     * display_name         顯示名稱
+     * text_content         內容
+     * created_at           發布時間
+     * created_at_display   日期（UTC）
+     * like_count           按讚
+     * reply_count          留言數
+     * repost_count         轉發
+     * quote_count          引用
+     * share_count          分享
+     * view_count           觀看
+     * view_count_status    觀看狀態
+     * is_reply             是留言
+     * is_quote_post        是引用
+     * is_repost            是轉發
+     * followers_count      作者追蹤者數
+     * is_verified          作者已驗證
+     * post_url             網址
+     * search_keyword       關鍵字
+     * search_filter        排序
+     * </pre>
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record Post() {}
+    private record Post(
+            @JsonProperty("record_type") String recordType,
+            @JsonProperty("text_content") String textContent,
+            @JsonProperty("like_count") Long likeCount,
+            @JsonProperty("reply_count") Long replyCount,
+            @JsonProperty("repost_count") Long repostCount,
+            @JsonProperty("quote_count") Long quoteCount,
+            @JsonProperty("share_count") Long shareCount,
+            @JsonProperty("view_count") Long viewCount,
+            @JsonProperty("is_reply") Boolean isReply,
+            @JsonProperty("is_repost") Boolean isRepost,
+            @JsonProperty("is_quote_post") Boolean isQuotePost) {
+
+        long engagementTotal() {
+            return nz(likeCount) + nz(replyCount) + nz(repostCount) + nz(quoteCount) + nz(shareCount);
+        }
+
+        private static long nz(Long v) {
+            return v == null ? 0L : v;
+        }
+    }
 }

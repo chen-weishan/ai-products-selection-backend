@@ -44,12 +44,12 @@ public class ThreadsHeatSourceAdapter implements HeatSourceAdapter {
         List<HeatDataPoint> results = new ArrayList<>();
         for (String keyword : targets) {
             try {
-                Long postCount = client.fetchPostCount(keyword);
-                if (postCount == null) {
+                Long engagementHeat = client.fetchEngagementHeat(keyword);
+                if (engagementHeat == null) {
                     log.warn("Threads 查無任何貼文，跳過：{}", keyword);
                     continue;
                 }
-                results.add(new HeatDataPoint(keyword, BigDecimal.valueOf(postCount)));
+                results.add(new HeatDataPoint(keyword, BigDecimal.valueOf(engagementHeat)));
             } catch (Exception e) {
                 log.warn("Threads 關鍵字熱度採集失敗，跳過：{}", keyword, e);
             }
