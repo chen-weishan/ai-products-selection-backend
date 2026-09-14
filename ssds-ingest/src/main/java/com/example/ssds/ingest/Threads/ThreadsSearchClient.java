@@ -3,6 +3,7 @@ package com.example.ssds.ingest.Threads;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -40,17 +41,21 @@ class ThreadsSearchClient {
 
     /** 查詢關鍵字最近的貼文，回傳互動熱度加總（讚+留言+轉發+引用+分享）。查無資料回傳 null。 */
     Long fetchEngagementHeat(String keyword) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("mode", "search");
+        requestBody.put("keywords", List.of(keyword));
+        requestBody.put("search_filter", properties.searchFilterOrDefault());
+        requestBody.put("max_posts", properties.resultsLimitOrDefault());
+        requestBody.put("start_date", properties.startDateParam());
+        properties.endDateParam().ifPresent(endDate -> requestBody.put("end_date", endDate));
+
         String json = restClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path("/actors/futurizerush~meta-threads-scraper-zh-tw/run-sync-get-dataset-items")
                         .queryParam("token", properties.apifyToken())
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of(
-                        "mode", "search",
-                        "keywords", List.of(keyword),
-                        "search_filter", "top",
-                        "max_posts", properties.resultsLimitOrDefault()))
+                .body(requestBody)
                 .retrieve()
                 .body(String.class);
 
@@ -59,12 +64,52 @@ class ThreadsSearchClient {
             return null;
         }
 
-        // record_type 會混雜原創貼文／轉發／回覆，只算原創貼文，避免熱度被灌水。
+        // 2026-09-14 發現：search_filter=recent 時日期雖然準（只落在很近的範圍），
+        // 但常常直接搜不到任何結果（懷疑是 Threads 平台「最新」搜尋索引視窗本來
+        // 就很短，不是 actor 或參數的問題）；search_filter=top 資料量足夠，但
+        // actor 的 start_date/end_date 對 top 排序似乎沒有確實生效，日期會跨到
+        // 數週前。兩者取捨後決定：固定用 top 拿資料量，日期窗口自己用
+        // created_at 在這裡精準過濾，不依賴 actor 端的日期參數是否生效。
+        //
+        // record_type 會混雜原創貼文／轉發／回覆，只算原創貼文；另外 actor
+        // 回傳的「關鍵字搜尋結果」不保證真的包含關鍵字，所以也自己比對一次。
         long heat = posts.stream()
                 .filter(p -> !Boolean.TRUE.equals(p.isRepost()) && !Boolean.TRUE.equals(p.isReply()))
+                .filter(p -> containsKeyword(p.textContent(), keyword))
+                .filter(p -> withinLookbackWindow(p.createdAt()))
                 .mapToLong(Post::engagementTotal)
                 .sum();
         return heat == 0 ? null : heat;
+    }
+
+    private static boolean containsKeyword(String textContent, String keyword) {
+        if (textContent == null || keyword == null) {
+            return false;
+        }
+        return textContent.toLowerCase(java.util.Locale.ROOT).contains(keyword.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * created_at 是 UTC 時間字串（例如 {@code 2026-09-11T02:08:20.123Z}），
+     * 只取日期部分跟 lookbackDays／endLookbackDays 算出的窗口比較。
+     * 窗口同樣以 UTC 日曆日計算，跟 created_at 的時區一致，避免時區位移
+     * 讓邊界日期算錯（代價是跟台北時間的「今天」會差最多 8 小時的模糊帶，
+     * 現階段抓天數為單位、不追求到小時精度，可接受）。
+     */
+    private boolean withinLookbackWindow(String createdAt) {
+        if (createdAt == null || createdAt.length() < 10) {
+            return false;
+        }
+        java.time.LocalDate postDate;
+        try {
+            postDate = java.time.LocalDate.parse(createdAt.substring(0, 10));
+        } catch (Exception e) {
+            return false;
+        }
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        java.time.LocalDate windowStart = today.minusDays(properties.lookbackDaysOrDefault());
+        java.time.LocalDate windowEnd = today.minusDays(properties.endLookbackDaysOrDefault());
+        return !postDate.isBefore(windowStart) && !postDate.isAfter(windowEnd);
     }
 
     private static List<Post> readValue(String json) {
@@ -122,7 +167,8 @@ class ThreadsSearchClient {
             @JsonProperty("view_count") Long viewCount,
             @JsonProperty("is_reply") Boolean isReply,
             @JsonProperty("is_repost") Boolean isRepost,
-            @JsonProperty("is_quote_post") Boolean isQuotePost) {
+            @JsonProperty("is_quote_post") Boolean isQuotePost,
+            @JsonProperty("created_at") String createdAt) {
 
         long engagementTotal() {
             return nz(likeCount) + nz(replyCount) + nz(repostCount) + nz(quoteCount) + nz(shareCount);
