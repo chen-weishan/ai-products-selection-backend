@@ -66,8 +66,12 @@ public class ProductInsightService {
                 latestReviewDate(reviews),
                 forceRefresh);
         Instant generatedAt = Instant.now();
-        if (!result.fallbackApplied() && !result.output().sellingPoints().isEmpty()) {
-            persist(product, reviews.size(), result, generatedAt);
+        if (!result.fallbackApplied()) {
+            if (result.output().hasSufficientEvidence()) {
+                persist(product, reviews.size(), result, generatedAt);
+            } else {
+                demoteCurrent(product.getId());
+            }
         }
         return ProductInsightResponse.from(
                 productId,
@@ -182,8 +186,7 @@ public class ProductInsightService {
             int reviewCount,
             ProductInsightResult result,
             Instant generatedAt) {
-        insightRepository.demoteCurrent(product.getId(), InsightType.SELLING_POINT);
-        insightRepository.demoteCurrent(product.getId(), InsightType.RISK);
+        demoteCurrent(product.getId());
         insightRepository.flush();
         AiInsight selling = insight(
                 product,
@@ -206,6 +209,11 @@ public class ProductInsightService {
                 null,
                 null);
         insightRepository.saveAll(List.of(selling, risk));
+    }
+
+    private void demoteCurrent(Long productId) {
+        insightRepository.demoteCurrent(productId, InsightType.SELLING_POINT);
+        insightRepository.demoteCurrent(productId, InsightType.RISK);
     }
 
     private static AiInsight insight(

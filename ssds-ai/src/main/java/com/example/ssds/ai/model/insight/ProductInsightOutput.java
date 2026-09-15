@@ -9,4 +9,16 @@ public record ProductInsightOutput(
         sellingPoints = sellingPoints == null ? List.of() : List.copyOf(sellingPoints);
         risks = risks == null ? List.of() : List.copyOf(risks);
     }
+
+    public long supportedSellingPointCount() {
+        return sellingPoints.stream().filter(item -> item.supportCount() > 0).count();
+    }
+
+    public long supportedRiskCount() {
+        return risks.stream().filter(item -> item.supportCount() > 0).count();
+    }
+
+    public boolean hasSufficientEvidence() {
+        return supportedSellingPointCount() >= 2 && supportedRiskCount() >= 2;
+    }
 }

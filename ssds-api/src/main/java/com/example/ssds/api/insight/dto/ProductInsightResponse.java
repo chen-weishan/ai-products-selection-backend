@@ -2,6 +2,7 @@ package com.example.ssds.api.insight.dto;
 
 import com.example.ssds.ai.model.insight.ProductInsightResult;
 import com.example.ssds.ai.model.insight.ProductInsightRisk;
+import com.example.ssds.ai.model.insight.ProductInsightOutput;
 import com.example.ssds.ai.model.insight.SellingPoint;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -27,14 +28,14 @@ public record ProductInsightResponse(
             int sourceReviewCount,
             ProductInsightResult result,
             OffsetDateTime generatedAt) {
-        boolean completed = !result.fallbackApplied() && !result.output().sellingPoints().isEmpty();
+        boolean completed = !result.fallbackApplied() && result.output().hasSufficientEvidence();
         String message = result.fallbackApplied()
                 ? "賣點與風險分析未完成"
                 : completed
                         ? null
                         : sourceReviewCount == 0
                                 ? "賣點與風險分析未執行：無評論資料"
-                                : "賣點與風險分析未完成";
+                                : insufficientEvidenceMessage(result.output());
         return new ProductInsightResponse(
                 productId,
                 result.output().sellingPoints(),
@@ -50,5 +51,14 @@ public record ProductInsightResponse(
                 sourceReviewCount,
                 result.requestCount(),
                 generatedAt);
+    }
+
+    private static String insufficientEvidenceMessage(ProductInsightOutput output) {
+        boolean sellingPointInsufficient = output.supportedSellingPointCount() < 2;
+        boolean riskInsufficient = output.supportedRiskCount() < 2;
+        if (sellingPointInsufficient && riskInsufficient) {
+            return "賣點證據不足／風險證據不足";
+        }
+        return sellingPointInsufficient ? "賣點證據不足" : "風險證據不足";
     }
 }

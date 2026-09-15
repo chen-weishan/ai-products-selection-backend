@@ -27,6 +27,7 @@ import com.example.ssds.ai.model.sourcing.SourcingScoutOutput;
 import com.example.ssds.ai.model.sourcing.SourcingScoutResult;
 import com.example.ssds.ai.model.calibration.WeightCalibrationOutput;
 import com.example.ssds.ai.model.calibration.WeightCalibrationResult;
+import com.example.ssds.ai.prompt.insight.ProductInsightPromptFactory;
 import com.example.ssds.api.calibration.WeightCalibrationService;
 import com.example.ssds.api.calibration.dto.WeightCalibrationInterpretRequest;
 import com.example.ssds.api.aitask.AiTaskService;
@@ -55,6 +56,7 @@ import com.example.ssds.core.domain.WeightVersionStatus;
 import com.example.ssds.infra.entity.AiTask;
 import com.example.ssds.infra.entity.AiTaskItem;
 import com.example.ssds.infra.entity.AiBudgetUsageDaily;
+import com.example.ssds.infra.entity.AiInsight;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.CalibrationReport;
 import com.example.ssds.infra.entity.Category;
@@ -410,6 +412,81 @@ class AgentDatabaseIntegrationTest {
                                 .map(value -> value.getInsightType())
                                 .collect(java.util.stream.Collectors.toSet())),
                 () -> assertEquals(authorityBefore, scoringAndDecisionSnapshot()));
+    }
+
+    @Test
+    @DisplayName("Agent 3: insufficient evidence demotes prior current insights without storing placeholders")
+    void agent3InsufficientEvidenceUsesAllOrNothingPersistence() {
+        AuthorityFixture fixture = authorityFixture("a3-insuf");
+        productReviews.saveAndFlush(ProductReview.builder()
+                .product(fixture.product())
+                .source("integration-test")
+                .content("口味清爽，但外箱凹損")
+                .contentHash("agent3-insufficient-review-hash")
+                .reviewedAt(LocalDate.of(2026, 9, 2))
+                .build());
+        insights.saveAllAndFlush(List.of(
+                AiInsight.builder()
+                        .product(fixture.product())
+                        .insightType(InsightType.SELLING_POINT)
+                        .contentJson("{\"sellingPoints\":[]}")
+                        .model("previous-model")
+                        .modelAlias("MODEL_LONG_TEXT")
+                        .promptVersion(ProductInsightPromptFactory.PROMPT_VERSION)
+                        .current(true)
+                        .build(),
+                AiInsight.builder()
+                        .product(fixture.product())
+                        .insightType(InsightType.RISK)
+                        .contentJson("{\"risks\":[]}")
+                        .model("previous-model")
+                        .modelAlias("MODEL_LONG_TEXT")
+                        .promptVersion(ProductInsightPromptFactory.PROMPT_VERSION)
+                        .current(true)
+                        .build()));
+        when(productInsightAgent.analyze(any(), anyInt(), any(), eq(false))).thenReturn(
+                new ProductInsightResult(
+                        new ProductInsightOutput(
+                                List.of(
+                                        new SellingPoint("評論提到口味清爽", 1, "口味"),
+                                        new SellingPoint(
+                                                "資料不足：評論未提供足夠資訊判定其他賣點",
+                                                0,
+                                                "資料不足")),
+                                List.of(
+                                        new ProductInsightRisk(
+                                                "評論提到外箱凹損",
+                                                1,
+                                                InsightRiskType.SHIPPING_DAMAGE,
+                                                Severity.LOW,
+                                                false),
+                                        new ProductInsightRisk(
+                                                "資料不足：評論未提供足夠資訊判定其他風險",
+                                                0,
+                                                InsightRiskType.OTHER,
+                                                Severity.LOW,
+                                                false))),
+                        false, null, false, "insight-test-model",
+                        ProductInsightPromptFactory.PROMPT_VERSION, 20, 10, 1));
+
+        var response = productInsightService.analyze(fixture.product().getId(), false);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertAll(
+                () -> assertFalse(response.fallbackApplied()),
+                () -> assertFalse(response.analysisCompleted()),
+                () -> assertEquals("賣點證據不足／風險證據不足", response.statusMessage()),
+                () -> assertTrue(insights.findByProductIdAndCurrentTrue(
+                        fixture.product().getId()).isEmpty()),
+                () -> assertEquals(1, insights
+                        .findByProductIdAndInsightTypeOrderByGeneratedAtDesc(
+                                fixture.product().getId(), InsightType.SELLING_POINT)
+                        .size()),
+                () -> assertEquals(1, insights
+                        .findByProductIdAndInsightTypeOrderByGeneratedAtDesc(
+                                fixture.product().getId(), InsightType.RISK)
+                        .size()));
     }
 
     @Test

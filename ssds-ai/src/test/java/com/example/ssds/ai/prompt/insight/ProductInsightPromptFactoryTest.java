@@ -29,9 +29,17 @@ class ProductInsightPromptFactoryTest {
         assertFalse(userPrompt.contains("supplier"));
         assertTrue(systemPrompt.contains("不得搜尋網路或呼叫工具"));
         assertTrue(systemPrompt.contains("不得對特定品牌或供應商作出評價性斷言"));
-        assertEquals("product-insight-v4", ProductInsightPromptFactory.PROMPT_VERSION);
-        assertTrue(factory.retryInstruction("SUPPORT_INVALID").contains("SUPPORT_INVALID"));
-        assertTrue(factory.retryInstruction("SUPPORT_INVALID").contains("supportCount"));
-        assertTrue(factory.retryInstruction("PENALTY_MAPPING_INVALID").contains("countedInPenalty"));
+        assertTrue(systemPrompt.contains("資料不足：評論未提供足夠資訊判定主要賣點"));
+        assertTrue(systemPrompt.contains("資料不足：評論未提供足夠資訊判定其他賣點"));
+        assertTrue(systemPrompt.contains("資料不足：評論未提供足夠資訊判定主要風險"));
+        assertTrue(systemPrompt.contains("資料不足：評論未提供足夠資訊判定其他風險"));
+        assertTrue(systemPrompt.contains("penalties 只決定 countedInPenalty，不能當成評論證據"));
+        assertEquals("product-insight-v5", ProductInsightPromptFactory.PROMPT_VERSION);
+        String retryInstruction = factory.retryInstruction("SUPPORT_INVALID");
+        assertTrue(retryInstruction.contains("SUPPORT_INVALID"));
+        assertTrue(retryInstruction.contains("supportCount"));
+        assertTrue(retryInstruction.contains("countedInPenalty"));
+        assertTrue(retryInstruction.contains("主要賣點"));
+        assertTrue(retryInstruction.contains("其他風險"));
     }
 }

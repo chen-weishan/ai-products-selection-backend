@@ -31,6 +31,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class AiTaskWorkerTest {
     @ParameterizedTest
@@ -258,8 +259,9 @@ class AiTaskWorkerTest {
                 item.getErrorMessage().contains("請更新模型設定"));
     }
 
-    @Test
-    void productInsightFallbackKeepsTaskSuccessfulAndAddsIncompleteMarker() {
+    @ParameterizedTest
+    @ValueSource(strings = {"賣點與風險分析未完成", "賣點證據不足／風險證據不足"})
+    void productInsightIncompleteKeepsTaskSuccessfulAndPersistsWarning(String warning) {
         AiTaskRepository taskRepository = mock(AiTaskRepository.class);
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
         SceneClassificationService sceneService = mock(SceneClassificationService.class);
@@ -268,7 +270,7 @@ class AiTaskWorkerTest {
         RecommendationService recommendationService = mock(RecommendationService.class);
         ProductInsightResponse fallback = mock(ProductInsightResponse.class);
         when(fallback.analysisCompleted()).thenReturn(false);
-        when(fallback.statusMessage()).thenReturn("賣點與風險分析未完成");
+        when(fallback.statusMessage()).thenReturn(warning);
         when(productInsightService.analyze(101L, true)).thenReturn(fallback);
         Product product = Product.builder().id(101L).build();
         AiTask task = AiTask.builder()
@@ -283,7 +285,7 @@ class AiTaskWorkerTest {
         worker.run(new AiTaskCreatedEvent(704L, true));
 
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
-        assertEquals("賣點與風險分析未完成", item.getErrorMessage());
+        assertEquals(warning, item.getErrorMessage());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
     }
 
