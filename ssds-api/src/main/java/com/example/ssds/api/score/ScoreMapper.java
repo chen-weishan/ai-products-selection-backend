@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 
@@ -35,30 +36,43 @@ public final class ScoreMapper {
     }
 
     /**
-     * @param page             已分頁的分數，product／category 必須已 join fetch
-     * @param factorsByScoreId 這一頁全部分數的因子，依 score id 分組
+     * @param page                 已分頁的分數，product／category 必須已 join fetch
+     * @param factorsByScoreId     這一頁全部分數的因子，依 score id 分組
+     * @param overriddenProductIds 這一頁裡「情境判定經人工覆寫」的品項 id
+     *                             （§FR-04 顯示內容表：情境判定「經人工覆寫者附標記」）
      */
     public static Page<ScoreRankingRowResponse> toRankingRows(
-            Page<ProductScore> page, Map<Long, List<ScoreFactor>> factorsByScoreId) {
+            Page<ProductScore> page,
+            Map<Long, List<ScoreFactor>> factorsByScoreId,
+            Set<Long> overriddenProductIds) {
         // Page.map 保留分頁中繼資料（totalElements、totalPages），
         // 用 getContent().stream() 重組會把那些資訊弄丟
-        return page.map(score -> toRow(score, factorsByScoreId));
+        return page.map(score -> toRow(score, factorsByScoreId,
+                overriddenProductIds.contains(score.getProduct().getId())));
     }
 
     private static ScoreRankingRowResponse toRow(
-            ProductScore score, Map<Long, List<ScoreFactor>> factorsByScoreId) {
+            ProductScore score,
+            Map<Long, List<ScoreFactor>> factorsByScoreId,
+            boolean sceneOverridden) {
 
         // 只取加分因子：扣分明細是獨立卡片（§FR-04「扣分明細以獨立卡片呈現」），
-        // 由 GET /scores/{id}/deductions 另外供應，不塞在排行列裡
+        // 由 GET /scores/{id}/deductions 另外供應，不塞在排行列裡。
+        //
+        // 一定要排序：§FR-04 指定長條「依序為熱度斜率、毛利、轉換率、價格帶適配、
+        // 節慶窗、氣候」，也就是 FactorCode 的宣告順序。不排的話順序由
+        // findByScoreIdIn 的資料庫回傳順序決定，每次查詢可能不同，畫面會跳。
+        // 與 toDetail、toSimulatedRow 同一個做法。
         List<ScoreFactorBarResponse> bars = factorsByScoreId
                 .getOrDefault(score.getId(), List.of())
                 .stream()
                 .filter(f -> !f.isPenalty())
+                .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
                 .map(ScoreMapper::toBar)
                 .toList();
 
         // 分數三欄取資料庫的既有值
-        return buildRankingRow(score, bars,
+        return buildRankingRow(score, bars, sceneOverridden,
                 score.getBonusSubtotal(), score.getFinalScore(), score.getGrade());
     }
 
@@ -74,6 +88,7 @@ public final class ScoreMapper {
     private static ScoreRankingRowResponse buildRankingRow(
             ProductScore score,
             List<ScoreFactorBarResponse> bars,
+            boolean sceneOverridden,
             BigDecimal bonusSubtotal,
             BigDecimal finalScore,
             Grade grade) {
@@ -87,6 +102,7 @@ public final class ScoreMapper {
                 category == null ? null : category.getName(),
                 score.getSceneType(),
                 score.isPrimary(),
+                sceneOverridden,
                 bonusSubtotal,
                 // 正值直接回，負號由 UI 加（AC-04-7）
                 score.getPenaltySubtotal(),
@@ -211,6 +227,7 @@ public final class ScoreMapper {
             ProductScore score,
             List<ScoreFactor> factors,
             Map<FactorCode, BigDecimal> effectiveWeights,
+            boolean sceneOverridden,
             BigDecimal bonusSubtotal,
             BigDecimal finalScore,
             Grade grade) {
@@ -228,7 +245,7 @@ public final class ScoreMapper {
                 .toList();
 
         // 分數三欄用重算值；扣分不重算（§5.2.2），由 buildRankingRow 沿用原值
-        return buildRankingRow(score, bars, bonusSubtotal, finalScore, grade);
+        return buildRankingRow(score, bars, sceneOverridden, bonusSubtotal, finalScore, grade);
     }
 
     /**

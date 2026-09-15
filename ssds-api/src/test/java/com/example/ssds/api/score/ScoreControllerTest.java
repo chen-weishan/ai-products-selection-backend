@@ -45,7 +45,7 @@ class ScoreControllerTest {
 
     private ScoreRankingRowResponse row(long id) {
         return new ScoreRankingRowResponse(id, id, "品項 " + id, "零食",
-                SceneType.VIRAL, true, new BigDecimal("86.89"), new BigDecimal("4.00"),
+                SceneType.VIRAL, true, false, new BigDecimal("86.89"), new BigDecimal("4.00"),
                 new BigDecimal("82.89"), Grade.B, 86, false, false, List.of());
     }
 

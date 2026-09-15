@@ -2,6 +2,7 @@ package com.example.ssds.api.score;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
@@ -31,6 +32,7 @@ public class ScoreQueryService {
 
     private final ProductScoreRepository productScoreRepository;
     private final ScoreFactorRepository scoreFactorRepository;
+    private final SceneOverrideLookup sceneOverrideLookup;
 
     /**
      * 排行清單。{@code scene} 或 {@code categoryId} 為 null 時該條件不生效。
@@ -57,7 +59,13 @@ public class ScoreQueryService {
         Map<Long, List<ScoreFactor>> factorsByScoreId = scoreFactorRepository.findByScoreIdIn(scoreIds).stream()
                 .collect(Collectors.groupingBy(f -> f.getScore().getId()));
 
-        return ScoreMapper.toRankingRows(page, factorsByScoreId);
+        // §FR-04 顯示內容表：情境判定「經人工覆寫者附標記」。
+        // 同樣一次撈完整頁，理由與上面的因子相同
+        Set<Long> overriddenProductIds = sceneOverrideLookup.overriddenProductIds(
+                period,
+                page.getContent().stream().map(s -> s.getProduct().getId()).distinct().toList());
+
+        return ScoreMapper.toRankingRows(page, factorsByScoreId, overriddenProductIds);
     }
 
     @Transactional(readOnly = true)

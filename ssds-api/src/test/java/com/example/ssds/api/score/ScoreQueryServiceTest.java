@@ -14,9 +14,12 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,8 +56,17 @@ class ScoreQueryServiceTest {
     @Mock
     private ScoreFactorRepository scoreFactorRepository;
 
+    @Mock
+    private SceneOverrideLookup sceneOverrideLookup;
+
     @InjectMocks
     private ScoreQueryService service;
+
+    /** 預設「沒有任何品項被人工覆寫」；需要覆寫標記的測試各自重新 stub。 */
+    @BeforeEach
+    void noSceneOverrides() {
+        when(sceneOverrideLookup.overriddenProductIds(anyString(), any())).thenReturn(Set.of());
+    }
 
     /**
      * 空頁短路：不做這件事會送出 {@code in ()} 這種不合法的 SQL。
@@ -97,6 +109,53 @@ class ScoreQueryServiceTest {
                 .noneMatch(bar -> bar.factorCode().isPenalty());
         // AC-04-7：扣分小計為正值，負號只在 UI
         assertThat(row.penaltySubtotal()).isEqualByComparingTo("4.00");
+    }
+
+    /**
+     * §FR-04 顯示內容表指定長條「依序為熱度斜率、毛利、轉換率、價格帶適配、節慶窗、氣候」，
+     * 也就是 {@code FactorCode} 的宣告順序。
+     *
+     * <p>刻意用「反序」餵進去：{@code findByScoreIdIn} 沒有 order by，回傳順序由
+     * 資料庫決定，不排序的話畫面上的長條每次查詢都可能換位置。
+     */
+    @Test
+    @DisplayName("排行列的因子長條依 FR-04 指定順序排，不受資料庫回傳順序影響")
+    void rankingRowSortsFactorBars() {
+        ProductScore s = score(1L, new BigDecimal("4.00"));
+        List<ScoreFactor> shuffled = new ArrayList<>(allBonusFactors(s));
+        Collections.reverse(shuffled);
+
+        when(productScoreRepository.findRanking(anyString(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(s), PageRequest.of(0, 20), 1));
+        when(scoreFactorRepository.findByScoreIdIn(any())).thenReturn(shuffled);
+
+        ScoreRankingRowResponse row =
+                service.ranking("2026W30", SceneType.VIRAL, null, PageRequest.of(0, 20))
+                        .getContent().get(0);
+
+        assertThat(row.factors()).extracting(bar -> bar.factorCode())
+                .containsExactly(FactorCode.TREND, FactorCode.MARGIN, FactorCode.CVR,
+                        FactorCode.PRICE_FIT, FactorCode.FESTIVAL, FactorCode.CLIMATE);
+    }
+
+    /** §FR-04 顯示內容表：情境判定「經人工覆寫者附標記」。 */
+    @Test
+    @DisplayName("情境判定經人工覆寫的品項帶 sceneOverridden 標記")
+    void rankingRowFlagsManuallyOverriddenScene() {
+        ProductScore overridden = score(1L, new BigDecimal("4.00"));
+        ProductScore plain = score(2L, new BigDecimal("4.00"));
+
+        when(productScoreRepository.findRanking(anyString(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(overridden, plain), PageRequest.of(0, 20), 2));
+        when(scoreFactorRepository.findByScoreIdIn(any())).thenReturn(List.of());
+        when(sceneOverrideLookup.overriddenProductIds(anyString(), any())).thenReturn(Set.of(1L));
+
+        List<ScoreRankingRowResponse> rows =
+                service.ranking("2026W30", SceneType.VIRAL, null, PageRequest.of(0, 20))
+                        .getContent();
+
+        assertThat(rows).extracting(ScoreRankingRowResponse::sceneOverridden)
+                .containsExactly(true, false);
     }
 
     /** AC-04-1：總分等於加分小計減扣分小計。 */

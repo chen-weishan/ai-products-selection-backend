@@ -4,8 +4,10 @@ import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.Severity;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.RiskAlert;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -65,4 +67,17 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
             GROUP BY r.product.id
             """)
     List<Object[]> findTopSeverityRankByProductIds(@Param("productIds") List<Long> productIds);
+
+    /**
+     * FR-10-2 去重：同一品項同一 {@code riskType} 於 7 日內已有 {@code OPEN} 的示警時，
+     * 不重複開立，改更新那一筆的 {@code trigger_value} 與 {@code detected_at}。
+     *
+     * <p>七日的起算點由呼叫端算好後傳 {@code since}，不寫死在查詢裡——
+     * 「現在」取決於那一次批次的執行時刻，讓查詢自己取 now 會使同一批次的
+     * 前後品項用到不同的時間窗。
+     *
+     * <p>走 {@code idx_alert_dedup(product_id, risk_type, status, detected_at DESC)}。
+     */
+    Optional<RiskAlert> findFirstByProductIdAndRiskTypeAndStatusAndDetectedAtAfterOrderByDetectedAtDesc(
+            Long productId, String riskType, AlertStatus status, Instant since);
 }

@@ -16,6 +16,12 @@ import com.example.ssds.core.domain.SceneType;
  * <p>
  * {@code isPrimary = false} 代表這是次要情境的分數（§FR-04 多情境評分）。
  * 同一品項在同一 period 可以同時出現在多張榜，各榜分數不同——這不是重複資料。
+ *
+ * <p>
+ * {@code sceneOverridden} 對應 §FR-04 顯示內容表「情境判定 ── 經人工覆寫者附標記」：
+ * 該品項在這個 period 的最新一筆 {@code scene_classification_log} 有
+ * {@code overridden_by} 時為 true。旗標放在列上而不是讓前端另外打一支 API，
+ * 是因為排行一頁 20 列就會變成 20 次往返。
  */
 public record ScoreRankingRowResponse(
         Long scoreId,
@@ -24,6 +30,7 @@ public record ScoreRankingRowResponse(
         String categoryName,
         SceneType sceneType,
         boolean isPrimary,
+        boolean sceneOverridden,
         BigDecimal bonusSubtotal,
         BigDecimal penaltySubtotal,
         BigDecimal finalScore,

@@ -7,9 +7,10 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,7 @@ public class ScoreSimulationService {
     private final ScoreFactorRepository scoreFactorRepository;
     private final WeightVersionRepository weightVersionRepository;
     private final GradeThresholdRepository gradeThresholdRepository;
+    private final SceneOverrideLookup sceneOverrideLookup;
 
     /** §5.6 硬規則的門檻：扣分達此值（含）以上，分級最高只給 B。 */
     private static final BigDecimal PENALTY_CAP = BigDecimal.valueOf(20);
@@ -88,11 +90,19 @@ public class ScoreSimulationService {
         validateWeights(weights);
         validateThresholdOverrides(request);
 
-        // 5. 取要重算的母體。與正式排行共用同一支查詢，過濾條件（is_active、軟刪除）一致
+        // 5. 取要重算的母體。與正式排行共用同一支查詢，過濾條件（is_active、軟刪除）一致。
+        //
+        // 母體必須是「符合篩選條件的全部分數」，不能先用現行分數取前 N 再重算——
+        // 試算的用途正是找出「換這組權重後會竄升上來的品項」，而那些品項在
+        // 現行權重下本來就排在後面，先截斷就永遠不會出現，試算結果會誤導使用者。
+        // limit 改成重算並重排「之後」才套用（步驟 8）。
+        //
+        // Pageable.unpaged() 的量級可控：母體是單一 period × 單一榜（scene）
+        // 且 is_active = true 的分數，上限就是該期間的在架品項數。
         int limit = request.limit() == null ? DEFAULT_LIMIT : request.limit();
         List<ProductScore> scores = productScoreRepository.findRanking(
                 request.period(), request.scene(), request.categoryId(),
-                PageRequest.of(0, limit)).getContent();
+                Pageable.unpaged()).getContent();
 
         if (scores.isEmpty()) {
             return List.of();
@@ -104,6 +114,11 @@ public class ScoreSimulationService {
                 .stream()
                 .collect(Collectors.groupingBy(f -> f.getScore().getId()));
 
+        // 6b. §FR-04 顯示內容表：情境判定「經人工覆寫者附標記」。與排行同一份旗標
+        Set<Long> overriddenProductIds = sceneOverrideLookup.overriddenProductIds(
+                request.period(),
+                scores.stream().map(s -> s.getProduct().getId()).distinct().toList());
+
         // 7. 逐筆重算
         List<ScoreRankingRowResponse> rows = new ArrayList<>();
         for (ProductScore score : scores) {
@@ -114,13 +129,14 @@ public class ScoreSimulationService {
                 continue;
             }
             rows.add(ScoreMapper.toSimulatedRow(score, factors, simulated.effectiveWeights(),
+                    overriddenProductIds.contains(score.getProduct().getId()),
                     simulated.bonusSubtotal(), simulated.finalScore(), simulated.grade()));
         }
 
-        // 8. 分數變了，資料庫排的順序已失效，必須在 Java 端重排
+        // 8. 分數變了，資料庫排的順序已失效，必須在 Java 端重排，排完才截 limit
         rows.sort(Comparator.comparing(ScoreRankingRowResponse::finalScore).reversed()
                 .thenComparing(ScoreRankingRowResponse::scoreId));
-        return rows;
+        return rows.size() <= limit ? rows : List.copyOf(rows.subList(0, limit));
     }
 
     /**

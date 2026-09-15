@@ -20,11 +20,13 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +35,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
@@ -67,6 +70,9 @@ class ScoreSimulationServiceTest {
     @Mock
     private ScoreFactorRepository scoreFactorRepository;
 
+    @Mock
+    private SceneOverrideLookup sceneOverrideLookup;
+
     @InjectMocks
     private ScoreSimulationService service;
 
@@ -82,6 +88,7 @@ class ScoreSimulationServiceTest {
         when(productScoreRepository.findRanking(anyString(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(scores, PageRequest.of(0, 20), scores.size()));
         when(scoreFactorRepository.findByScoreIdIn(any())).thenReturn(factors);
+        when(sceneOverrideLookup.overriddenProductIds(anyString(), any())).thenReturn(Set.of());
     }
 
     private SimulateRequest request(
@@ -89,6 +96,10 @@ class ScoreSimulationServiceTest {
             Map<SceneType, SimulateRequest.ThresholdOverride> thresholdOverrides) {
         return new SimulateRequest(3L, "2026W30", SceneType.VIRAL, null,
                 overrides, thresholdOverrides, 20);
+    }
+
+    private SimulateRequest requestWithLimit(int limit) {
+        return new SimulateRequest(3L, "2026W30", SceneType.VIRAL, null, null, null, limit);
     }
 
     private Map<SceneType, Map<FactorCode, BigDecimal>> viralOverride(String... weights) {
@@ -285,6 +296,63 @@ class ScoreSimulationServiceTest {
             List<ScoreRankingRowResponse> rows = service.simulate(request(null, null));
 
             assertThat(rows).extracting(ScoreRankingRowResponse::scoreId).containsExactly(2L, 1L);
+        }
+    }
+
+    /**
+     * 試算的母體必須是「符合篩選條件的全部分數」。
+     *
+     * <p>先用<b>現行</b>分數取前 N 再重算是錯的：試算的用途正是找出
+     * 「換這組權重後會竄升上來的品項」，而那些品項在現行權重下本來就排在後面，
+     * 先截斷就永遠不會出現，使用者看到的試算結果是假的。
+     */
+    @Nested
+    @DisplayName("重算母體")
+    class Population {
+
+        /** 三筆無扣分的分數；重算後的總分由 flatFactors 傳入的正規化值決定。 */
+        private List<ProductScore> threeScores() {
+            return List.of(score(1L, BigDecimal.ZERO),
+                    score(2L, BigDecimal.ZERO),
+                    score(3L, BigDecimal.ZERO));
+        }
+
+        private List<ScoreFactor> flatFactors(List<ProductScore> scores, String... normalized) {
+            List<ScoreFactor> factors = new ArrayList<>();
+            for (int i = 0; i < scores.size(); i++) {
+                for (FactorCode code : ScoreTestFixtures.BONUS_FACTORS) {
+                    factors.add(bonusFactor(scores.get(i), code,
+                            new BigDecimal(normalized[i]), true));
+                }
+            }
+            return factors;
+        }
+
+        @Test
+        @DisplayName("母體查詢不帶分頁，limit 不得在重算前先截斷")
+        void populationIsNotPreTruncated() {
+            List<ProductScore> scores = threeScores();
+            given(scores, flatFactors(scores, "50", "60", "90"));
+
+            service.simulate(requestWithLimit(2));
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(productScoreRepository)
+                    .findRanking(anyString(), any(), any(), captor.capture());
+            assertThat(captor.getValue().isUnpaged()).isTrue();
+        }
+
+        @Test
+        @DisplayName("換權重後竄升的品項要能進入結果，limit 於重排後才套用")
+        void limitAppliesAfterRecompute() {
+            List<ProductScore> scores = threeScores();
+            // 資料庫回的順序是現行分數的排名（1、2、3），重算後恰好相反
+            given(scores, flatFactors(scores, "50", "60", "90"));
+
+            List<ScoreRankingRowResponse> rows = service.simulate(requestWithLimit(2));
+
+            assertThat(rows).extracting(ScoreRankingRowResponse::scoreId)
+                    .containsExactly(3L, 2L);
         }
     }
 
