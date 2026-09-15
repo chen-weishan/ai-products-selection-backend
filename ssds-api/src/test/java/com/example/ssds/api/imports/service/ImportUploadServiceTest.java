@@ -27,6 +27,34 @@ import org.springframework.util.unit.DataSize;
 class ImportUploadServiceTest {
 
     @Test
+    void keepsSmallFilesSynchronous() throws Exception {
+        ImportBatchRepository batches = mock(ImportBatchRepository.class);
+        AppUserRepository users = mock(AppUserRepository.class);
+        ImportStagingStorage storage = mock(ImportStagingStorage.class);
+        ImportFileParser parser = mock(ImportFileParser.class);
+        ImportUploadService service = new ImportUploadService(
+                batches, users, storage, parser,
+                DataSize.ofMegabytes(2), DataSize.ofMegabytes(50), 5_000);
+        AppUser actor = AppUser.builder().id(7L).email("admin@test.local").build();
+        when(users.findByEmail(actor.getEmail())).thenReturn(Optional.of(actor));
+        when(batches.saveAndFlush(any(ImportBatch.class))).thenAnswer(invocation -> {
+            ImportBatch batch = invocation.getArgument(0);
+            if (batch.getId() == null) batch.setId(1L);
+            return batch;
+        });
+        Path path = Path.of("reviews.csv");
+        when(storage.stageForBatch(eq(1L), eq("reviews.csv"), any()))
+                .thenReturn(new StagedImportFile("1", path, 128L, Instant.now()));
+        when(parser.parse(path, "reviews.csv", ImportDataType.REVIEW))
+                .thenReturn(new ImportParseResult(List.of("品名", "評論內容"), List.of(), List.of(), 5_000));
+
+        var response = service.upload(ImportDataType.REVIEW, new MockMultipartFile(
+                "file", "reviews.csv", "text/csv", "small".getBytes()), actor.getEmail());
+
+        assertThat(response.async()).isFalse();
+    }
+
+    @Test
     void createsBatchStagesFileAndMarksLargeRowCountAsAsync() throws Exception {
         ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
         AppUserRepository userRepository = mock(AppUserRepository.class);

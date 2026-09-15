@@ -32,6 +32,46 @@ import org.junit.jupiter.api.Test;
 class ImportPreviewServiceTest {
 
     @Test
+    void rejectsReviewWhenReferencedProductDoesNotExist() throws Exception {
+        ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
+        ImportStagingStorage storage = mock(ImportStagingStorage.class);
+        ImportFileScanner scanner = mock(ImportFileScanner.class);
+        ProductRepository products = mock(ProductRepository.class);
+        CategoryRepository categories = mock(CategoryRepository.class);
+        SupplierRepository suppliers = mock(SupplierRepository.class);
+        AudienceSegmentRepository audiences = mock(AudienceSegmentRepository.class);
+        ProductReviewRepository reviews = mock(ProductReviewRepository.class);
+        ImportPreviewService service = new ImportPreviewService(
+                batchRepository, storage, scanner, new ImportFieldRegistry(), products,
+                categories, suppliers, audiences, reviews, directTransactions());
+        ImportBatch batch = ImportBatch.builder().id(8L).dataType(ImportDataType.REVIEW)
+                .fileName("reviews.xlsx").totalRows(1).build();
+        Path path = Path.of("8.xlsx");
+        when(batchRepository.findById(8L)).thenReturn(Optional.of(batch));
+        when(storage.findForBatch(8L))
+                .thenReturn(new StagedImportFile("8", path, 100L, Instant.now()));
+        when(products.findAllWithCategory()).thenReturn(List.of());
+        when(categories.findAll()).thenReturn(List.of());
+        when(suppliers.findAll()).thenReturn(List.of());
+        when(audiences.findAll()).thenReturn(List.of());
+        when(reviews.findAllImportDedupKeys()).thenReturn(List.of());
+        doAnswer(invocation -> {
+            ImportSheetHandler handler = invocation.getArgument(2);
+            handler.onHeaders(List.of("品名", "評論內容"));
+            handler.onRow(2, List.of("不存在的品項", "測試評論"));
+            return null;
+        }).when(scanner).scan(eq(path), eq("reviews.xlsx"), any(ImportSheetHandler.class));
+
+        var response = service.preview(8L, new ImportPreviewRequest(
+                Map.of("品名", "productName", "評論內容", "content")));
+
+        assertThat(response.validRows()).isZero();
+        assertThat(response.errorRows()).isEqualTo(1);
+        assertThat(response.previewRows().getFirst().issues())
+                .extracting(issue -> issue.message()).anyMatch(message -> message.contains("品項"));
+    }
+
+    @Test
     void validatesAllRowsAndSeparatesValidErrorAndDuplicateCounts() throws Exception {
         ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
         ImportStagingStorage storage = mock(ImportStagingStorage.class);

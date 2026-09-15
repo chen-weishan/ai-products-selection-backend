@@ -31,7 +31,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProductFallbackScoringService {
 
-    private static final SceneType SCENE = SceneType.REPLENISHMENT;
     private static final Set<FactorCode> BONUS_FACTORS = EnumSet.of(
             FactorCode.TREND, FactorCode.MARGIN, FactorCode.CVR,
             FactorCode.PRICE_FIT, FactorCode.FESTIVAL, FactorCode.CLIMATE
@@ -52,6 +51,14 @@ public class ProductFallbackScoringService {
     }
 
     public ProductScore score(Product product) {
+        return score(product, SceneType.REPLENISHMENT);
+    }
+
+    /**
+     * 不經過任何 Agent 的確定性評分入口。
+     * FR-09 匯入後重算會沿用最近一次情境；一般降級路徑仍可使用上面的預設情境方法。
+     */
+    public ProductScore score(Product product, SceneType scene) {
         WeightVersion version = weightVersionRepository.findByIsCurrentTrue()
                 .orElseThrow(() -> new IllegalStateException("目前沒有生效中的權重版本"));
         var margin = marginStatisticsDao.findPercentile(product.getId(), product.getCategory().getId())
@@ -65,7 +72,7 @@ public class ProductFallbackScoringService {
         BigDecimal finalScore = bonus.subtract(penalty).max(BigDecimal.ZERO)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        var threshold = marginStatisticsDao.findGradeThreshold(version.getId(), SCENE.name())
+        var threshold = marginStatisticsDao.findGradeThreshold(version.getId(), scene.name())
                 .orElse(new ProductMarginStatisticsDao.GradeThreshold(
                         BigDecimal.valueOf(80), BigDecimal.valueOf(65)
                 ));
@@ -73,12 +80,12 @@ public class ProductFallbackScoringService {
         int confidence = Math.max(0, 100 - 5 * 8 - (margin.imputed() ? 24 : 0));
         String period = isoWeek(LocalDate.now(ZoneId.of("Asia/Taipei")));
 
-        scoreRepository.deactivateCurrent(product.getId(), period, SCENE);
+        scoreRepository.deactivateCurrent(product.getId(), period, scene);
         ProductScore score = ProductScore.builder()
                 .product(product)
                 .weightVersion(version)
                 .period(period)
-                .sceneType(SCENE)
+                .sceneType(scene)
                 .primary(true)
                 .active(true)
                 .bonusSubtotal(bonus)

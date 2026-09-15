@@ -16,11 +16,49 @@ import java.util.List;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class ImportFoundationTest {
 
     @TempDir
     Path tempDirectory;
+
+    @ParameterizedTest
+    @EnumSource(ImportDataType.class)
+    void parsesCsvAndXlsxForEveryImportDataType(ImportDataType dataType) throws Exception {
+        var registry = new ImportFieldRegistry();
+        var required = registry.fieldsFor(dataType).stream().filter(ImportSystemField::required).toList();
+        List<String> headers = required.stream().map(ImportSystemField::label).toList();
+        List<String> values = required.stream().map(field -> sampleValue(field.valueType())).toList();
+        Path csv = tempDirectory.resolve(dataType.name().toLowerCase() + ".csv");
+        Files.writeString(csv, String.join(",", headers) + "\n" + String.join(",", values) + "\n",
+                StandardCharsets.UTF_8);
+        Path xlsx = tempDirectory.resolve(dataType.name().toLowerCase() + ".xlsx");
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var sheet = workbook.createSheet("data");
+            var headerRow = sheet.createRow(0);
+            var valueRow = sheet.createRow(1);
+            for (int index = 0; index < headers.size(); index++) {
+                headerRow.createCell(index).setCellValue(headers.get(index));
+                valueRow.createCell(index).setCellValue(values.get(index));
+            }
+            try (OutputStream output = Files.newOutputStream(xlsx)) {
+                workbook.write(output);
+            }
+        }
+        var parser = new ImportFileParser(
+                List.of(new CsvImportReader(), new XlsxImportReader()),
+                new ImportHeaderMapper(registry), 200_000);
+
+        for (Path source : List.of(csv, xlsx)) {
+            ImportParseResult parsed = parser.parse(source, source.getFileName().toString(), dataType);
+            assertThat(parsed.totalRows()).isEqualTo(1);
+            assertThat(parsed.headers()).containsExactlyElementsOf(headers);
+            assertThat(parsed.suggestions()).extracting(ImportColumnSuggestion::systemField)
+                    .containsExactlyElementsOf(required.stream().map(ImportSystemField::key).toList());
+        }
+    }
 
     @Test
     void mapsAliasesAndBlocksPersonallyIdentifiableColumns() {
@@ -135,5 +173,15 @@ class ImportFoundationTest {
                 new BigDecimal("100"), 2, 20, "main");
 
         assertThat(first).isEqualTo(second).hasSize(64);
+    }
+
+    private String sampleValue(ImportValueType type) {
+        return switch (type) {
+            case STRING -> "測試資料";
+            case INTEGER, LONG -> "10";
+            case DECIMAL -> "100.50";
+            case DATE -> "2026-09-01";
+            case ENUM -> "A";
+        };
     }
 }
