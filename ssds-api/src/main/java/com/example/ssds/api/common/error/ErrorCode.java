@@ -21,6 +21,14 @@ public enum ErrorCode {
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "此帳號已停用，請聯絡系統管理員"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "權限不足，無法執行此操作"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "找不到指定的資料"),
+    /**
+     * 路徑存在但 HTTP 方法不對（例如對 {@code POST /scores/simulate} 發 GET）。
+     *
+     * <p>規格書 §8.1 的錯誤代碼表沒有列 405。此為<b>規格補充</b>：
+     * 不加的話這類請求會落到兜底 handler 回 500，把客戶端錯誤報成伺服器錯誤。
+     * §8.1 該表未宣告為完整清單（對照 §8.2 明寫「本章為完整清單」）。
+     */
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "此路徑不支援該 HTTP 方法"),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "資料已存在，不可重複建立"),
     RESOURCE_IN_USE(HttpStatus.CONFLICT, "資料仍被其他資料使用，無法刪除"),
     INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "目前狀態不允許此操作"),
