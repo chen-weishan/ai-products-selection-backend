@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@RestController
+@RestController("analysisAiTaskController")
 @RequestMapping("/ai/tasks")
 @Tag(name = "AI Tasks", description = "非同步 AI 任務；SELLING_POINT 是 Product Insight（賣點與風險）的相容碼")
 public class AiTaskController {
@@ -28,12 +28,6 @@ public class AiTaskController {
             @Valid @RequestBody CreateAiTaskRequest request) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.success(service.create(request)));
-    }
-
-    @GetMapping("/{taskId}")
-    @Operation(summary = "查詢 AI 任務進度與實際外部請求統計")
-    public ApiResponse<AiTaskResponse> get(@PathVariable("taskId") Long taskId) {
-        return ApiResponse.success(service.get(taskId));
     }
 
     @GetMapping("/{taskId}/items")

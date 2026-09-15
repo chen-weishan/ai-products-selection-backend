@@ -1,6 +1,10 @@
 package com.example.ssds.infra.dao;
 
+import com.example.ssds.infra.dao.projection.SourceBreakdownRow;
+import com.example.ssds.infra.dao.projection.TrendCompositeSnapshot;
 import com.example.ssds.infra.dao.projection.TrendPointRow;
+import com.example.ssds.infra.dao.projection.TrendSignalRow;
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -52,6 +56,110 @@ public class TrendQueryDao {
                 .list();
     }
 
+        /** 單一關鍵字最新一筆合成快照(今日熱度、斜率、階段、實際採用權重)。 */
+    public Optional<TrendCompositeSnapshot> findLatestComposite(Long keywordId) {
+    return jdbcClient
+            .sql("""
+                SELECT composite_value        AS compositeValue,
+                       slope_7d                AS slope7d,
+                       slope_30d               AS slope30d,
+                       stage                   AS stage,
+                       stage_weeks             AS stageWeeks,
+                       estimated_lifespan_days AS estimatedLifespanDays,
+                       applied_weights::text   AS appliedWeights,
+                       divergence_flag         AS divergenceFlag
+                FROM heat_composite_daily
+                WHERE keyword_id = :keywordId
+                ORDER BY stat_date DESC
+                LIMIT 1
+                """)
+            .param("keywordId", keywordId)
+            .query(TrendCompositeSnapshot.class)
+            .optional();
+}
+
+    /** 各來源明細：今日百分位、可用性、粒度，權重直接取自 applied_weights JSON。 */
+    public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
+    return jdbcClient
+            .sql("""
+                 WITH keyword_categories AS (
+                     SELECT DISTINCT p.category_id
+                     FROM product_keyword pk
+                     JOIN product p ON p.id = pk.product_id
+                     WHERE pk.keyword_id = :keywordId
+                 ),
+                 relevant_readings AS (
+                     SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
+                     FROM heat_reading hr
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     WHERE hs.granularity = 'KEYWORD' AND hr.keyword_id = :keywordId
+
+                     UNION ALL
+
+                     SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
+                     FROM heat_reading hr
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                     WHERE hs.granularity = 'CATEGORY'
+                 ),
+                 SourceLatest AS (
+                     SELECT MAX(reading_date) AS asof FROM relevant_readings
+                 ),
+                 Today AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof
+                     GROUP BY rr.source_id
+                 ),
+                 D7 AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_7d
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof - INTERVAL '7 days'
+                     GROUP BY rr.source_id
+                 ),
+                 D30 AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_30d
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof - INTERVAL '30 days'
+                     GROUP BY rr.source_id
+                 )
+                 SELECT hs.source_code                AS sourceCode,
+                        hs.granularity                 AS granularity,
+                        hs.availability                AS availability,
+                        t.today_pct                    AS percentileWithinSource,
+                        ROUND((t.today_pct - COALESCE(d7.pct_7d, 0.01))
+                        / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01), 4) AS slope7d,
+                        ROUND((t.today_pct - COALESCE(d30.pct_30d, 0.01))
+                        / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01), 4) AS slope30d
+                 FROM Today t
+                 JOIN heat_source hs ON hs.id = t.source_id
+                 LEFT JOIN D7 d7 ON d7.source_id = t.source_id
+                 LEFT JOIN D30 d30 ON d30.source_id = t.source_id
+                 """)
+            .param("keywordId", keywordId)
+            .query(SourceBreakdownRow.class)
+            .list();
+}
+
+public List<TrendSignalRow> findAllLatestSignals() {
+    return jdbcClient
+            .sql("""
+                 SELECT DISTINCT ON (d.keyword_id)
+                        d.keyword_id       AS keywordId,
+                        k.keyword          AS keyword,
+                        d.composite_value  AS heatToday,
+                        d.slope_7d         AS slope7d,
+                        d.slope_30d        AS slope30d,
+                        d.stage            AS stage,
+                        d.divergence_flag  AS divergenceFlag
+                 FROM heat_composite_daily d
+                 JOIN trend_keyword k ON k.id = d.keyword_id
+                 WHERE k.enabled = TRUE
+                 ORDER BY d.keyword_id, d.stat_date DESC
+                 """)
+            .query(TrendSignalRow.class)
+            .list();
+}
     /**
      * §5.3.3 斜率計算所需的三個觀測點：t、t−7、t−30。
      *
@@ -104,28 +212,118 @@ public class TrendQueryDao {
      *
      * <p>回傳 null 表示該關鍵字當日沒有任何可用來源的讀值 ——
      * 呼叫端要當成「無資料」而非 0（§5.7 資料不足不懲罰）。
+     *
+     * <p><b>2026-09-07 修正：「可用」的判定改成 {@code availability <> 'UNAVAILABLE'}</b>，
+     * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
+     * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
+     * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
+     * 的定義（enabled 且非 UNAVAILABLE）不一致，以那兩處為準改過來。
      */
     public Double findCompositeHeat(Long keywordId, LocalDate readingDate) {
-        return jdbcClient
-                .sql("""
-                     SELECT CASE WHEN SUM(hs.composite_weight) = 0 THEN NULL
-                                 ELSE SUM(hr.percentile_within_source * hs.composite_weight)
-                                      / SUM(hs.composite_weight)
-                            END AS composite
+    return jdbcClient
+            .sql("""
+                WITH keyword_categories AS (
+                    SELECT DISTINCT p.category_id
+                    FROM product_keyword pk
+                    JOIN product p ON p.id = pk.product_id
+                    WHERE pk.keyword_id = :keywordId
+                ),
+                matched_readings AS (
+                    SELECT hr.source_id, hr.percentile_within_source
+                    FROM heat_reading hr
+                    JOIN heat_source hs ON hs.id = hr.source_id
+                    WHERE hs.granularity = 'KEYWORD'
+                      AND hr.keyword_id = :keywordId
+                      AND hr.reading_date = :readingDate
+                      AND hr.percentile_within_source IS NOT NULL
+
+                    UNION ALL
+
+                    SELECT hr.source_id, AVG(hr.percentile_within_source)
+                    FROM heat_reading hr
+                    JOIN heat_source hs ON hs.id = hr.source_id
+                    JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                    WHERE hs.granularity = 'CATEGORY'
+                      AND hr.reading_date = :readingDate
+                      AND hr.percentile_within_source IS NOT NULL
+                    GROUP BY hr.source_id
+                )
+                SELECT CASE WHEN SUM(hs.composite_weight
+                                * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END) = 0 THEN NULL
+                            ELSE SUM(mr.percentile_within_source * hs.composite_weight
+                                     * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
+                                / SUM(hs.composite_weight
+                                     * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
+                       END AS composite
+                FROM matched_readings mr
+                JOIN heat_source hs ON hs.id = mr.source_id
+                WHERE hs.enabled = TRUE
+                  AND hs.availability <> 'UNAVAILABLE'
+                """)
+            .param("keywordId", keywordId)
+            .param("readingDate", readingDate)
+            .query(Double.class)
+            .optional()
+            .orElse(null);
+}
+
+    public Map<String, BigDecimal> findAppliedWeights(Long keywordId, LocalDate readingDate) {
+    List<Map<String, Object>> rows = jdbcClient
+            .sql("""
+                 WITH keyword_categories AS (
+                     SELECT DISTINCT p.category_id
+                     FROM product_keyword pk
+                     JOIN product p ON p.id = pk.product_id
+                     WHERE pk.keyword_id = :keywordId
+                 ),
+                 matched_readings AS (
+                     SELECT hr.source_id
                      FROM heat_reading hr
-                              JOIN heat_source hs ON hs.id = hr.source_id
-                     WHERE hr.keyword_id = :keywordId
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     WHERE hs.granularity = 'KEYWORD'
+                       AND hr.keyword_id = :keywordId
                        AND hr.reading_date = :readingDate
                        AND hr.percentile_within_source IS NOT NULL
-                       AND hs.enabled = TRUE
-                       AND hs.availability <> 'UNAVAILABLE'
-                     """)
-                .param("keywordId", keywordId)
-                .param("readingDate", readingDate)
-                .query(Double.class)
-                .optional()
-                .orElse(null);
+
+                     UNION
+
+                     SELECT hr.source_id
+                     FROM heat_reading hr
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                     WHERE hs.granularity = 'CATEGORY'
+                       AND hr.reading_date = :readingDate
+                       AND hr.percentile_within_source IS NOT NULL
+                 )
+                 SELECT hs.source_code AS sourceCode,
+                        hs.composite_weight
+                            * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END AS effectiveWeight
+                 FROM matched_readings mr
+                 JOIN heat_source hs ON hs.id = mr.source_id
+                 WHERE hs.enabled = TRUE
+                   AND hs.availability <> 'UNAVAILABLE'
+                 """)
+            .param("keywordId", keywordId)
+            .param("readingDate", readingDate)
+            .query()
+            .listOfRows();
+
+    BigDecimal total = rows.stream()
+            .map(r -> (BigDecimal) r.get("effectiveWeight"))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    if (total.compareTo(BigDecimal.ZERO) == 0) {
+        return Map.of();
     }
+
+    Map<String, BigDecimal> result = new java.util.LinkedHashMap<>();
+    for (Map<String, Object> row : rows) {
+        String code = String.valueOf(row.get("sourceCode"));
+        BigDecimal weight = (BigDecimal) row.get("effectiveWeight");
+        result.put(code, weight.divide(total, 4, java.math.RoundingMode.HALF_UP));
+    }
+    return result;
+}
 
     /**
      * §5.3.2 的人工標記合成值：加權平均熱度等級，權重為時間衰減係數。

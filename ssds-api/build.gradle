@@ -16,17 +16,22 @@ dependencies {
 	implementation libs.spring.boot.starter.aspectj
 	// 規格書 §3.3：後端為 OpenAPI 契約的單一事實來源
 	implementation libs.springdoc.openapi
+    implementation 'com.auth0:java-jwt:4.4.0'
+	implementation libs.commons.csv
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
 
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
 
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
 	// DB-backed integration tests use an isolated PostgreSQL 17.6 container.
 	// They never connect to the shared Supabase database.
-	testImplementation libs.test.testcontainers.postgresql
-	testImplementation libs.test.testcontainers.junit
+	testImplementation "org.testcontainers:postgresql:1.20.4"
+	testImplementation "org.testcontainers:junit-jupiter:1.20.4"
 }
 
 // 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改

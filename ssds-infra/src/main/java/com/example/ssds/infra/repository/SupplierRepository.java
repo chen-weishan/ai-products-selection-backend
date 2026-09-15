@@ -9,5 +9,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
-    List<Supplier> findByNameContainingIgnoreCase(String keyword);
+    List<Supplier> findAllByOrderByNameAsc();
+
+    List<Supplier> findByNameContainingIgnoreCaseOrderByNameAsc(String keyword);
 }

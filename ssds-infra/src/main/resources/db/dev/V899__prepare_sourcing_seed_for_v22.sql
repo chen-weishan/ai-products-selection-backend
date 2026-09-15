@@ -13,3 +13,4 @@ ALTER TABLE sourcing_candidate
     ADD COLUMN IF NOT EXISTS heat_stage VARCHAR(16),
     ADD COLUMN IF NOT EXISTS stage_weeks SMALLINT,
     ADD COLUMN IF NOT EXISTS estimated_lifespan_days INT;
+

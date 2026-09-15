@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.example.ssds.api.common.response.ApiError;
 import com.example.ssds.api.common.response.ApiResponse;
@@ -69,6 +70,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnreadable(HttpMessageNotReadableException e) {
         log.warn("無法解析的請求內容: {}", e.getMessage());
         return toResponse(ErrorCode.VALIDATION_FAILED, "請求內容格式不正確", null);
+    }
+
+    /** multipart 檔案超過上限時，仍回傳統一驗證錯誤，避免落入 500 兜底。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(
+            MaxUploadSizeExceededException e) {
+        FieldError fieldError = new FieldError("file", "圖片大小不可超過 2MB");
+        return toResponse(ErrorCode.VALIDATION_FAILED,
+                "圖片驗證失敗", List.of(fieldError));
     }
 
     /** Spring Security 判定權限不足。不單獨攔會被兜底吃成 500。 */
