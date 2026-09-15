@@ -16,6 +16,9 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "尚未登入或憑證無效，請重新登入"),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "登入已逾時，請重新取得授權"),
     REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "登入憑證已失效或遭撤銷，請重新登入"),
+    // FR-01：密碼錯誤不透露是帳號錯還是密碼錯，兩者共用同一訊息與狀態碼
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "帳號或密碼錯誤"),
+    ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "此帳號已停用，請聯絡系統管理員"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "權限不足，無法執行此操作"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "找不到指定的資料"),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "資料已存在，不可重複建立"),

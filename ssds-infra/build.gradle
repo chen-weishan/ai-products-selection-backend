@@ -23,6 +23,10 @@ dependencies {
 	// Testcontainers：MigrationVerificationTest 用它起一個乾淨的 PostgreSQL，
 	// 從 V1 一路建到最新，確認 migration 不必依賴共用資料庫就能驗證。
 	// 需要本機有執行中的 Docker Desktop。
-	testImplementation libs.test.testcontainers.postgresql
-	testImplementation libs.test.testcontainers.junit
+	// testImplementation libs.test.testcontainers.postgresql
+	// testImplementation libs.test.testcontainers.junit
+	// 暫時繞開 libs.test.testcontainers.* 型別安全 accessor（環境內該 accessor
+// 無法正確生成），改用直接座標字串，版本對齊 gradle/libs.versions.toml 的 testcontainers = "1.20.4"
+testImplementation "org.testcontainers:postgresql:1.20.4"
+testImplementation "org.testcontainers:junit-jupiter:1.20.4"
 }

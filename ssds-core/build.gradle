@@ -8,4 +8,6 @@ dependencies {
 	implementation libs.jackson.databind
 
 	testImplementation libs.test.spring.boot
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 }
