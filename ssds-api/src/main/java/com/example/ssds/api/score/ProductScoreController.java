@@ -2,6 +2,7 @@ package com.example.ssds.api.score;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +23,8 @@ public class ProductScoreController {
 
     private final ScoreQueryService queryService;
 
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/{id}/scores")
     public ApiResponse<ScoreDetailResponse> snapshot(
             @PathVariable Long id,
@@ -31,7 +33,8 @@ public class ProductScoreController {
         return ApiResponse.success(queryService.snapshot(id, period, scene));
     }
 
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/{id}/scores/history")
     public ApiResponse<List<ScoreHistoryPointResponse>> history(
             @PathVariable Long id,

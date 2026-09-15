@@ -2,6 +2,7 @@ package com.example.ssds.api.score;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,7 +49,8 @@ public class ScoreController {
      * 若讓 Spring 從 query string 組出帶 Sort 的 Pageable，
      * 會和 JPQL 的 order by 打架。
      */
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/ranking")
     public ApiResponse<PageResponse<ScoreRankingRowResponse>> ranking(
             @RequestParam String period,
@@ -62,13 +64,15 @@ public class ScoreController {
         return ApiResponse.success(PageResponse.from(result));
     }
 
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/{id}/deductions")
     public ApiResponse<ScoreDeductionsResponse> deductions(@PathVariable Long id) {
         return ApiResponse.success(queryService.deductions(id));
     }
 
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @PostMapping ("/simulate")
     public ApiResponse<List<ScoreRankingRowResponse>> simulate(
             @Valid @RequestBody SimulateRequest simulateRequest) {

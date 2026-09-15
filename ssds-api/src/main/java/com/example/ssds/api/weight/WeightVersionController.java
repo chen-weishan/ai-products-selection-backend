@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.net.URI;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -42,14 +43,16 @@ public class WeightVersionController {
     private final WeightVersionCommandService commandService;
 
     /** 該版本的四組權重與四榜門檻。 */
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/{id}/profiles")
     public ApiResponse<WeightVersionDetailResponse> getProfiles(@PathVariable Long id) {
         return ApiResponse.success(queryService.getDetail(id));
     }
 
     /** 版本清單（摘要，不含權重明細）。沒有任何版本時回空頁，不是 404。 */
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping
     public ApiResponse<PageResponse<WeightVersionSummaryResponse>> list(
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -58,13 +61,15 @@ public class WeightVersionController {
     }
 
     /** 目前生效中的版本（is_current = true），連同四組權重與四榜門檻。查無則 404。 */
-    // TODO 權限列 2（§2.1）：全部已登入角色可讀 → @PreAuthorize("isAuthenticated()")
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/active")
     public ApiResponse<WeightVersionDetailResponse> getActive() {
         return ApiResponse.success(queryService.getActive());
     }
 
-    // TODO 權限列 15（§2.1）：僅 BUYER_LEAD → @PreAuthorize("hasRole('BUYER_LEAD')")
+    // §2.1 權限列 15「建立／編輯權重版本草稿」：僅 BUYER_LEAD
+    @PreAuthorize("hasRole('BUYER_LEAD')")
     @PostMapping
     public ResponseEntity<ApiResponse<WeightVersionDetailResponse>> create(
             @Valid @RequestBody CreateWeightVersionRequest request) {
@@ -76,14 +81,18 @@ public class WeightVersionController {
         return ResponseEntity.created(location).body(ApiResponse.success(dto));
     }
 
-    // TODO 權限列 15（§2.1）：僅 BUYER_LEAD → @PreAuthorize("hasRole('BUYER_LEAD')")
+    // §2.1 權限列 15「建立／編輯權重版本草稿」：僅 BUYER_LEAD
+    @PreAuthorize("hasRole('BUYER_LEAD')")
     @PutMapping("/{id}")
     public ApiResponse<WeightVersionDetailResponse> update(
             @PathVariable Long id, @Valid @RequestBody CreateWeightVersionRequest request) {
         return ApiResponse.success(commandService.update(id, request));
     }
 
-    // TODO 權限列 15（§2.1）、AC-08-3：僅 BUYER_LEAD → @PreAuthorize("hasRole('BUYER_LEAD')")
+    // §2.1 權限列 16「核准權重版本生效」、AC-08-3「非 BUYER_LEAD 不可核准版本」：僅 BUYER_LEAD。
+    // 註：原 TODO 寫的是列 15（建立／編輯草稿），核准是獨立的列 16；
+    // 兩列的允許角色剛好相同，所以運算式不變，但引用要對。
+    @PreAuthorize("hasRole('BUYER_LEAD')")
     @PostMapping("/{id}/approve")
     public ApiResponse<WeightVersionDetailResponse> approve(
             @PathVariable Long id, @Valid @RequestBody ApproveWeightVersionRequest request) {
