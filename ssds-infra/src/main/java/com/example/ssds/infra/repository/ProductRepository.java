@@ -106,6 +106,10 @@ public interface ProductRepository
 
         long countByTrackType(TrackType trackType);
 
+        long countByCategoryId(Long categoryId);
+
+        long countBySupplierId(Long supplierId);
+
         /**
          * FR-02 KPI 候選品項總數（軌別），不含軟刪除品項。
          */

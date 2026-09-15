@@ -60,9 +60,9 @@ public class ProductReferenceQueryService {
     public List<SupplierResponse> getSuppliers(String keyword) {
         String normalizedKeyword = normalize(keyword);
         List<Supplier> suppliers = normalizedKeyword == null
-                ? supplierRepository.findAllByOrderByNameAsc()
+                ? supplierRepository.findAllByDeletedAtIsNullOrderByNameAsc()
                 : supplierRepository
-                        .findByNameContainingIgnoreCaseOrderByNameAsc(
+                        .findByNameContainingIgnoreCaseAndDeletedAtIsNullOrderByNameAsc(
                                 normalizedKeyword
                         );
 
@@ -129,6 +129,7 @@ public class ProductReferenceQueryService {
 
     private CategoryTreeResponse toCategoryTreeResponse(Category category) {
         List<CategoryTreeResponse> children = category.getChildren().stream()
+                .filter(child -> !child.isDeleted())
                 .sorted(CATEGORY_ORDER)
                 .map(child -> new CategoryTreeResponse(
                         child.getId(),

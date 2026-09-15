@@ -86,7 +86,9 @@ public class InstagramHeatIngestJob {
         // 查不到的品類名稱只跳過該筆並記警告，不讓整個排程失敗。
         List<HashtagCategory> resolved = new ArrayList<>();
         for (InstagramHashtagMapping.Entry entry : InstagramHashtagMapping.ENTRIES) {
-            List<Category> matches = categoryRepository.findByNameIgnoreCase(entry.categoryName());
+            List<Category> matches = categoryRepository.findByNameIgnoreCaseAndDeletedAtIsNull(
+                    entry.categoryName()
+            );
             if (matches.isEmpty()) {
                 log.warn("設定檔的品類名稱查無對應品類，跳過：{}", entry.categoryName());
                 continue;

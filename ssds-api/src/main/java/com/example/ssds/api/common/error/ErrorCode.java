@@ -22,6 +22,7 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "權限不足，無法執行此操作"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "找不到指定的資料"),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "資料已存在，不可重複建立"),
+    RESOURCE_IN_USE(HttpStatus.CONFLICT, "資料仍被其他資料使用，無法刪除"),
     INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "目前狀態不允許此操作"),
     WEIGHT_SUM_INVALID(HttpStatus.CONFLICT, "情境權重組加總必須等於 1.000"),
     AI_SCHEMA_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "AI 回應格式不正確，請稍後再試"),

@@ -52,7 +52,9 @@ class ProductReferenceQueryServiceTest {
         Category snacks = category(2L, "零食", 1);
         Category cookies = category(5L, "餅乾", 2);
         Category candy = category(4L, "糖果", 1);
-        snacks.getChildren().addAll(List.of(cookies, candy));
+        Category deleted = category(6L, "已刪除類別", 0);
+        deleted.softDelete(null);
+        snacks.getChildren().addAll(List.of(cookies, candy, deleted));
         when(categoryRepository.findTreeWithChildren())
                 .thenReturn(List.of(drinks, snacks));
 
@@ -74,7 +76,7 @@ class ProductReferenceQueryServiceTest {
                 .name("京都食品")
                 .contact("王小姐")
                 .build();
-        when(supplierRepository.findAllByOrderByNameAsc())
+        when(supplierRepository.findAllByDeletedAtIsNullOrderByNameAsc())
                 .thenReturn(List.of(supplier));
 
         List<SupplierResponse> result = service.getSuppliers("  ");
@@ -87,13 +89,13 @@ class ProductReferenceQueryServiceTest {
     @Test
     void supplierKeywordIsTrimmedBeforeSearch() {
         when(supplierRepository
-                .findByNameContainingIgnoreCaseOrderByNameAsc("京都"))
+                .findByNameContainingIgnoreCaseAndDeletedAtIsNullOrderByNameAsc("京都"))
                 .thenReturn(List.of());
 
         service.getSuppliers("  京都  ");
 
         verify(supplierRepository)
-                .findByNameContainingIgnoreCaseOrderByNameAsc("京都");
+                .findByNameContainingIgnoreCaseAndDeletedAtIsNullOrderByNameAsc("京都");
     }
 
     @Test

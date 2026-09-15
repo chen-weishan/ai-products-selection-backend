@@ -210,12 +210,12 @@ public class ImportPreviewService {
                         product.getId(), product.getName(), product.getCategory().getName()))
                 .toList();
         Map<String, List<Category>> categories = new HashMap<>();
-        for (Category category : categoryRepository.findAll()) {
+        for (Category category : categoryRepository.findAllByDeletedAtIsNull()) {
             categories.computeIfAbsent(key(category.getName()), ignored -> new ArrayList<>())
                     .add(category);
         }
         Map<String, Supplier> suppliers = new HashMap<>();
-        supplierRepository.findAll().forEach(supplier ->
+        supplierRepository.findAllByDeletedAtIsNull().forEach(supplier ->
                 suppliers.putIfAbsent(key(supplier.getName()), supplier));
         Map<String, AudienceSegment> audiences = new HashMap<>();
         audienceRepository.findAll().forEach(audience ->
