@@ -2,6 +2,8 @@ package com.example.ssds.api.service;
 
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
+import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,24 @@ import jakarta.transaction.Transactional;
 @SpringBootTest
 @Transactional
 class SimpleTest {
+
+    /**
+     * 唯一的版本號。
+     *
+     * <p>不可寫死成 "2.0"：{@code weight_version.version_no} 有唯一鍵，而本測試連的是
+     * 共用資料庫。只要團隊中任何人在沒有 {@code @Transactional} 的舊分支上跑過一次
+     * 測試（2026-09-14 就發生過），那筆列就會留在庫裡，之後<b>所有人</b>的這支測試
+     * 都會撞唯一鍵而失敗，且失敗訊息與程式碼邏輯完全無關，很難查。
+     *
+     * <p>@Transactional 只能保證「自己不留垃圾」，擋不住別人留下的；用唯一值才能讓
+     * 這支測試不依賴共用庫當下是否乾淨。長度受限於 VARCHAR(16)。
+     */
+    private static String uniqueVersionNo() {
+        // version_no 是 VARCHAR(16)，完整 UUID（36 字元）塞不下。
+        // 取 12 個十六進位字元 + 前綴共 13 字元，仍在上限內。
+        return "t" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -70,7 +90,7 @@ class SimpleTest {
     @Test
     void testWeightVersionSave() {
         WeightVersion wv = WeightVersion.builder()
-                .versionNo("2.0")
+                .versionNo(uniqueVersionNo())
                 .name("Test Weight Version")
                 .effectiveFrom(java.time.LocalDate.of(2026, 1, 1))
                 .build();
@@ -94,7 +114,7 @@ class SimpleTest {
         product = productRepository.save(product);
 
         WeightVersion weightVersion = WeightVersion.builder()
-                .versionNo("3.0")
+                .versionNo(uniqueVersionNo())
                 .name("ProductScore Test Weight Version")
                 .effectiveFrom(java.time.LocalDate.of(2026, 1, 1))
                 .build();
