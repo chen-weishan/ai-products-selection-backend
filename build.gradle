@@ -70,5 +70,18 @@ subprojects {
 		// 與 bootRun 同理：.env 在 repo 根目錄，而 Gradle 預設用子專案目錄當
 		// 工作目錄，會讓 spring.config.import 的 ./.env 找不到檔案
 		workingDir = rootProject.projectDir
+
+		// Flyway 一律關掉，且不讓 .env 有機會打開它。
+		//
+		// 任何 @SpringBootTest 都會啟動完整 context，context 一起來 Flyway 就會
+		// 對 spring.flyway.url 指向的資料庫套用 migration —— 那是共用的 Supabase。
+		// 負責套用 migration 的人會在 .env 設 SSDS_FLYWAY_ENABLED=true，
+		// 於是在那台機器上「跑一次單元測試」等於「對共用庫上線一支還沒審完的 migration」。
+		// 2026-09-11 就這樣誤套過一次。
+		//
+		// 這裡覆蓋環境變數，是因為 .env 由 spring.config.import 載入、優先序高於
+		// 預設值；只靠 application.properties 的 ${SSDS_FLYWAY_ENABLED:false} 擋不住。
+		// migration 要驗證請跑 :ssds-infra:test（Testcontainers，隔離的容器）。
+		environment 'SSDS_FLYWAY_ENABLED', 'false'
 	}
 }
