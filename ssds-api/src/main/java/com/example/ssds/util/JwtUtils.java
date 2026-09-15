@@ -60,11 +60,16 @@ public class JwtUtils {
     	}
 
  
-    // jwt.secret 是 Base64 編碼過的亂數，要先解碼還原成位元組
+    // 修正：SECRET_KEY 不是 Base64 編碼，是一般字串；且 generateToken() 用 auth0
+    // 的 Algorithm.HMAC256(SECRET_KEY) 簽章時，內部也是直接取字串的 UTF-8 位元組。
+    // 這裡改成同樣用 UTF-8 位元組，兩邊才會是同一把金鑰，簽章跟驗證才對得起來。
+    // （原本誤把它當 Base64 解碼，解出來的位元組跟簽章時用的完全不同，
+    //   而且 SECRET_KEY 含有底線字元，Decoders.BASE64.decode 甚至會直接拋出
+    //   IllegalArgumentException，導致每次驗證 token 都 500。）
 
     	private SecretKey getSigningKey() {
 
-    		byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
+    		byte[] keyBytes = SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
     		return Keys.hmacShaKeyFor(keyBytes);
 
