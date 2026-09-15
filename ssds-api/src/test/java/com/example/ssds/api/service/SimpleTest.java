@@ -6,8 +6,28 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 
+import jakarta.transaction.Transactional;
+
+/**
+ * Repository 存得進去、拿得回 id。
+ *
+ * <p><b>@Transactional 不可拿掉</b>：本測試連的是共用的 Supabase 資料庫，
+ * 沒有回滾的話每跑一次就在 category／product／weight_version 留下一組
+ * 「Simple Test ...」的資料。2026-09-11 清出 28 筆這種殘留，
+ * 而且 {@code version_no = "2.0"} 的唯一鍵會撞到前一次自己留下的列，
+ * 讓測試從第二次起就固定失敗。
+ *
+ * <p><b>與 {@link TransactionalSimpleTest} 內容重複</b>：那支是本檔加上
+ * {@code @Transactional} 的版本。兩支現在完全等價，應該擇一刪除——
+ * 保留哪一支由 PR 作者決定，這裡先止血不擅自刪別人的測試。
+ *
+ * <p>Flyway 護欄的理由見 {@code build.gradle} 的 test 設定。
+ */
+@TestPropertySource(properties = "spring.flyway.enabled=false")
 @SpringBootTest
+@Transactional
 class SimpleTest {
 
     @Autowired

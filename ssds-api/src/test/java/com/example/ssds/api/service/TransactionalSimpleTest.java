@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import jakarta.transaction.Transactional;
 
+@TestPropertySource(properties = "spring.flyway.enabled=false")
 @SpringBootTest
 @Transactional
 class TransactionalSimpleTest {
