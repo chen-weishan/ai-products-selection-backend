@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
-import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.aitask.dto.*;
 import com.example.ssds.core.domain.*;
 import org.junit.jupiter.api.Test;

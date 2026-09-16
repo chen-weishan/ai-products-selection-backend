@@ -1,6 +1,8 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.fullanalysis;
 
 import static org.mockito.Mockito.*;
+
+import com.example.ssds.api.aitask.service.AiTaskService;
 
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

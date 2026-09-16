@@ -16,9 +16,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
     List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
     @Query("select i.id from AiTaskItem i where i.task.id = :taskId and i.status = :status order by i.id")

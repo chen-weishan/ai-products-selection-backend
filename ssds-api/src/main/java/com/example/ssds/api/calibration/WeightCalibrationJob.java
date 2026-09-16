@@ -1,6 +1,6 @@
 package com.example.ssds.api.calibration;
 
-import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.infra.repository.*;
 import java.time.*;
 import org.slf4j.*;

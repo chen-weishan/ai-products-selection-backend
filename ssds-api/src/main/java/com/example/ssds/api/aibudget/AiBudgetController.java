@@ -1,4 +1,4 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aibudget;
 
 import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.api.common.response.ApiResponse;

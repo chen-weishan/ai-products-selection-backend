@@ -1,8 +1,10 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.execution;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
+
+import com.example.ssds.api.aitask.fullanalysis.FullAnalysisOrchestrator;
 
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.calibration.WeightCalibrationService;

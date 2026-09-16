@@ -12,6 +12,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
@@ -29,6 +31,7 @@ import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
+import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.AuditLog;
@@ -58,6 +61,7 @@ class ProductCommandServiceTest {
     private CategoryRepository categoryRepository;
     private TrendKeywordRepository keywordRepository;
     private ProductSourcingCandidateService sourcingCandidateService;
+    private AiTaskService aiTaskService;
     private ProductCommandService service;
     private Category category;
     private AppUser createActor;
@@ -74,6 +78,7 @@ class ProductCommandServiceTest {
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         keywordRepository = mock(TrendKeywordRepository.class);
         sourcingCandidateService = mock(ProductSourcingCandidateService.class);
+        aiTaskService = mock(AiTaskService.class);
 
         service = new ProductCommandService(
                 productRepository,
@@ -84,7 +89,8 @@ class ProductCommandServiceTest {
                 categoryRepository,
                 supplierRepository,
                 keywordRepository,
-                sourcingCandidateService
+                sourcingCandidateService,
+                aiTaskService
         );
 
         category = Category.builder()
@@ -114,6 +120,11 @@ class ProductCommandServiceTest {
 
     @Test
     void createTrackAWithValidPricingSucceeds() {
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(task.taskId()).thenReturn(700L);
+        when(task.status()).thenReturn(TaskStatus.PENDING);
+        when(aiTaskService.enqueueFullAnalysis(anyList(), any(AppUser.class), any(Boolean.class)))
+                .thenReturn(task);
         ProductCreateResponse response = createProduct(createRequest(
                 TrackType.A,
                 null,
@@ -124,9 +135,12 @@ class ProductCommandServiceTest {
         assertEquals(TrackType.A, response.product().trackType());
         assertEquals(new BigDecimal("0.3333"), response.product().marginRate());
         assertEquals(ProductStatus.EVALUATING, response.product().status());
+        assertEquals(700L, response.taskId());
+        assertEquals(TaskStatus.PENDING, response.taskStatus());
         verify(productRepository).saveAndFlush(argThat(product ->
                 product.getCreatedBy() == createActor
         ));
+        verify(aiTaskService).enqueueFullAnalysis(anyList(), any(AppUser.class), any(Boolean.class));
     }
 
     @Test
@@ -153,6 +167,8 @@ class ProductCommandServiceTest {
 
         assertEquals(ProductStatus.DRAFT, response.product().status());
         assertNull(response.product().cost());
+        assertNull(response.taskId());
+        verify(aiTaskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     @Test
@@ -172,6 +188,7 @@ class ProductCommandServiceTest {
         );
 
         assertEquals(ProductStatus.EVALUATING, response.product().status());
+        verify(aiTaskService).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     @Test

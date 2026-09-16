@@ -1,4 +1,4 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.fullanalysis;
 
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.recommendation.RecommendationService;
@@ -48,7 +48,11 @@ public class FullAnalysisOrchestrator {
         var classification = scene.classify(productId, forceRefresh);
         if (classification.fallbackApplied()) warnings.add("情境判定已使用 REPLENISHMENT 降級值");
 
-        scoring.recalculate(productId, classification);
+        var scoringResult = scoring.recalculate(productId, classification);
+        if (!scoringResult.scored()) {
+            warnings.add(scoringResult.message());
+            throw new FullAnalysisIncompleteException(String.join(" ", warnings));
+        }
         var insight = productInsight.analyze(productId, forceRefresh);
         if (!insight.analysisCompleted()) warnings.add(insight.statusMessage());
 
@@ -64,4 +68,11 @@ public class FullAnalysisOrchestrator {
     }
 
     public record Result(int cacheHits, String warning) {}
+
+    /** 可辨識的業務失敗：資料狀態已落地，但本次 FULL_ANALYSIS 未完成。 */
+    public static final class FullAnalysisIncompleteException extends RuntimeException {
+        public FullAnalysisIncompleteException(String message) {
+            super(message);
+        }
+    }
 }

@@ -2,7 +2,7 @@ package com.example.ssds.api.calibration;
 
 import static org.mockito.Mockito.*;
 
-import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.infra.entity.CalibrationReport;

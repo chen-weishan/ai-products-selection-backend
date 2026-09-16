@@ -1,10 +1,11 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
+import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
@@ -12,6 +13,7 @@ import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +31,49 @@ class AiTaskServiceTest {
     @Mock AiTaskItemRepository itemRepository;
     @Mock ProductRepository productRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+
+    @Test
+    void getsCompleteTaskProgressAndUsageStatistics() {
+        AiTask task = AiTask.builder()
+                .id(12L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.RUNNING)
+                .totalCount(4)
+                .successCount(1)
+                .failCount(1)
+                .cacheHitCount(2)
+                .requestCount(7)
+                .retryPoolRequestCount(3)
+                .totalCostUsd(new BigDecimal("0.12500"))
+                .startedAt(Instant.parse("2026-09-16T01:00:00Z"))
+                .build();
+        when(taskRepository.findById(12L)).thenReturn(Optional.of(task));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.get(12L);
+
+        assertAll(
+                () -> assertEquals(12L, response.taskId()),
+                () -> assertEquals(AiTaskType.FULL_ANALYSIS, response.taskType()),
+                () -> assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool()),
+                () -> assertEquals(TaskStatus.RUNNING, response.status()),
+                () -> assertEquals(50, response.progressPercent()),
+                () -> assertEquals(2, response.cacheHitCount()),
+                () -> assertEquals(7, response.requestCount()),
+                () -> assertEquals(3, response.retryPoolRequestCount()),
+                () -> assertEquals(new BigDecimal("0.12500"), response.totalCostUsd()));
+    }
+
+    @Test
+    void getRejectsMissingTask() {
+        when(taskRepository.findById(99L)).thenReturn(Optional.empty());
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.get(99L));
+    }
 
     @Test
     void createsPendingTaskAndPublishesAfterCommitEvent() {
@@ -54,6 +99,37 @@ class AiTaskServiceTest {
         verify(eventPublisher).publishEvent(event.capture());
         assertEquals(700L, event.getValue().taskId());
         verify(itemRepository).saveAll(argThat(items -> items.iterator().hasNext()));
+    }
+
+    @Test
+    void fr03FullAnalysisUsesCanonicalTaskAndEventPipeline() {
+        Product product = Product.builder()
+                .id(102L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        AppUser actor = AppUser.builder().id(9L).email("buyer@ssds.dev").build();
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(702L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.enqueueFullAnalysis(List.of(product), actor, false);
+
+        assertAll(
+                () -> assertEquals(702L, response.taskId()),
+                () -> assertEquals(AiTaskType.FULL_ANALYSIS, response.taskType()),
+                () -> assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool()),
+                () -> assertEquals(TaskStatus.PENDING, response.status()));
+        verify(taskRepository).save(argThat(task -> task.getCreatedBy() == actor));
+        verify(itemRepository).saveAll(argThat(items ->
+                items.iterator().next().getProduct() == product));
+        ArgumentCaptor<AiTaskCreatedEvent> event = ArgumentCaptor.forClass(AiTaskCreatedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertEquals(702L, event.getValue().taskId());
     }
 
     @Test

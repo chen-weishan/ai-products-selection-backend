@@ -1,4 +1,4 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.audit.listener;
 
 import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.infra.entity.AuditLog;

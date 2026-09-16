@@ -1,5 +1,6 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.fullanalysis;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

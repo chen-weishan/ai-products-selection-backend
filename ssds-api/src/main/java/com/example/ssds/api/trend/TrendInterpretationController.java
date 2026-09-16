@@ -1,6 +1,6 @@
 package com.example.ssds.api.trend;
 
-import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.aitask.dto.*;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.trend.dto.TrendInterpretationResponse;

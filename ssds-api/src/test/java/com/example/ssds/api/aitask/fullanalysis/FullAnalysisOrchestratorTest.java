@@ -1,6 +1,7 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.fullanalysis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.insight.ProductInsightService;
@@ -12,6 +13,8 @@ import com.example.ssds.api.review.dto.ReviewRiskResponse;
 import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
 import com.example.ssds.api.scoring.ScoreRecalculationService;
+import com.example.ssds.core.domain.LastScoringStatus;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -29,6 +32,8 @@ class FullAnalysisOrchestratorTest {
         RecommendationResponse recommendationResponse = mock(RecommendationResponse.class);
         when(review.analyze(101L, false)).thenReturn(reviewResponse);
         when(scene.classify(101L, false)).thenReturn(sceneResponse);
+        when(scoring.recalculate(101L, sceneResponse)).thenReturn(
+                new ScoreRecalculationService.Result(LastScoringStatus.SCORED, List.of(), null));
         when(insight.analyze(101L, false)).thenReturn(insightResponse);
         when(recommendation.recommend(101L, false)).thenReturn(recommendationResponse);
         when(insightResponse.analysisCompleted()).thenReturn(true);
@@ -60,6 +65,8 @@ class FullAnalysisOrchestratorTest {
         when(reviewResponse.statusMessage())
                 .thenReturn("評論風險分析未執行：無評論資料，評論風險扣分計為 0");
         when(scene.classify(102L, false)).thenReturn(sceneResponse);
+        when(scoring.recalculate(102L, sceneResponse)).thenReturn(
+                new ScoreRecalculationService.Result(LastScoringStatus.SCORED, List.of(), null));
         when(insight.analyze(102L, false)).thenReturn(insightResponse);
         when(insightResponse.statusMessage()).thenReturn("賣點與風險分析未執行：無評論資料");
         when(recommendation.recommend(102L, false)).thenReturn(recommendationResponse);
@@ -71,5 +78,32 @@ class FullAnalysisOrchestratorTest {
                 "評論風險分析未執行：無評論資料，評論風險扣分計為 0 "
                         + "賣點與風險分析未執行：無評論資料",
                 result.warning());
+    }
+
+    @Test
+    void stopsScoreDependentAgentsWhenScoringDataIsInsufficient() {
+        SceneClassificationService scene = mock(SceneClassificationService.class);
+        ReviewRiskService review = mock(ReviewRiskService.class);
+        ProductInsightService insight = mock(ProductInsightService.class);
+        RecommendationService recommendation = mock(RecommendationService.class);
+        ScoreRecalculationService scoring = mock(ScoreRecalculationService.class);
+        ReviewRiskResponse reviewResponse = mock(ReviewRiskResponse.class);
+        SceneClassificationResponse sceneResponse = mock(SceneClassificationResponse.class);
+        when(review.analyze(103L, false)).thenReturn(reviewResponse);
+        when(reviewResponse.statusMessage()).thenReturn("無評論資料");
+        when(scene.classify(103L, false)).thenReturn(sceneResponse);
+        when(scoring.recalculate(103L, sceneResponse)).thenReturn(
+                new ScoreRecalculationService.Result(
+                        LastScoringStatus.INSUFFICIENT_DATA,
+                        List.of(),
+                        "六項加分因子缺少四項以上，無法產生分數"));
+
+        var exception = assertThrows(
+                FullAnalysisOrchestrator.FullAnalysisIncompleteException.class,
+                () -> new FullAnalysisOrchestrator(
+                        scene, review, scoring, insight, recommendation).analyze(103L, false));
+
+        assertEquals("無評論資料 六項加分因子缺少四項以上，無法產生分數", exception.getMessage());
+        verifyNoInteractions(insight, recommendation);
     }
 }

@@ -1,5 +1,6 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.execution;
 
+import com.example.ssds.api.aitask.fullanalysis.FullAnalysisOrchestrator;
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.review.ReviewRiskService;

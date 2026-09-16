@@ -30,7 +30,7 @@ import com.example.ssds.ai.model.calibration.WeightCalibrationResult;
 import com.example.ssds.ai.prompt.insight.ProductInsightPromptFactory;
 import com.example.ssds.api.calibration.WeightCalibrationService;
 import com.example.ssds.api.calibration.dto.WeightCalibrationInterpretRequest;
-import com.example.ssds.api.aitask.AiTaskService;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.recommendation.RecommendationService;

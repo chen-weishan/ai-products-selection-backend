@@ -1,5 +1,6 @@
-package com.example.ssds.api.aitask;
+package com.example.ssds.api.aitask.service;
 
+import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
 import com.example.ssds.api.aitask.dto.*;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
@@ -77,7 +78,10 @@ public class AiTaskService {
             return createCalibrationTask(request);
         }
         if (request.taskType() == AiTaskType.FULL_ANALYSIS && request.productIds().isEmpty()) {
-            return createFullAnalysis(productRepository.findFullAnalysisCandidates(eligibleStatuses()), request.forceRefresh());
+            return createFullAnalysis(
+                    productRepository.findFullAnalysisCandidates(eligibleStatuses()),
+                    null,
+                    request.forceRefresh());
         }
         if (!request.keywordIds().isEmpty()
                 || !request.calibrationReportIds().isEmpty()
@@ -224,7 +228,9 @@ public class AiTaskService {
             return Optional.empty();
         }
         List<Product> products = productRepository.findFullAnalysisCandidates(eligibleStatuses());
-        return products.isEmpty() ? Optional.empty() : Optional.of(createFullAnalysis(products, false));
+        return products.isEmpty()
+                ? Optional.empty()
+                : Optional.of(createFullAnalysis(products, null, false));
     }
 
     /** 隔日續跑前一輪因配額或單輪上限略過的品項。 */
@@ -236,7 +242,9 @@ public class AiTaskService {
         }
         List<Product> products = itemRepository.findProductsPendingQuotaRetry(
                 AiTaskType.FULL_ANALYSIS, com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA);
-        return products.isEmpty() ? Optional.empty() : Optional.of(createFullAnalysis(products, false));
+        return products.isEmpty()
+                ? Optional.empty()
+                : Optional.of(createFullAnalysis(products, null, false));
     }
 
     /** FR-07：人工重跑指定任務內的一般失敗項；原 task/item 保留作稽核。 */
@@ -272,12 +280,34 @@ public class AiTaskService {
         return AiTaskResponse.from(retryTask);
     }
 
-    private AiTaskResponse createFullAnalysis(List<Product> products, boolean forceRefresh) {
+    /**
+     * FR-03 與 FR-07 共用的 FULL_ANALYSIS 建立入口。
+     *
+     * <p>呼叫端保留各自的資格驗證與部分成功規則；本方法只負責以一致的
+     * task/item 資料與事件契約交給正式 Worker。
+     */
+    @Transactional
+    public AiTaskResponse enqueueFullAnalysis(
+            List<Product> products,
+            AppUser createdBy,
+            boolean forceRefresh) {
+        if (products == null || products.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED, "FULL_ANALYSIS 至少需要一個品項");
+        }
+        return createFullAnalysis(products, createdBy, forceRefresh);
+    }
+
+    private AiTaskResponse createFullAnalysis(
+            List<Product> products,
+            AppUser createdBy,
+            boolean forceRefresh) {
         AiTask task = taskRepository.save(AiTask.builder()
                 .taskType(AiTaskType.FULL_ANALYSIS)
                 .budgetPool(AiTaskType.BudgetPool.TRACK_A)
                 .status(TaskStatus.PENDING)
                 .totalCount(products.size())
+                .createdBy(createdBy)
                 .build());
         itemRepository.saveAll(products.stream()
                 .map(product -> AiTaskItem.builder().task(task).product(product).build())

@@ -6,11 +6,15 @@ import static org.mockito.Mockito.*;
 
 import com.example.ssds.ai.model.scene.SceneCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
+import com.example.ssds.api.product.service.ProductFallbackScoringService;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.ProductScoreRepository;
+import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.RiskAlertRepository;
 import com.example.ssds.infra.repository.WeightVersionRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -56,16 +60,97 @@ class ScoreRecalculationServiceTest {
                 0,
                 null);
 
-        List<ProductScore> result = new ScoreRecalculationService(scores, versions)
+        ScoreRecalculationService.Result result = new ScoreRecalculationService(scores, versions)
                 .recalculate(102L, classification);
 
-        assertEquals(2, result.size());
-        assertEquals(SceneType.FESTIVAL, result.get(0).getSceneType());
-        assertTrue(result.get(0).isPrimary());
-        assertEquals(SceneType.SEASONAL, result.get(1).getSceneType());
-        assertFalse(result.get(1).isPrimary());
-        assertEquals(9, result.get(0).getFactors().size());
+        assertEquals(LastScoringStatus.SCORED, result.status());
+        assertEquals(2, result.scores().size());
+        assertEquals(SceneType.FESTIVAL, result.scores().get(0).getSceneType());
+        assertTrue(result.scores().get(0).isPrimary());
+        assertEquals(SceneType.SEASONAL, result.scores().get(1).getSceneType());
+        assertFalse(result.scores().get(1).isPrimary());
+        assertEquals(9, result.scores().get(0).getFactors().size());
         verify(scores).deactivateCurrentScores(eq(102L), matches("\\d{4}W\\d{2}"));
+    }
+
+    @Test
+    void createsInitialSnapshotBeforeRecalculatingNewProduct() {
+        ProductScoreRepository scores = mock(ProductScoreRepository.class);
+        WeightVersionRepository versions = mock(WeightVersionRepository.class);
+        ProductRepository products = mock(ProductRepository.class);
+        ProductFallbackScoringService initialScoring = mock(ProductFallbackScoringService.class);
+        Product product = Product.builder().id(103L).build();
+        ProductScore initial = sourceScore(product);
+        WeightVersion version = versionWithProfiles();
+        WeightVersionRepository.GradeThresholdView threshold = mock(
+                WeightVersionRepository.GradeThresholdView.class);
+        when(threshold.getGradeAMin()).thenReturn(new BigDecimal("80"));
+        when(threshold.getGradeBMin()).thenReturn(new BigDecimal("65"));
+        when(scores.findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(103L))
+                .thenReturn(Optional.empty());
+        when(products.findById(103L)).thenReturn(Optional.of(product));
+        when(initialScoring.buildScore(product)).thenReturn(initial);
+        when(versions.findByIsCurrentTrue()).thenReturn(Optional.of(version));
+        when(versions.findGradeThreshold(eq(1L), anyString())).thenReturn(Optional.of(threshold));
+        when(scores.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SceneClassificationResponse classification = new SceneClassificationResponse(
+                10L, 103L, SceneCode.FESTIVAL, new BigDecimal("0.82"), "節慶匹配",
+                null, List.of(), false, null, false, "HIGH", "model",
+                "MODEL_CLASSIFY", "v3", null, null, 0, null);
+
+        ScoreRecalculationService.Result result = new ScoreRecalculationService(
+                scores, versions, products, initialScoring).recalculate(103L, classification);
+
+        assertEquals(1, result.scores().size());
+        verify(initialScoring).buildScore(product);
+        verify(scores).deactivateCurrentScores(eq(103L), matches("\\d{4}W\\d{2}"));
+    }
+
+    @Test
+    void recordsInsufficientDataWithoutPersistingAnInvalidScore() {
+        ProductScoreRepository scores = mock(ProductScoreRepository.class);
+        WeightVersionRepository versions = mock(WeightVersionRepository.class);
+        ProductRepository products = mock(ProductRepository.class);
+        ProductFallbackScoringService initialScoring = mock(ProductFallbackScoringService.class);
+        RiskAlertRepository alerts = mock(RiskAlertRepository.class);
+        Product product = Product.builder().id(104L).build();
+        ProductScore initial = insufficientSource(product);
+        WeightVersion version = versionWithProfiles();
+        WeightVersionRepository.GradeThresholdView threshold = mock(
+                WeightVersionRepository.GradeThresholdView.class);
+        when(threshold.getGradeAMin()).thenReturn(new BigDecimal("80"));
+        when(threshold.getGradeBMin()).thenReturn(new BigDecimal("65"));
+        when(scores.findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(104L))
+                .thenReturn(Optional.empty());
+        when(products.findById(104L)).thenReturn(Optional.of(product));
+        when(initialScoring.buildScore(product)).thenReturn(initial);
+        when(versions.findByIsCurrentTrue()).thenReturn(Optional.of(version));
+        when(versions.findGradeThreshold(1L, SceneType.FESTIVAL.name()))
+                .thenReturn(Optional.of(threshold));
+        when(alerts.existsByProductIdAndRiskTypeAndStatus(
+                        104L, "DATA_INSUFFICIENT", com.example.ssds.core.domain.AlertStatus.OPEN))
+                .thenReturn(false);
+
+        SceneClassificationResponse classification = new SceneClassificationResponse(
+                11L, 104L, SceneCode.FESTIVAL, new BigDecimal("0.82"), "節慶匹配",
+                null, List.of(), false, null, false, "HIGH", "model",
+                "MODEL_CLASSIFY", "v3", null, null, 0, null);
+
+        ScoreRecalculationService.Result result = new ScoreRecalculationService(
+                scores, versions, products, initialScoring, alerts)
+                .recalculate(104L, classification);
+
+        assertEquals(LastScoringStatus.INSUFFICIENT_DATA, result.status());
+        assertTrue(result.scores().isEmpty());
+        assertEquals(LastScoringStatus.INSUFFICIENT_DATA, product.getLastScoringStatus());
+        assertNotNull(product.getLastScoringAttemptedAt());
+        verify(products).save(product);
+        verify(alerts).save(argThat(alert ->
+                "DATA_INSUFFICIENT".equals(alert.getRiskType())
+                        && alert.getProduct() == product));
+        verify(scores, never()).saveAll(anyList());
+        verify(scores, never()).deactivateCurrentScores(anyLong(), anyString());
     }
 
     private static ProductScore sourceScore(Product product) {
@@ -91,6 +176,30 @@ class ScoreRecalculationServiceTest {
                     .penaltyValue(penalty ? BigDecimal.ZERO : null)
                     .penalty(penalty)
                     .dataAvailable(true)
+                    .build());
+        }
+        score.setFactors(factors);
+        return score;
+    }
+
+    private static ProductScore insufficientSource(Product product) {
+        ProductScore score = ProductScore.builder()
+                .product(product)
+                .sceneType(SceneType.REPLENISHMENT)
+                .primary(true)
+                .active(true)
+                .confidence(60)
+                .build();
+        List<ScoreFactor> factors = new ArrayList<>();
+        for (FactorCode code : FactorCode.values()) {
+            boolean margin = code == FactorCode.MARGIN;
+            factors.add(ScoreFactor.builder()
+                    .score(score)
+                    .factorCode(code)
+                    .normalizedValue(margin ? new BigDecimal("70") : null)
+                    .penaltyValue(code.isPenalty() ? BigDecimal.ZERO : null)
+                    .penalty(code.isPenalty())
+                    .dataAvailable(margin)
                     .build());
         }
         score.setFactors(factors);
