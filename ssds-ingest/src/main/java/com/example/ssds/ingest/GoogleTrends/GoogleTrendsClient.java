@@ -3,6 +3,8 @@ package com.example.ssds.ingest.GoogleTrends;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -23,7 +25,7 @@ import org.springframework.web.client.RestClient;
  * 那次的修正模式）。
  */
 @Component
-class GoogleTrendsClient {
+public class GoogleTrendsClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private final RestClient restClient;
@@ -69,6 +71,36 @@ class GoogleTrendsClient {
         double average = effectiveValues.stream().mapToInt(Integer::intValue).average().orElse(0);
         return Math.round(average);
     }
+
+    public List<DailyInterest> fetchInterestOverTime(String keyword, String timeframe) {
+    String json = restClient.post()
+            .uri(uriBuilder -> uriBuilder
+                    .path("/actors/cirkit~google-trends-scraper/run-sync-get-dataset-items")
+                    .queryParam("token", properties.apifyToken())
+                    .build())
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(Map.of(
+                    "keywords", List.of(keyword),
+                    "geo", properties.geoOrDefault(),
+                    "timeframe", timeframe,
+                    "dataTypes", List.of("interestOverTime"),
+                    "maxItems", properties.maxItemsOrDefault()))
+            .retrieve()
+            .body(String.class);
+
+    List<TrendPoint> points = readValue(json);
+    if (points == null) {
+        return List.of();
+    }
+    
+    return points.stream()
+            .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
+            .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
+            .map(p -> new DailyInterest(LocalDate.parse(p.date().substring(0, 10)), p.value()))
+            .toList();
+}
+
+    public record DailyInterest(LocalDate date, Integer value) {}
 
     private static List<TrendPoint> readValue(String json) {
         if (json == null || json.isBlank()) {
