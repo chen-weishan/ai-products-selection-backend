@@ -103,7 +103,7 @@ public class ReviewRiskService {
                 analyses.size(),
                 analyses,
                 statistics,
-                true,
+                !reviews.isEmpty(),
                 reviews.isEmpty()
                         ? "評論風險分析未執行：無評論資料，評論風險扣分計為 0"
                         : reviews.size() < MINIMUM_REVIEW_SAMPLE

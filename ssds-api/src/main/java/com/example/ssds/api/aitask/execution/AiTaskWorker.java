@@ -170,6 +170,9 @@ public class AiTaskWorker {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }
                         warning = result.warning();
+                        if (!result.analysisCompleted()) {
+                            throw new IncompleteItemException(incompleteAnalysisMessage(warning));
+                        }
                     }
                     case SCENE_CLASSIFY -> {
                         var response = sceneClassificationService.classify(
@@ -185,13 +188,17 @@ public class AiTaskWorker {
                         if (response.statusMessage() != null && !response.statusMessage().isBlank()) {
                             warning = response.statusMessage();
                         }
+                        if (!response.analysisCompleted()) {
+                            throw new IncompleteItemException(incompleteReviewMessage(warning));
+                        }
                     }
                     case SELLING_POINT -> {
                         var response = productInsightService.analyze(
                                 item.getProduct().getId(), event.forceRefresh());
                         if (response.cacheHit() && dailyAiBudget != null) dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         if (!response.analysisCompleted()) {
-                            warning = response.statusMessage();
+                            throw new IncompleteItemException(
+                                    incompleteInsightMessage(response.statusMessage()));
                         }
                     }
                     case RECOMMENDATION -> {
@@ -276,6 +283,30 @@ public class AiTaskWorker {
         if (added == null || added.isBlank()) return current;
         String merged = current + " " + added;
         return merged.length() <= 500 ? merged : merged.substring(0, 500);
+    }
+
+    private static String incompleteInsightMessage(String message) {
+        return message == null || message.isBlank()
+                ? "賣點與風險分析未完成"
+                : message;
+    }
+
+    private static String incompleteReviewMessage(String message) {
+        return message == null || message.isBlank()
+                ? "評論風險分析未完成"
+                : message;
+    }
+
+    private static String incompleteAnalysisMessage(String message) {
+        return message == null || message.isBlank()
+                ? "完整分析未完成"
+                : message;
+    }
+
+    private static final class IncompleteItemException extends RuntimeException {
+        private IncompleteItemException(String message) {
+            super(message);
+        }
     }
 
     private static final class DeferredItemException extends RuntimeException {

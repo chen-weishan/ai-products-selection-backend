@@ -32,7 +32,7 @@ public record ReviewRiskResponse(
 
     public static ReviewRiskResponse from(
             Long productId, int reviewCount, ReviewRiskResult result, Instant analyzedAt) {
-        boolean completed = !result.fallbackApplied();
+        boolean completed = !result.fallbackApplied() && reviewCount > 0;
         String statusMessage = result.fallbackApplied()
                 ? "評論分析未完成"
                 : reviewCount == 0

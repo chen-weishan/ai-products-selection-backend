@@ -1,6 +1,7 @@
 package com.example.ssds.api.aitask.fullanalysis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
@@ -36,6 +37,7 @@ class FullAnalysisOrchestratorTest {
                 new ScoreRecalculationService.Result(LastScoringStatus.SCORED, List.of(), null));
         when(insight.analyze(101L, false)).thenReturn(insightResponse);
         when(recommendation.recommend(101L, false)).thenReturn(recommendationResponse);
+        when(reviewResponse.analysisCompleted()).thenReturn(true);
         when(insightResponse.analysisCompleted()).thenReturn(true);
 
         FullAnalysisOrchestrator.Result result = new FullAnalysisOrchestrator(
@@ -51,7 +53,7 @@ class FullAnalysisOrchestratorTest {
     }
 
     @Test
-    void keepsAgentSpecificMessagesWhenReviewsAreAbsent() {
+    void marksFullAnalysisIncompleteWhenProductInsightHasNoUsableOutput() {
         SceneClassificationService scene = mock(SceneClassificationService.class);
         ReviewRiskService review = mock(ReviewRiskService.class);
         ProductInsightService insight = mock(ProductInsightService.class);
@@ -63,21 +65,57 @@ class FullAnalysisOrchestratorTest {
         RecommendationResponse recommendationResponse = mock(RecommendationResponse.class);
         when(review.analyze(102L, false)).thenReturn(reviewResponse);
         when(reviewResponse.statusMessage())
-                .thenReturn("評論風險分析未執行：無評論資料，評論風險扣分計為 0");
+                .thenReturn("評論樣本不足（少於 20 則），評論風險扣分計為 0");
+        when(reviewResponse.analysisCompleted()).thenReturn(true);
         when(scene.classify(102L, false)).thenReturn(sceneResponse);
         when(scoring.recalculate(102L, sceneResponse)).thenReturn(
                 new ScoreRecalculationService.Result(LastScoringStatus.SCORED, List.of(), null));
         when(insight.analyze(102L, false)).thenReturn(insightResponse);
-        when(insightResponse.statusMessage()).thenReturn("賣點與風險分析未執行：無評論資料");
+        when(insightResponse.statusMessage()).thenReturn("賣點證據不足／風險證據不足");
         when(recommendation.recommend(102L, false)).thenReturn(recommendationResponse);
 
         FullAnalysisOrchestrator.Result result = new FullAnalysisOrchestrator(
                 scene, review, scoring, insight, recommendation).analyze(102L, false);
 
         assertEquals(
-                "評論風險分析未執行：無評論資料，評論風險扣分計為 0 "
-                        + "賣點與風險分析未執行：無評論資料",
+                "評論樣本不足（少於 20 則），評論風險扣分計為 0 "
+                        + "賣點證據不足／風險證據不足",
                 result.warning());
+        assertFalse(result.analysisCompleted());
+        verify(recommendation).recommend(102L, false);
+    }
+
+    @Test
+    void marksFullAnalysisIncompleteWhenReviewRiskHasNoUsableOutput() {
+        SceneClassificationService scene = mock(SceneClassificationService.class);
+        ReviewRiskService review = mock(ReviewRiskService.class);
+        ProductInsightService insight = mock(ProductInsightService.class);
+        RecommendationService recommendation = mock(RecommendationService.class);
+        ScoreRecalculationService scoring = mock(ScoreRecalculationService.class);
+        ReviewRiskResponse reviewResponse = mock(ReviewRiskResponse.class);
+        SceneClassificationResponse sceneResponse = mock(SceneClassificationResponse.class);
+        ProductInsightResponse insightResponse = mock(ProductInsightResponse.class);
+        RecommendationResponse recommendationResponse = mock(RecommendationResponse.class);
+        when(review.analyze(104L, false)).thenReturn(reviewResponse);
+        when(reviewResponse.analysisCompleted()).thenReturn(false);
+        when(reviewResponse.statusMessage())
+                .thenReturn("評論風險分析未執行：無評論資料，評論風險扣分計為 0");
+        when(scene.classify(104L, false)).thenReturn(sceneResponse);
+        when(scoring.recalculate(104L, sceneResponse)).thenReturn(
+                new ScoreRecalculationService.Result(LastScoringStatus.SCORED, List.of(), null));
+        when(insight.analyze(104L, false)).thenReturn(insightResponse);
+        when(insightResponse.analysisCompleted()).thenReturn(true);
+        when(recommendation.recommend(104L, false)).thenReturn(recommendationResponse);
+
+        FullAnalysisOrchestrator.Result result = new FullAnalysisOrchestrator(
+                scene, review, scoring, insight, recommendation).analyze(104L, false);
+
+        assertEquals(
+                "評論風險分析未執行：無評論資料，評論風險扣分計為 0",
+                result.warning());
+        assertFalse(result.analysisCompleted());
+        verify(insight).analyze(104L, false);
+        verify(recommendation).recommend(104L, false);
     }
 
     @Test

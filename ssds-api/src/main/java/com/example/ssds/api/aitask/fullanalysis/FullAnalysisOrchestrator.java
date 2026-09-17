@@ -43,6 +43,8 @@ public class FullAnalysisOrchestrator {
         var review = reviewRisk.analyze(productId, forceRefresh);
         if (review.statusMessage() != null && !review.statusMessage().isBlank()) {
             warnings.add(review.statusMessage());
+        } else if (!review.analysisCompleted()) {
+            warnings.add("評論風險分析未完成");
         }
 
         var classification = scene.classify(productId, forceRefresh);
@@ -54,7 +56,11 @@ public class FullAnalysisOrchestrator {
             throw new FullAnalysisIncompleteException(String.join(" ", warnings));
         }
         var insight = productInsight.analyze(productId, forceRefresh);
-        if (!insight.analysisCompleted()) warnings.add(insight.statusMessage());
+        if (!insight.analysisCompleted()) {
+            warnings.add(insight.statusMessage() == null || insight.statusMessage().isBlank()
+                    ? "賣點與風險分析未完成"
+                    : insight.statusMessage());
+        }
 
         var advice = recommendation.recommend(productId, forceRefresh);
         if (advice.fallbackApplied()) warnings.add("進貨建議已使用規則式降級值");
@@ -64,10 +70,17 @@ public class FullAnalysisOrchestrator {
         if (classification.cacheHit()) cacheHits++;
         if (insight.cacheHit()) cacheHits++;
         if (advice.cacheHit()) cacheHits++;
-        return new Result(cacheHits, String.join(" ", warnings));
+        return new Result(
+                cacheHits,
+                String.join(" ", warnings),
+                review.analysisCompleted() && insight.analysisCompleted());
     }
 
-    public record Result(int cacheHits, String warning) {}
+    public record Result(int cacheHits, String warning, boolean analysisCompleted) {
+        public Result(int cacheHits, String warning) {
+            this(cacheHits, warning, true);
+        }
+    }
 
     /** 可辨識的業務失敗：資料狀態已落地，但本次 FULL_ANALYSIS 未完成。 */
     public static final class FullAnalysisIncompleteException extends RuntimeException {

@@ -1,6 +1,7 @@
 package com.example.ssds.api.review.dto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.review.ReviewRiskOutput;
@@ -47,6 +48,7 @@ class ReviewRiskResponseTest {
 
         assertEquals("評論風險分析未執行：無評論資料，評論風險扣分計為 0", response.statusMessage());
         assertEquals(0, response.riskPenaltyOverride());
+        assertFalse(response.analysisCompleted());
     }
 
     @Test

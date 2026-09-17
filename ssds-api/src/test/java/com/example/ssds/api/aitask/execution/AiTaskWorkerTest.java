@@ -71,6 +71,7 @@ class AiTaskWorkerTest {
             case REVIEW_RISK -> {
                 ReviewRiskResponse response = mock(ReviewRiskResponse.class);
                 when(response.cacheHit()).thenReturn(true);
+                when(response.analysisCompleted()).thenReturn(true);
                 when(reviewRiskService.analyze(101L, false)).thenReturn(response);
             }
             case SELLING_POINT -> {
@@ -202,7 +203,7 @@ class AiTaskWorkerTest {
     }
 
     @Test
-    void reviewRiskFallbackKeepsTaskSuccessfulAndAddsIncompleteMarker() {
+    void incompleteReviewRiskFailsTaskAndPersistsReason() {
         AiTaskRepository taskRepository = mock(AiTaskRepository.class);
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
         SceneClassificationService sceneService = mock(SceneClassificationService.class);
@@ -211,6 +212,7 @@ class AiTaskWorkerTest {
         RecommendationService recommendationService = mock(RecommendationService.class);
         ReviewRiskResponse fallback = mock(ReviewRiskResponse.class);
         when(fallback.fallbackApplied()).thenReturn(true);
+        when(fallback.analysisCompleted()).thenReturn(false);
         when(fallback.statusMessage()).thenReturn("評論分析未完成");
         when(reviewRiskService.analyze(101L, true)).thenReturn(fallback);
         Product product = Product.builder().id(101L).build();
@@ -225,9 +227,71 @@ class AiTaskWorkerTest {
 
         worker.run(new AiTaskCreatedEvent(702L, true));
 
-        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals(TaskItemStatus.FAILED, item.getStatus());
         assertEquals("評論分析未完成", item.getErrorMessage());
-        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+        assertEquals(TaskStatus.FAILED, task.getStatus());
+    }
+
+    @Test
+    void reviewRiskWithoutReviewsFailsTaskAndPersistsReason() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ReviewRiskResponse response = mock(ReviewRiskResponse.class);
+        when(response.analysisCompleted()).thenReturn(false);
+        when(response.statusMessage())
+                .thenReturn("評論風險分析未執行：無評論資料，評論風險扣分計為 0");
+        when(reviewRiskService.analyze(101L, false)).thenReturn(response);
+        AiTask task = AiTask.builder()
+                .id(746L).taskType(AiTaskType.REVIEW_RISK).totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(747L).task(task).product(Product.builder().id(101L).build()).build();
+        when(taskRepository.findById(746L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(746L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                reviewRiskService, mock(ProductInsightService.class),
+                mock(RecommendationService.class));
+
+        worker.run(new AiTaskCreatedEvent(746L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.FAILED, item.getStatus()),
+                () -> assertEquals(TaskStatus.FAILED, task.getStatus()),
+                () -> assertEquals(
+                        "評論風險分析未執行：無評論資料，評論風險扣分計為 0",
+                        item.getErrorMessage()));
+    }
+
+    @Test
+    void reviewRiskWithPersistedLowSampleResultSucceedsWithWarning() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        ReviewRiskService reviewRiskService = mock(ReviewRiskService.class);
+        ReviewRiskResponse response = mock(ReviewRiskResponse.class);
+        when(response.analysisCompleted()).thenReturn(true);
+        when(response.statusMessage())
+                .thenReturn("評論樣本不足（少於 20 則），評論風險扣分計為 0");
+        when(reviewRiskService.analyze(101L, false)).thenReturn(response);
+        AiTask task = AiTask.builder()
+                .id(748L).taskType(AiTaskType.REVIEW_RISK).totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(749L).task(task).product(Product.builder().id(101L).build()).build();
+        when(taskRepository.findById(748L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(748L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                reviewRiskService, mock(ProductInsightService.class),
+                mock(RecommendationService.class));
+
+        worker.run(new AiTaskCreatedEvent(748L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()),
+                () -> assertEquals(TaskStatus.SUCCEEDED, task.getStatus()),
+                () -> assertEquals(
+                        "評論樣本不足（少於 20 則），評論風險扣分計為 0",
+                        item.getErrorMessage()));
     }
 
     @Test
@@ -263,7 +327,7 @@ class AiTaskWorkerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"賣點與風險分析未完成", "賣點證據不足／風險證據不足"})
-    void productInsightIncompleteKeepsTaskSuccessfulAndPersistsWarning(String warning) {
+    void productInsightIncompleteFailsTaskAndPersistsReason(String warning) {
         AiTaskRepository taskRepository = mock(AiTaskRepository.class);
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
         SceneClassificationService sceneService = mock(SceneClassificationService.class);
@@ -286,9 +350,46 @@ class AiTaskWorkerTest {
 
         worker.run(new AiTaskCreatedEvent(704L, true));
 
-        assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
+        assertEquals(TaskItemStatus.FAILED, item.getStatus());
         assertEquals(warning, item.getErrorMessage());
-        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+        assertEquals(TaskStatus.FAILED, task.getStatus());
+    }
+
+    @Test
+    void fullAnalysisFailsWhenProductInsightHasNoUsableOutput() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(744L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(745L)
+                .task(task)
+                .product(Product.builder().id(101L).build())
+                .build();
+        when(taskRepository.findById(744L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(744L)).thenReturn(List.of(item));
+        when(orchestrator.analyze(101L, false)).thenReturn(
+                new FullAnalysisOrchestrator.Result(
+                        0, "賣點與風險分析未執行：無評論資料", false));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 150);
+
+        worker.run(new AiTaskCreatedEvent(744L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.FAILED, item.getStatus()),
+                () -> assertEquals(TaskStatus.FAILED, task.getStatus()),
+                () -> assertEquals(
+                        "賣點與風險分析未執行：無評論資料",
+                        item.getErrorMessage()));
     }
 
     @Test

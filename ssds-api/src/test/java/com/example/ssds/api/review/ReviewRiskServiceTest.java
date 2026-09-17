@@ -60,7 +60,7 @@ class ReviewRiskServiceTest {
         var response = fixture.service.analyze(102L, false);
 
         assertAll(
-                () -> assertTrue(response.analysisCompleted()),
+                () -> assertFalse(response.analysisCompleted()),
                 () -> assertEquals(0, response.riskPenaltyOverride()),
                 () -> assertEquals(
                         "評論風險分析未執行：無評論資料，評論風險扣分計為 0",
