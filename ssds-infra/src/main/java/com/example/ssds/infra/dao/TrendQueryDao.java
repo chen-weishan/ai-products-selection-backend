@@ -84,89 +84,89 @@ public class TrendQueryDao {
      * 而不是從讀值反查來源 —— 沒讀值的來源才會被顯示為 DEGRADED，
      * 而不是整筆消失。
      */
-    public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
-        return jdbcClient
-                .sql("""
-                     WITH keyword_categories AS (
-                         SELECT DISTINCT p.category_id
-                         FROM product_keyword pk
-                         JOIN product p ON p.id = pk.product_id
-                         WHERE pk.keyword_id = :keywordId
-                     ),
-                     relevant_readings AS (
-                         SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
-                         FROM heat_reading hr
-                         JOIN heat_source hs ON hs.id = hr.source_id
-                         WHERE hs.granularity = 'KEYWORD' AND hr.keyword_id = :keywordId
+public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
+    return jdbcClient
+            .sql("""
+                 WITH keyword_categories AS (
+                     SELECT DISTINCT p.category_id
+                     FROM product_keyword pk
+                     JOIN product p ON p.id = pk.product_id
+                     WHERE pk.keyword_id = :keywordId
+                 ),
+                 relevant_readings AS (
+                     SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
+                     FROM heat_reading hr
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     WHERE hs.granularity = 'KEYWORD' AND hr.keyword_id = :keywordId
 
-                         UNION ALL
+                     UNION ALL
 
-                         SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
-                         FROM heat_reading hr
-                         JOIN heat_source hs ON hs.id = hr.source_id
-                         JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                         WHERE hs.granularity = 'CATEGORY'
-                     ),
-                     SourceLatest AS (
-                         SELECT MAX(reading_date) AS asof FROM relevant_readings
-                     ),
-                     Today AS (
-                         SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
-                         FROM relevant_readings rr, SourceLatest ld
-                         WHERE rr.reading_date = ld.asof
-                         GROUP BY rr.source_id
-                     ),
-                     D7 AS (
-                         SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_7d
-                         FROM relevant_readings rr, SourceLatest ld
-                         WHERE rr.reading_date = ld.asof - INTERVAL '7 days'
-                         GROUP BY rr.source_id
-                     ),
-                     D30 AS (
-                         SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_30d
-                         FROM relevant_readings rr, SourceLatest ld
-                         WHERE rr.reading_date = ld.asof - INTERVAL '30 days'
-                         GROUP BY rr.source_id
-                     ),
-                     applicable_sources AS (
-                         SELECT hs.id, hs.source_code, hs.granularity, hs.availability
-                         FROM heat_source hs
-                         WHERE hs.enabled = TRUE AND hs.granularity = 'KEYWORD'
+                     SELECT hr.source_id, hr.reading_date, hr.percentile_within_source
+                     FROM heat_reading hr
+                     JOIN heat_source hs ON hs.id = hr.source_id
+                     JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                     WHERE hs.granularity = 'CATEGORY'
+                 ),
+                 SourceLatest AS (
+                     SELECT MAX(reading_date) AS asof FROM relevant_readings
+                 ),
+                 Today AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof
+                     GROUP BY rr.source_id
+                 ),
+                 D7 AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_7d
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof - INTERVAL '7 days'
+                     GROUP BY rr.source_id
+                 ),
+                 D30 AS (
+                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_30d
+                     FROM relevant_readings rr, SourceLatest ld
+                     WHERE rr.reading_date = ld.asof - INTERVAL '30 days'
+                     GROUP BY rr.source_id
+                 ),
+                 applicable_sources AS (
+                     SELECT hs.id, hs.source_code, hs.granularity, hs.availability
+                     FROM heat_source hs
+                     WHERE hs.enabled = TRUE AND hs.granularity = 'KEYWORD'
 
-                         UNION ALL
+                     UNION ALL
 
-                         SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability
-                         FROM heat_source hs
-                         JOIN heat_reading hr ON hr.source_id = hs.id
-                         JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                         WHERE hs.enabled = TRUE AND hs.granularity = 'CATEGORY'
-                     )
-                     SELECT a.source_code AS sourceCode,
-                            a.granularity AS granularity,
-                            CASE
-                                WHEN a.availability = 'UNAVAILABLE' THEN 'UNAVAILABLE'
-                                WHEN t.today_pct IS NULL THEN 'DEGRADED'
-                                ELSE a.availability
-                            END AS availability,
-                            t.today_pct AS percentileWithinSource,
-                            CASE WHEN t.today_pct IS NULL THEN NULL ELSE
-                                ROUND((t.today_pct - COALESCE(d7.pct_7d, 0.01))
-                                / GREATEST(COALESCE(d7.pct_7d, 0.01), 0.01), 4)
-                            END AS slope7d,
-                            CASE WHEN t.today_pct IS NULL THEN NULL ELSE
-                                ROUND((t.today_pct - COALESCE(d30.pct_30d, 0.01))
-                                / GREATEST(COALESCE(d30.pct_30d, 0.01), 0.01), 4)
-                            END AS slope30d
-                     FROM applicable_sources a
-                        LEFT JOIN Today t ON t.source_id = a.id
-                        LEFT JOIN D7   d7 ON d7.source_id = a.id
-                        LEFT JOIN D30 d30 ON d30.source_id = a.id
-                        ORDER BY a.id
-                     """)
-                .param("keywordId", keywordId)
-                .query(SourceBreakdownRow.class)
-                .list();
-    }
+                     SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability
+                     FROM heat_source hs
+                     JOIN heat_reading hr ON hr.source_id = hs.id
+                     JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                     WHERE hs.enabled = TRUE AND hs.granularity = 'CATEGORY'
+                 )
+                 SELECT a.source_code AS sourceCode,
+                        a.granularity AS granularity,
+                        CASE
+                            WHEN a.availability = 'UNAVAILABLE' THEN 'UNAVAILABLE'
+                            WHEN t.today_pct IS NULL THEN 'DEGRADED'
+                            ELSE a.availability
+                        END AS availability,
+                        t.today_pct AS percentileWithinSource,
+                        CASE WHEN t.today_pct IS NULL OR d7.pct_7d IS NULL THEN NULL ELSE
+                            ROUND((t.today_pct - d7.pct_7d)
+                            / GREATEST(d7.pct_7d, 0.01), 4)
+                        END AS slope7d,
+                        CASE WHEN t.today_pct IS NULL OR d30.pct_30d IS NULL THEN NULL ELSE
+                            ROUND((t.today_pct - d30.pct_30d)
+                            / GREATEST(d30.pct_30d, 0.01), 4)
+                        END AS slope30d
+                 FROM applicable_sources a
+                    LEFT JOIN Today t ON t.source_id = a.id
+                    LEFT JOIN D7   d7 ON d7.source_id = a.id
+                    LEFT JOIN D30 d30 ON d30.source_id = a.id
+                    ORDER BY a.id
+                 """)
+            .param("keywordId", keywordId)
+            .query(SourceBreakdownRow.class)
+            .list();
+}
 
     public List<TrendSignalRow> findAllLatestSignals() {
         return jdbcClient
