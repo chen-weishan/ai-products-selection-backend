@@ -109,14 +109,23 @@ public class Product extends BaseAuditEntity {
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
 
-    /** 最近一次已完成評分嘗試的技術結果；與採購狀態分開維護。 */
+    // ---- V23 新增：最近一次評分嘗試的結果（§5.7 資料不足處理）----
+
+    /**
+     * §5.7：加分因子缺 4 項以上時不產生分數，狀態標示「資料不足，無法評分」。
+     * 這個欄位就是那段標示的承接處——資料不足的品項<b>沒有</b> product_score，
+     * 光看 product_score 表無法分辨「還沒評分」與「評不出來」。
+     *
+     * <p>null 代表尚未嘗試評分；與採購狀態（{@link #status}）分開維護。
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "last_scoring_status", length = 32)
     private LastScoringStatus lastScoringStatus;
 
-    /** 最近一次已完成評分嘗試時間（UTC）。 */
+    /** 最近一次已完成評分嘗試的時間（UTC）。與 {@link #lastScoringStatus} 同進同出。 */
     @Column(name = "last_scoring_attempted_at")
     private Instant lastScoringAttemptedAt;
+
     /** 軟刪除時間（§7.2.2）。非 NULL 者不出現在任何清單、排行、評分批次與報表； */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -159,6 +168,28 @@ public class Product extends BaseAuditEntity {
     /** B 軌不產生選品分數（AC-16-2）。 */
     public boolean isScorable() {
         return trackType == TrackType.A;
+    }
+
+    /**
+     * §5.7「資料不足，無法評分」——FR-03 品項清單與 FR-04 排行都要能明確標示。
+     *
+     * <p>只認 {@link LastScoringStatus#INSUFFICIENT_DATA}：null（尚未評分）不算資料不足，
+     * 那是「還沒跑」而不是「跑了算不出來」，混在一起會讓新建品項一律被標成資料不足。
+     */
+    public boolean isScoringDataInsufficient() {
+        return lastScoringStatus == LastScoringStatus.INSUFFICIENT_DATA;
+    }
+
+    /**
+     * 記錄一次已完成的評分嘗試。狀態與時間一起寫，避免出現
+     * 「有狀態沒時間」或「有時間沒狀態」的半套資料。
+     *
+     * @param attemptedAt 嘗試時間（UTC）。由呼叫端傳入而非取 {@code Instant.now()}，
+     *                    這樣同一批次的全部品項會落在同一個時刻，批次結果可比對
+     */
+    public void recordScoringAttempt(LastScoringStatus status, Instant attemptedAt) {
+        this.lastScoringStatus = status;
+        this.lastScoringAttemptedAt = attemptedAt;
     }
 
     /**
