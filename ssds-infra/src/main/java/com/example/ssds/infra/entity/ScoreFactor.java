@@ -69,6 +69,10 @@ public class ScoreFactor {
     @Builder.Default
     private boolean dataAvailable = true;
 
+    /** 扣分命中原因摘要；不得拿來代替原始量值。 */
+    @Column(length = 120)
+    private String note;
+
     /** 本因子對加分小計的貢獻（正規化值 × 權重）；扣分列回傳 0。 */
     public BigDecimal contribution() {
         if (penalty || weight == null || normalizedValue == null) {

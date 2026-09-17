@@ -1,5 +1,7 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -73,6 +75,7 @@ public class ProductCommandService {
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
     private final ProductSourcingCandidateService sourcingCandidateService;
+    private final AiTaskService aiTaskService;
 
     public ProductCommandService(
             ProductRepository productRepository,
@@ -83,7 +86,8 @@ public class ProductCommandService {
             CategoryRepository categoryRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository,
-            ProductSourcingCandidateService sourcingCandidateService
+            ProductSourcingCandidateService sourcingCandidateService,
+            AiTaskService aiTaskService
     ) {
         this.productRepository = productRepository;
         this.productScoreRepository = productScoreRepository;
@@ -94,6 +98,7 @@ public class ProductCommandService {
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
         this.sourcingCandidateService = sourcingCandidateService;
+        this.aiTaskService = aiTaskService;
     }
 
     /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
@@ -158,9 +163,14 @@ public class ProductCommandService {
 
         Product savedProduct = productRepository.saveAndFlush(product);
         sourcingCandidateService.synchronize(savedProduct);
+        AiTaskResponse task = trackType == TrackType.A && !request.resolvedSaveAsDraft()
+                ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), actor, false)
+                : null;
         return new ProductCreateResponse(
                 toResponse(savedProduct),
-                warnings
+                warnings,
+                task == null ? null : task.taskId(),
+                task == null ? null : task.status()
         );
     }
 
@@ -172,6 +182,14 @@ public class ProductCommandService {
     public ProductUpdateResponse update(
             Long productId,
             ProductUpdateRequest request
+    ) {
+        return update(productId, request, null);
+    }
+
+    public ProductUpdateResponse update(
+            Long productId,
+            ProductUpdateRequest request,
+            String actorEmail
     ) {
         Product product = findProduct(productId);
         String name = request.name().trim();
@@ -189,6 +207,9 @@ public class ProductCommandService {
                 request.sourcingStatus()
         );
         boolean saveAsDraft = request.resolvedSaveAsDraft();
+        boolean submittedForScoring = product.getStatus() == ProductStatus.DRAFT
+                && !saveAsDraft
+                && trackType == TrackType.A;
         validateDraftOperation(product, saveAsDraft);
         validateSubmission(
                 trackType,
@@ -237,9 +258,17 @@ public class ProductCommandService {
             productScoreRepository.deactivateAllCurrent(savedProduct.getId());
         }
         sourcingCandidateService.synchronize(savedProduct);
+        AppUser taskActor = submittedForScoring && actorEmail != null
+                ? findActor(actorEmail)
+                : null;
+        AiTaskResponse task = submittedForScoring
+                ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), taskActor, false)
+                : null;
         return new ProductUpdateResponse(
                 toResponse(savedProduct),
-                warnings
+                warnings,
+                task == null ? null : task.taskId(),
+                task == null ? null : task.status()
         );
     }
 

@@ -25,6 +25,23 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
 
     List<AiTask> findByTaskTypeOrderByStartedAtDesc(AiTaskType taskType);
 
+    boolean existsByTaskTypeAndStatusIn(AiTaskType taskType, List<TaskStatus> statuses);
+
+    /** 同品項的尋源任務尚未結束時直接沿用，避免重複 Web Search 造成逾時與 429。 */
+    @Query("""
+            select t
+            from AiTaskItem i join i.task t
+            where i.product.id = :productId
+              and t.taskType = :taskType
+              and t.status in :statuses
+            order by t.id desc
+            """)
+    List<AiTask> findActiveProductTasks(
+            @Param("productId") Long productId,
+            @Param("taskType") AiTaskType taskType,
+            @Param("statuses") List<TaskStatus> statuses,
+            Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select t from AiTask t

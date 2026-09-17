@@ -10,15 +10,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.AiTask;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.AiTaskItemRepository;
-import com.example.ssds.infra.repository.AiTaskRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import java.util.List;
@@ -30,18 +30,18 @@ class ProductScoringBatchServiceTest {
 
     private ProductRepository productRepository;
     private AppUserRepository appUserRepository;
-    private AiTaskRepository taskRepository;
     private AiTaskItemRepository taskItemRepository;
+    private AiTaskService taskService;
     private ProductScoringBatchService service;
 
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
         appUserRepository = mock(AppUserRepository.class);
-        taskRepository = mock(AiTaskRepository.class);
         taskItemRepository = mock(AiTaskItemRepository.class);
+        taskService = mock(AiTaskService.class);
         service = new ProductScoringBatchService(
-                productRepository, appUserRepository, taskRepository, taskItemRepository);
+                productRepository, appUserRepository, taskItemRepository, taskService);
     }
 
     @Test
@@ -55,19 +55,17 @@ class ProductScoringBatchServiceTest {
                 AiTaskType.FULL_ANALYSIS,
                 Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
                 .thenReturn(Set.of(2L));
-        when(taskRepository.saveAndFlush(any(AiTask.class)))
-                .thenAnswer(invocation -> {
-                    AiTask task = invocation.getArgument(0);
-                    task.setId(88L);
-                    return task;
-                });
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(task.taskId()).thenReturn(88L);
+        when(taskService.enqueueFullAnalysis(anyList(), any(), any(Boolean.class)))
+                .thenReturn(task);
 
         ProductScoringBatchResult result = service.enqueueWeeklyBatch();
 
         assertEquals(88L, result.taskId());
         assertEquals(1, result.queuedCount());
         assertEquals(1, result.skippedActiveCount());
-        verify(taskItemRepository).saveAllAndFlush(anyList());
+        verify(taskService).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     @Test
@@ -78,7 +76,7 @@ class ProductScoringBatchServiceTest {
 
         assertNull(result.taskId());
         assertEquals(0, result.queuedCount());
-        verify(taskRepository, never()).saveAndFlush(any());
+        verify(taskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     @Test
@@ -107,12 +105,11 @@ class ProductScoringBatchServiceTest {
                 .thenReturn(Set.of(2L));
         when(appUserRepository.findByEmail("buyer@ssds.dev"))
                 .thenReturn(java.util.Optional.of(actor));
-        when(taskRepository.saveAndFlush(any(AiTask.class)))
-                .thenAnswer(invocation -> {
-                    AiTask task = invocation.getArgument(0);
-                    task.setId(89L);
-                    return task;
-                });
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(task.taskId()).thenReturn(89L);
+        when(task.status()).thenReturn(TaskStatus.PENDING);
+        when(taskService.enqueueFullAnalysis(anyList(), any(AppUser.class), any(Boolean.class)))
+                .thenReturn(task);
 
         var result = service.enqueueByIds(requestedIds, "buyer@ssds.dev");
 
@@ -125,11 +122,10 @@ class ProductScoringBatchServiceTest {
         assertEquals(Set.of(3L, 4L), result.ineligibleProductIds());
         assertEquals(Set.of(2L), result.alreadyQueuedProductIds());
         assertEquals(3, result.warnings().size());
-        verify(taskItemRepository).saveAllAndFlush(anyList());
-        verify(taskRepository).saveAndFlush(org.mockito.ArgumentMatchers.argThat(task -> {
-            assertSame(actor, task.getCreatedBy());
+        verify(taskService).enqueueFullAnalysis(anyList(), org.mockito.ArgumentMatchers.argThat(taskActor -> {
+            assertSame(actor, taskActor);
             return true;
-        }));
+        }), any(Boolean.class));
     }
 
     @Test
@@ -149,8 +145,7 @@ class ProductScoringBatchServiceTest {
         assertEquals(0, result.queuedCount());
         assertEquals(Set.of(99L), result.missingProductIds());
         assertEquals(Set.of(3L), result.ineligibleProductIds());
-        verify(taskRepository, never()).saveAndFlush(any());
-        verify(taskItemRepository, never()).saveAllAndFlush(anyList());
+        verify(taskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
         verify(appUserRepository, never()).findByEmail(any());
     }
 

@@ -1,28 +1,53 @@
 package com.example.ssds.api.aitask.controller;
 
-import com.example.ssds.api.aitask.dto.AiTaskStatusResponse;
-import com.example.ssds.api.aitask.service.AiTaskQueryService;
+import com.example.ssds.api.aitask.dto.*;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.response.ApiResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-/** FR-07 任務端點的最小查詢切片，供 FR-03 評分完成後自動更新清單。 */
 @RestController
 @RequestMapping("/ai/tasks")
+@Tag(name = "AI Tasks", description = "非同步 AI 任務；SELLING_POINT 是 Product Insight（賣點與風險）的相容碼")
 public class AiTaskController {
+    private final AiTaskService service;
 
-    private final AiTaskQueryService queryService;
-
-    public AiTaskController(AiTaskQueryService queryService) {
-        this.queryService = queryService;
+    public AiTaskController(AiTaskService service) {
+        this.service = service;
     }
 
-    @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AiTaskStatusResponse> getById(@PathVariable(name = "id") Long id) {
-        return ApiResponse.success(queryService.getStatus(id));
+    @PostMapping
+    @Operation(
+            summary = "建立 AI 任務",
+            description = "FULL_ANALYSIS 編排四個邏輯 Agent 階段；requestCount 記錄實際外部請求嘗試，會因快取、資料不足或重試而不等於 4。")
+    public ResponseEntity<ApiResponse<AiTaskResponse>> create(
+            @Valid @RequestBody CreateAiTaskRequest request) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(service.create(request)));
+    }
+
+    @GetMapping("/{taskId}")
+    @Operation(summary = "查詢 AI 任務進度與實際外部請求統計")
+    public ApiResponse<AiTaskResponse> get(@PathVariable("taskId") Long taskId) {
+        return ApiResponse.success(service.get(taskId));
+    }
+
+    @GetMapping("/{taskId}/items")
+    @Operation(summary = "查詢 AI 任務品項結果")
+    public ApiResponse<List<AiTaskItemResponse>> items(@PathVariable("taskId") Long taskId) {
+        return ApiResponse.success(service.items(taskId));
+    }
+
+    @PostMapping("/{taskId}/retry-failed")
+    @Operation(summary = "將指定任務的一般失敗項建立為新的 RETRY 任務")
+    public ResponseEntity<ApiResponse<AiTaskResponse>> retryFailed(
+            @PathVariable("taskId") Long taskId) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(service.retryFailedItems(taskId)));
     }
 }

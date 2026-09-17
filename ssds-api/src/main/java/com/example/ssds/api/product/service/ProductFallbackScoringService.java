@@ -52,6 +52,13 @@ public class ProductFallbackScoringService {
     }
 
     public ProductScore score(Product product) {
+        ProductScore score = buildScore(product);
+        scoreRepository.deactivateCurrent(product.getId(), score.getPeriod(), score.getSceneType());
+        return scoreRepository.saveAndFlush(score);
+    }
+
+    /** 建立真實資料可得的降級快照，但不寫入資料庫，供正式評分先判斷資料是否足夠。 */
+    public ProductScore buildScore(Product product) {
         WeightVersion version = weightVersionRepository.findByIsCurrentTrue()
                 .orElseThrow(() -> new IllegalStateException("目前沒有生效中的權重版本"));
         var margin = marginStatisticsDao.findPercentile(product.getId(), product.getCategory().getId())
@@ -73,7 +80,6 @@ public class ProductFallbackScoringService {
         int confidence = Math.max(0, 100 - 5 * 8 - (margin.imputed() ? 24 : 0));
         String period = isoWeek(LocalDate.now(ZoneId.of("Asia/Taipei")));
 
-        scoreRepository.deactivateCurrent(product.getId(), period, SCENE);
         ProductScore score = ProductScore.builder()
                 .product(product)
                 .weightVersion(version)
@@ -109,7 +115,7 @@ public class ProductFallbackScoringService {
                 product.getMoq() != null || product.getShelfLifeDays() != null
                         || product.getSeason() != Season.ALL));
         score.setFactors(factors);
-        return scoreRepository.saveAndFlush(score);
+        return score;
     }
 
     private ScoreFactor penaltyFactor(
