@@ -10,9 +10,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 實際值來自 .env 的 {@code SSDS_TRENDS_APIFY_TOKEN}。
  */
 @ConfigurationProperties(prefix = "ssds.ingest.google-trends")
-public record GoogleTrendsIngestProperties(String apifyToken, String timeRange) {
+public record GoogleTrendsIngestProperties(String apifyToken, String timeRange, String geo, Integer maxItems) {
 
-    private static final String DEFAULT_TIME_RANGE = "past_7_days";
+    private static final String DEFAULT_TIME_RANGE = "now 1-d";
+    private static final String DEFAULT_GEO = "TW";
+    private static final int DEFAULT_MAX_ITEMS = 30;
 
     public boolean configured() {
         return apifyToken != null && !apifyToken.isBlank();
@@ -20,5 +22,13 @@ public record GoogleTrendsIngestProperties(String apifyToken, String timeRange) 
 
     public String timeRangeOrDefault() {
         return (timeRange == null || timeRange.isBlank()) ? DEFAULT_TIME_RANGE : timeRange;
+    }
+
+    public String geoOrDefault() {
+        return (geo == null || geo.isBlank()) ? DEFAULT_GEO : geo;
+    }
+
+    public int maxItemsOrDefault() {
+        return maxItems != null ? maxItems : DEFAULT_MAX_ITEMS;
     }
 }
