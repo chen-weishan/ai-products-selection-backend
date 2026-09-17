@@ -83,6 +83,24 @@ public class TrendQueryDao {
      * <p>從「這個關鍵字適用的來源清單」出發、LEFT JOIN 讀值，
      * 而不是從讀值反查來源 —— 沒讀值的來源才會被顯示為 DEGRADED，
      * 而不是整筆消失。
+     *
+     * <p><b>2026-09-17 修正：Today／D7／D30 改成「各來源自己的最新讀值日」為準，
+     * 不再要求剛好等於「所有來源裡最新的那天」。</b>原本的寫法拿全部來源共用
+     * 的一個 {@code asof}（取自讀值最新的那個來源，通常是每日來源），
+     * 週頻來源（如 Instagram）在非採集日查詢時，它自己壓根沒有那天的讀值，
+     * 就被判成沒資料 → {@code DEGRADED}、slope 也因此是 null——即使它上週才
+     * 採過、資料其實還在。現在 {@code SourceOwnLatest} 改成逐來源各自的
+     * {@code MAX(reading_date)}，D7／D30 也改成「往前 N 天以內最接近的一筆」
+     * 而不是精確比對，因為週頻來源的採集日彼此間隔本來就不會剛好整除 7 或 30。
+     *
+     * <p>取捨：這個修正無法區分「週頻來源本來就還沒到採集日」跟「來源已經
+     * 停採很久但 heat_source.availability 還沒被標記」——只要抓得到任何一筆
+     * 舊讀值就不會再是 DEGRADED。整批連不上的情況已經有
+     * {@code InstagramHeatIngestJob} 在失敗時把 availability 設成
+     * {@code UNAVAILABLE}（見上面的 {@code CASE WHEN a.availability = 'UNAVAILABLE'}
+     * 分支）涵蓋；「單一來源默默停採超過其預期頻率」目前的 schema 沒有
+     * 存「預期頻率」，抓不到這種半停擺狀態，是已知限制，之後如果要處理
+     * 得先在 heat_source 加一個 expected_interval 之類的欄位。
      */
 public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     return jdbcClient
@@ -107,26 +125,33 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                      JOIN keyword_categories kc ON kc.category_id = hr.category_id
                      WHERE hs.granularity = 'CATEGORY'
                  ),
-                 SourceLatest AS (
-                     SELECT MAX(reading_date) AS asof FROM relevant_readings
+                 SourceOwnLatest AS (
+                     SELECT source_id, MAX(reading_date) AS own_asof
+                     FROM relevant_readings
+                     GROUP BY source_id
                  ),
                  Today AS (
                      SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
-                     FROM relevant_readings rr, SourceLatest ld
-                     WHERE rr.reading_date = ld.asof
+                     FROM relevant_readings rr
+                     JOIN SourceOwnLatest sol
+                         ON sol.source_id = rr.source_id AND rr.reading_date = sol.own_asof
                      GROUP BY rr.source_id
                  ),
                  D7 AS (
-                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_7d
-                     FROM relevant_readings rr, SourceLatest ld
-                     WHERE rr.reading_date = ld.asof - INTERVAL '7 days'
-                     GROUP BY rr.source_id
+                     SELECT DISTINCT ON (rr.source_id) rr.source_id,
+                            rr.percentile_within_source AS pct_7d
+                     FROM relevant_readings rr
+                     JOIN SourceOwnLatest sol ON sol.source_id = rr.source_id
+                     WHERE rr.reading_date <= sol.own_asof - INTERVAL '7 days'
+                     ORDER BY rr.source_id, rr.reading_date DESC
                  ),
                  D30 AS (
-                     SELECT rr.source_id, AVG(rr.percentile_within_source) AS pct_30d
-                     FROM relevant_readings rr, SourceLatest ld
-                     WHERE rr.reading_date = ld.asof - INTERVAL '30 days'
-                     GROUP BY rr.source_id
+                     SELECT DISTINCT ON (rr.source_id) rr.source_id,
+                            rr.percentile_within_source AS pct_30d
+                     FROM relevant_readings rr
+                     JOIN SourceOwnLatest sol ON sol.source_id = rr.source_id
+                     WHERE rr.reading_date <= sol.own_asof - INTERVAL '30 days'
+                     ORDER BY rr.source_id, rr.reading_date DESC
                  ),
                  applicable_sources AS (
                      SELECT hs.id, hs.source_code, hs.granularity, hs.availability

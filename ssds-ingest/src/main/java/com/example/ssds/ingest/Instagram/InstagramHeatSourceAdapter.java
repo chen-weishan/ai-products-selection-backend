@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
 /**
  * Instagram 熱度來源 adapter（品類級，見 §7.2.3 V17 裁決）。
  *
- * <p>target 為 hashtag 名稱（對應 hashtag→品類名稱的設定檔對照，見
- * {@code InstagramHashtagMapping}，由呼叫端在 ssds-api 決定要查哪些品類、
+ * <p>target 為 hashtag 名稱（對應 {@code instagram_hashtag_mapping} 表的
+ * hashtag→品類對照，V29，由呼叫端在 ssds-api 決定要查哪些品類、
  * 傳進來）。每個 hashtag 查一次「實際抓回的貼文篇數」（見
  * {@link InstagramHashtagClient} 的熱度換算說明——2026-09-07 實測發現該
  * actor 的按讚/留言數固定為 0，改用篇數）當熱度值，單一 hashtag
