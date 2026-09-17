@@ -214,45 +214,43 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     }
 
     /**
-     * §5.3.3 斜率計算所需的三個觀測點：t、t−7、t−30。
+     * §5.3.3 斜率計算所需的原始日序列。
      *
-     * <pre>
-     *   slope_7d  = (heat_t − heat_{t-7})  / max(heat_{t-7}, ε)
-     *   slope_30d = (heat_t − heat_{t-30}) / max(heat_{t-30}, ε)
-     * </pre>
-     *
-     * <p>刻意只回傳原始觀測值、不在 SQL 算斜率：ε 的取值與「兩者背離時標記
-     * 可能見頂」的判斷屬於評分規則，該由 ssds-core 的計分引擎決定，
-     * 散在 SQL 裡日後沒人找得到。
+     * <p><b>2026-09-18 修正：不再用「精確等於 t-7／t-30 那一天」去撈觀測點</b>
+     * ——像 Threads 這種資料源常常整天沒有任何 keyword_match 貼文（實測 8 月
+     * 就有 21 天完全空缺），精確比對會讓 slope7d／slope30d 動不動就是 null。
+     * 改成一次撈出涵蓋 t／t-7／t-30 三個觀測點「前後各 3 天」容錯窗所需的
+     * 完整區間原始序列，交給 {@link com.example.ssds.core.domain.HeatTrendCalculator#resolveAnchor}
+     * 逐一判斷「該窗口內有沒有足夠天數的資料可信、可信的話取哪一天」——
+     * 判斷規則屬於評分邏輯，不寫在 SQL 裡（理由同舊版註解：散在 SQL 裡以後
+     * 沒人找得到）。這裡只負責把「可能用得到的原始資料」全部撈出來。
      *
      * <p>註：{@code heat_composite_daily} 本身也有 slope_7d／slope_30d 兩欄，
-     * 那是批次寫入時算好的結果值。本方法給的是「現在重算一次」用的觀測點，
+     * 那是批次寫入時算好的結果值。本方法給的是「現在重算一次」用的觀測序列，
      * 兩者用途不同——要顯示既有結果就直接讀那兩欄，不必呼叫這裡。
      *
-     * @return key 為 {@code "t"} / {@code "t7"} / {@code "t30"}，缺該日資料時不含該 key
+     * @param from 序列起始日（含），呼叫端需自行涵蓋最遠觀測點（t-30）再往前
+     *             減掉容錯窗半徑
+     * @param to   序列結束日（含），呼叫端需自行涵蓋最近觀測點（t）再往後
+     *             加上容錯窗半徑
+     * @return key 為日期，value 為當天 composite_value；沒有資料的日期不含該 key
      */
-    public Map<String, BigDecimal> findSlopeAnchors(Long keywordId, LocalDate asOf) {
+    public Map<LocalDate, BigDecimal> findCompositeSeries(Long keywordId, LocalDate from, LocalDate to) {
         return jdbcClient
                 .sql("""
-                     SELECT CASE stat_date
-                                WHEN :t   THEN 't'
-                                WHEN :t7  THEN 't7'
-                                ELSE 't30'
-                            END AS anchor,
-                            composite_value
+                     SELECT stat_date, composite_value
                      FROM heat_composite_daily
                      WHERE keyword_id = :keywordId
-                       AND stat_date IN (:t, :t7, :t30)
+                       AND stat_date BETWEEN :from AND :to
                      """)
                 .param("keywordId", keywordId)
-                .param("t", asOf)
-                .param("t7", asOf.minusDays(7))
-                .param("t30", asOf.minusDays(30))
+                .param("from", from)
+                .param("to", to)
                 .query()
                 .listOfRows()
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        row -> (String) row.get("anchor"),
+                        row -> ((java.sql.Date) row.get("stat_date")).toLocalDate(),
                         row -> (BigDecimal) row.get("composite_value")));
     }
 

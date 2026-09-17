@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * §5.3.2／§5.3.3／§5.8 的每日合成主流程。
  *
  * <p>這是本次補實作的核心缺口：{@code TrendQueryDao} 早就有
- * {@code findCompositeHeat}／{@code findAppliedWeights}／{@code findSlopeAnchors}
+ * {@code findCompositeHeat}／{@code findAppliedWeights}／{@code findCompositeSeries}
  * 三支查詢把 SQL 端的計算都做好了，但沒有任何呼叫端把結果組成一列
  * {@code heat_composite_daily} 寫回去——這正是「applied_weights 全部來自種子
  * SQL、看不到即時計算」的根本原因，不是單一來源權重歸零的問題而已。
@@ -71,10 +71,23 @@ public class HeatCompositeCalibrationService {
 
         BigDecimal heatT = BigDecimal.valueOf(heat).setScale(2, RoundingMode.HALF_UP);
         Map<String, BigDecimal> appliedWeights = trendQueryDao.findAppliedWeights(keywordId, date);
-        Map<String, BigDecimal> anchors = trendQueryDao.findSlopeAnchors(keywordId, date.minusDays(1));
 
-        BigDecimal slope7d = HeatTrendCalculator.slope(heatT, anchors.get("t7"));
-        BigDecimal slope30d = HeatTrendCalculator.slope(heatT, anchors.get("t30"));
+        // 2026-09-18 修正：t-7／t-30 改成「±3 天容錯窗、窗內 ≥4 天有資料才採信」，
+        // 不再要求精確等於那一天（見 HeatTrendCalculator#resolveAnchor 的規則說明）。
+        // 一次把三個觀測點各自容錯窗所需的區間都撈出來，避免三次查詢。
+        LocalDate asOf = date.minusDays(1);
+        LocalDate anchorT7Target = asOf.minusDays(7);
+        LocalDate anchorT30Target = asOf.minusDays(30);
+        Map<LocalDate, BigDecimal> series = trendQueryDao.findCompositeSeries(
+                keywordId,
+                anchorT30Target.minusDays(3),
+                anchorT7Target.plusDays(3));
+
+        BigDecimal anchorT7 = HeatTrendCalculator.resolveAnchor(series, anchorT7Target);
+        BigDecimal anchorT30 = HeatTrendCalculator.resolveAnchor(series, anchorT30Target);
+
+        BigDecimal slope7d = HeatTrendCalculator.slope(heatT, anchorT7);
+        BigDecimal slope30d = HeatTrendCalculator.slope(heatT, anchorT30);
 
         Optional<HeatCompositeDaily> previousDay =
                 heatCompositeDailyRepository.findByKeywordIdAndStatDate(keywordId, date.minusDays(1));

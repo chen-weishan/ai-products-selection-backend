@@ -3,9 +3,13 @@ package com.example.ssds.ingest.Threads;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,27 +31,112 @@ import org.springframework.web.client.RestClient;
  * {@link Post} 的說明。
  */
 @Component
-class ThreadsSearchClient {
+public class ThreadsSearchClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final RestClient restClient;
     private final ThreadsIngestProperties properties;
 
-    ThreadsSearchClient(RestClient threadsRestClient, ThreadsIngestProperties properties) {
+    public ThreadsSearchClient(RestClient threadsRestClient, ThreadsIngestProperties properties) {
         this.restClient = threadsRestClient;
         this.properties = properties;
     }
 
     /** 查詢關鍵字最近的貼文，回傳互動熱度加總（讚+留言+轉發+引用+分享）。查無資料回傳 null。 */
     Long fetchEngagementHeat(String keyword) {
+        List<Post> posts = fetchFilteredPosts(
+                keyword,
+                properties.startDateParam(),
+                properties.endDateParam(),
+                properties.lookbackDaysOrDefault(),
+                properties.endLookbackDaysOrDefault());
+        if (posts == null) {
+            return null;
+        }
+        long heat = posts.stream().mapToLong(Post::engagementTotal).sum();
+        return heat == 0 ? null : heat;
+    }
+
+    /**
+     * 一次性回補用：針對「單一歷史日期」重新查詢並計算熱度，供
+     * {@code ThreadsBackfillService} 補跑排程當天沒跑成功的日期使用。
+     *
+     * <p>把 start_date/end_date（相對「現在」的天數字串，例如 {@code "2 days"}）
+     * 動態換算成剛好對齊 {@code targetDate} 的單日窗口，並把後續的
+     * {@code created_at} 過濾窗口也收斂成同一天，而不是套用
+     * application.properties 裡固定的 lookbackDays。
+     *
+     * <p>注意：Threads/Apify 這個 actor 本質上是查「現在」搜尋得到的貼文，
+     * 不是真正的歷史快照查詢——start_date/end_date 對 search_filter=top
+     * 排序不保證確實生效（見類別註解），所以回補結果的準確度不如當天即時
+     * 採集，只是盡量還原。查無資料回傳 null。
+     */
+    public Long fetchEngagementHeatForDate(String keyword, LocalDate targetDate) {
+        Map<LocalDate, Long> byDate = fetchEngagementHeatByDate(keyword, targetDate, targetDate);
+        return byDate.get(targetDate);
+    }
+
+    /**
+     * 一次性回補用：針對「一段日期區間」（例如整月）一次查詢，並依貼文的
+     * {@code created_at} 把互動熱度分桶到各天，回傳每天的加總。跟
+     * {@link #fetchEngagementHeatForDate} 逐日各打一次 API 不同，這裡整段
+     * 區間只對 Apify 打一次請求（省額度），代價是：
+     *
+     * <ul>
+     *   <li>單次請求的 {@code max_posts} 上限（見
+     *       {@link ThreadsIngestProperties#resultsLimitOrDefault()}）是分給
+     *       「整段區間」用的，區間越長，分配到每一天的貼文可能越少，較舊
+     *       的日期在 {@code search_filter=top} 排序下容易被擠掉、資料變稀疏
+     *       甚至查無資料（不會出現在回傳的 Map 裡）。
+     *   <li>準確度跟單日回補一樣，不如當天即時採集，只是盡量還原。
+     * </ul>
+     *
+     * <p>回傳的 Map 只包含「查到有資料」的日期；沒有資料的日期不會有 key
+     * （呼叫端可自行判斷要不要跳過或標記缺漏）。
+     */
+    public Map<LocalDate, Long> fetchEngagementHeatByDate(
+            String keyword, LocalDate startDate, LocalDate endDateInclusive) {
+        if (startDate.isAfter(endDateInclusive)) {
+            throw new IllegalArgumentException("startDate 不能晚於 endDateInclusive");
+        }
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        if (endDateInclusive.isAfter(today)) {
+            throw new IllegalArgumentException("endDateInclusive 不能是未來日期：" + endDateInclusive);
+        }
+        long lookbackDays = ChronoUnit.DAYS.between(startDate, today);
+        long endLookbackDays = ChronoUnit.DAYS.between(endDateInclusive, today);
+
+        List<Post> posts = fetchFilteredPosts(
+                keyword,
+                lookbackDays + " days",
+                Optional.of(endLookbackDays + " days"),
+                (int) lookbackDays,
+                (int) endLookbackDays);
+        if (posts == null) {
+            return Map.of();
+        }
+
+        return posts.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        p -> LocalDate.parse(p.createdAt().substring(0, 10)),
+                        java.util.stream.Collectors.summingLong(Post::engagementTotal)));
+    }
+
+    /** 打 Apify 一次，套用原創貼文／關鍵字命中／日期窗口過濾後回傳貼文清單。查無資料回傳 null。 */
+    private List<Post> fetchFilteredPosts(
+            String keyword,
+            String startDateParam,
+            Optional<String> endDateParam,
+            int lookbackDays,
+            int endLookbackDays) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("mode", "search");
         requestBody.put("keywords", List.of(keyword));
         requestBody.put("search_filter", properties.searchFilterOrDefault());
         requestBody.put("max_posts", properties.resultsLimitOrDefault());
-        requestBody.put("start_date", properties.startDateParam());
-        properties.endDateParam().ifPresent(endDate -> requestBody.put("end_date", endDate));
+        requestBody.put("start_date", startDateParam);
+        endDateParam.ifPresent(endDate -> requestBody.put("end_date", endDate));
 
         String json = restClient.post()
                 .uri(uriBuilder -> uriBuilder
@@ -71,22 +160,18 @@ class ThreadsSearchClient {
         // 數週前。兩者取捨後決定：固定用 top 拿資料量，日期窗口自己用
         // created_at 在這裡精準過濾，不依賴 actor 端的日期參數是否生效。
         //
-        // record_type 會混雜原創貼文／轉發／回覆，只算原創貼文；另外 actor
-        // 回傳的「關鍵字搜尋結果」不保證真的包含關鍵字，所以也自己比對一次。
-        long heat = posts.stream()
+        // record_type 會混雜原創貼文／轉發／回覆，只算原創貼文；關鍵字命中與否
+        // 直接信任 actor 回傳的 keyword_match 欄位（2026-09-17 改版：原本自己用
+        // 「完整關鍵字需連續出現」字串比對，實測發現比 actor 自己的判定嚴格
+        // 很多——「岡山和牛」「日本の「和牛」」「日本A4和牛」這類關鍵字被拆開或
+        // 中間插了其他字的貼文，actor 判成 true，但字串比對會漏掉，導致資料
+        // 明顯比 Apify console 手動查詢時少。null 視為未命中，保守跳過。
+        List<Post> filtered = posts.stream()
                 .filter(p -> !Boolean.TRUE.equals(p.isRepost()) && !Boolean.TRUE.equals(p.isReply()))
-                .filter(p -> containsKeyword(p.textContent(), keyword))
-                .filter(p -> withinLookbackWindow(p.createdAt()))
-                .mapToLong(Post::engagementTotal)
-                .sum();
-        return heat == 0 ? null : heat;
-    }
-
-    private static boolean containsKeyword(String textContent, String keyword) {
-        if (textContent == null || keyword == null) {
-            return false;
-        }
-        return textContent.toLowerCase(java.util.Locale.ROOT).contains(keyword.toLowerCase(java.util.Locale.ROOT));
+                .filter(p -> Boolean.TRUE.equals(p.keywordMatch()))
+                .filter(p -> withinLookbackWindow(p.createdAt(), lookbackDays, endLookbackDays))
+                .toList();
+        return filtered.isEmpty() ? null : filtered;
     }
 
     /**
@@ -96,19 +181,19 @@ class ThreadsSearchClient {
      * 讓邊界日期算錯（代價是跟台北時間的「今天」會差最多 8 小時的模糊帶，
      * 現階段抓天數為單位、不追求到小時精度，可接受）。
      */
-    private boolean withinLookbackWindow(String createdAt) {
+    private boolean withinLookbackWindow(String createdAt, int lookbackDays, int endLookbackDays) {
         if (createdAt == null || createdAt.length() < 10) {
             return false;
         }
-        java.time.LocalDate postDate;
+        LocalDate postDate;
         try {
-            postDate = java.time.LocalDate.parse(createdAt.substring(0, 10));
+            postDate = LocalDate.parse(createdAt.substring(0, 10));
         } catch (Exception e) {
             return false;
         }
-        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
-        java.time.LocalDate windowStart = today.minusDays(properties.lookbackDaysOrDefault());
-        java.time.LocalDate windowEnd = today.minusDays(properties.endLookbackDaysOrDefault());
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate windowStart = today.minusDays(lookbackDays);
+        LocalDate windowEnd = today.minusDays(endLookbackDays);
         return !postDate.isBefore(windowStart) && !postDate.isAfter(windowEnd);
     }
 
@@ -153,6 +238,7 @@ class ThreadsSearchClient {
      * post_url             網址
      * search_keyword       關鍵字
      * search_filter        排序
+     * keyword_match        actor 自己判定的關鍵字命中結果
      * </pre>
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -168,7 +254,8 @@ class ThreadsSearchClient {
             @JsonProperty("is_reply") Boolean isReply,
             @JsonProperty("is_repost") Boolean isRepost,
             @JsonProperty("is_quote_post") Boolean isQuotePost,
-            @JsonProperty("created_at") String createdAt) {
+            @JsonProperty("created_at") String createdAt,
+            @JsonProperty("keyword_match") Boolean keywordMatch) {
 
         long engagementTotal() {
             return nz(likeCount) + nz(replyCount) + nz(repostCount) + nz(quoteCount) + nz(shareCount);
