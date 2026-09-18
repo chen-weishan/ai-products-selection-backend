@@ -55,7 +55,7 @@ public class InstagramHeatIngestJob {
         this.instagramAdapter = instagramAdapter;
     }
 
-    // @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
+    @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
     @Transactional
     public void run() {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.INSTAGRAM).orElse(null);

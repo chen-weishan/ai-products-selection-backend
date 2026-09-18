@@ -76,7 +76,7 @@ public class TrendService {
                         s.percentileWithinSource(),
                         s.availability(),
                         "CATEGORY".equals(s.granularity()),
-                        appliedWeights.getOrDefault(s.sourceCode(), BigDecimal.ZERO),
+                        appliedWeights.get(s.sourceCode()),
                         s.slope7d(),
                         s.slope30d()))
                 .toList());
