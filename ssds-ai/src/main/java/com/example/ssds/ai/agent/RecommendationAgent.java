@@ -184,7 +184,10 @@ public class RecommendationAgent {
                 return fallback(input, FallbackReason.AI_UNAVAILABLE, "policy-blocked",
                         Math.max(0, retry.requestCount() - 1));
             } catch (AiBudgetExceededException exception) {
-                throw exception;
+                log.warn("Recommendation budget exhausted; using rule fallback: productId={}, pool={}",
+                        input.productId(), exception.pool());
+                return fallback(input, FallbackReason.AI_UNAVAILABLE, "budget-exhausted",
+                        Math.max(0, retry.requestCount() - 1));
             } catch (RuntimeException exception) {
                 log.warn(
                         "Recommendation request failed: productId={}, model={}, errorType={}",

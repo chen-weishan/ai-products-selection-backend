@@ -19,7 +19,6 @@ public class ReviewRiskResponseParser {
     private static final Set<String> ROOT_FIELDS = Set.of("reviews", "topicStatistics");
     private static final Set<String> REVIEW_FIELDS = Set.of("reviewIndex", "sentiment", "riskTopic");
     private static final Set<String> STATISTIC_FIELDS = Set.of("topic", "ratio", "severity");
-    private static final BigDecimal RATIO_TOLERANCE = new BigDecimal("0.02");
     private final ObjectMapper objectMapper;
 
     public ReviewRiskResponseParser(ObjectMapper objectMapper) {
@@ -54,8 +53,10 @@ public class ReviewRiskResponseParser {
             }
             if (returnedIndexes.size() != input.reviews().size()) fail("reviews 必須與輸入逐筆一一對應");
 
-            List<ReviewTopicStatistic> statistics = parseStatistics(statisticNodes);
-            validateRatios(statistics, negativeCounts);
+            parseStatistics(statisticNodes);
+            // sentiment/riskTopic 是模型的語意輸出；比例與嚴重度是其確定性衍生值，
+            // 由後端重算，避免讓 LLM 算術成為正式風險資料的權威來源。
+            List<ReviewTopicStatistic> statistics = statisticsFrom(negativeCounts);
             return new ReviewRiskOutput(reviews, statistics);
         } catch (AiSchemaValidationException exception) {
             throw exception;
@@ -85,19 +86,21 @@ public class ReviewRiskResponseParser {
         return statistics;
     }
 
-    private static void validateRatios(
-            List<ReviewTopicStatistic> statistics,
+    private static List<ReviewTopicStatistic> statisticsFrom(
             EnumMap<ReviewRiskTopic, Integer> negativeCounts) {
         int totalNegative = negativeCounts.values().stream().mapToInt(Integer::intValue).sum();
-        for (ReviewTopicStatistic statistic : statistics) {
-            BigDecimal expected = totalNegative == 0
+        return Arrays.stream(ReviewRiskTopic.values()).map(topic -> {
+            BigDecimal ratio = totalNegative == 0
                     ? BigDecimal.ZERO
-                    : BigDecimal.valueOf(negativeCounts.getOrDefault(statistic.topic(), 0))
+                    : BigDecimal.valueOf(negativeCounts.getOrDefault(topic, 0))
                             .divide(BigDecimal.valueOf(totalNegative), 6, RoundingMode.HALF_UP);
-            if (statistic.ratio().subtract(expected).abs().compareTo(RATIO_TOLERANCE) > 0) {
-                fail("topicStatistics ratio 與逐筆分類不一致: " + statistic.topic());
-            }
-        }
+            Severity severity = ratio.compareTo(new BigDecimal("0.60")) >= 0
+                    ? Severity.HIGH
+                    : ratio.compareTo(new BigDecimal("0.30")) >= 0
+                            ? Severity.MEDIUM
+                            : Severity.LOW;
+            return new ReviewTopicStatistic(topic, ratio, severity);
+        }).toList();
     }
 
     private static void requireObject(JsonNode node, Set<String> allowed, String label) {

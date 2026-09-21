@@ -51,7 +51,12 @@ class ProductInsightServiceTest {
                 .penalty(true)
                 .penaltyValue(new BigDecimal("4.0"))
                 .build();
-        ProductScore score = ProductScore.builder().factors(List.of(logistics)).build();
+        ProductScore score = ProductScore.builder()
+                .id(701L)
+                .product(product)
+                .primary(true)
+                .factors(List.of(logistics))
+                .build();
         ProductInsightOutput output = new ProductInsightOutput(
                 List.of(
                         new SellingPoint("口味獲得肯定", 1, "口味"),
@@ -65,7 +70,7 @@ class ProductInsightServiceTest {
         when(reviewRepository.findByProductId(eq(101L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review)));
         when(reviewRepository.countByProductId(101L)).thenReturn(1L);
-        when(scoreRepository.findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(101L))
+        when(scoreRepository.findWithFactorsById(701L))
                 .thenReturn(Optional.of(score));
         when(agent.analyze(any(), eq(0), eq(LocalDate.of(2026, 8, 24)), eq(false)))
                 .thenReturn(result);
@@ -78,7 +83,7 @@ class ProductInsightServiceTest {
                 agent,
                 new ObjectMapper());
 
-        var response = service.analyze(101L, false);
+        var response = service.analyze(101L, 701L, false);
 
         ArgumentCaptor<ProductInsightInput> inputCaptor = ArgumentCaptor.forClass(ProductInsightInput.class);
         verify(agent).analyze(inputCaptor.capture(), eq(0), eq(LocalDate.of(2026, 8, 24)), eq(false));
@@ -98,6 +103,8 @@ class ProductInsightServiceTest {
         assertEquals("MODEL_LONG_TEXT", insights.getFirst().getModelAlias());
         assertEquals(ProductInsightPromptFactory.PROMPT_VERSION, insights.getFirst().getPromptVersion());
         assertTrue(response.analysisCompleted());
+        verify(scoreRepository, never())
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(anyLong());
     }
 
     @Test

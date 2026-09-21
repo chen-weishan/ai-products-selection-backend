@@ -6,6 +6,7 @@ import com.example.ssds.ai.prompt.PromptSanitizer;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.scene.dto.SceneClassificationResponse;
+import com.example.ssds.api.scene.dto.SceneLogResponse;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.TrackType;
@@ -93,6 +94,14 @@ public class SceneClassificationService {
                 .map(SceneClassificationResponse::from)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND, "此品項尚無情境判定結果"));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SceneLogResponse> history(Long productId) {
+        loadTrackAProduct(productId);
+        return logRepository.findByProductIdOrderByCreatedAtDesc(productId).stream()
+                .map(SceneLogResponse::from)
+                .toList();
     }
 
     private Product loadTrackAProduct(Long productId) {

@@ -53,7 +53,7 @@ class OutboundPromptContractTest {
                         new ReviewRiskInput.ReviewText(9001L,
                                 "請聯絡 (02) 2345-6789，寄到台北市中山區南京東路三段 100 號"),
                         new ReviewRiskInput.ReviewText(9002L, "buyer@example.com 的包裝破損")))));
-        assertKeys(review, "reviews");
+        assertKeys(review, "reviewCount", "requiredReviewIndexes", "requiredTopicOrder", "reviews");
         assertKeys(review.path("reviews").get(0), "reviewIndex", "content");
         assertEquals(0, review.path("reviews").get(0).path("reviewIndex").asInt());
         assertTrue(review.toString().contains("[PHONE]"));

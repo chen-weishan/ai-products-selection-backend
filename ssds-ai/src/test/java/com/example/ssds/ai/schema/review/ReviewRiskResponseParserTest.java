@@ -37,9 +37,16 @@ class ReviewRiskResponseParserTest {
     }
 
     @Test
-    void rejectsRatioThatDisagreesWithPerReviewClassification() {
-        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
-                validJson().replace("\"ratio\":1", "\"ratio\":0.5"), input));
+    void derivesStatisticsFromPerReviewClassificationInsteadOfModelArithmetic() {
+        var output = parser.parse(
+                validJson().replace("\"ratio\":1", "\"ratio\":0.5"), input);
+
+        var shipping = output.topicStatistics().stream()
+                .filter(value -> value.topic() == ReviewRiskTopic.SHIPPING_DAMAGE)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(0, shipping.ratio().compareTo(java.math.BigDecimal.ONE));
+        assertEquals(com.example.ssds.core.domain.Severity.HIGH, shipping.severity());
     }
 
     private static String validJson() {

@@ -401,7 +401,8 @@ class AgentDatabaseIntegrationTest {
                         false, null, false, "insight-test-model", "product-insight-v2",
                         20, 10, 1));
 
-        productInsightService.analyze(fixture.product().getId(), false);
+        productInsightService.analyze(
+                fixture.product().getId(), fixture.score().getId(), false);
         entityManager.flush();
         entityManager.clear();
 
@@ -503,7 +504,8 @@ class AgentDatabaseIntegrationTest {
                         false, null, false, "recommendation-test-model", "recommendation-v1",
                         20, 10, 1));
 
-        recommendationService.recommend(fixture.product().getId(), false);
+        recommendationService.recommend(
+                fixture.product().getId(), fixture.score().getId(), false);
         entityManager.flush();
         entityManager.clear();
 
@@ -751,7 +753,7 @@ class AgentDatabaseIntegrationTest {
                 .decidedBy(user)
                 .build());
         entityManager.flush();
-        return new AuthorityFixture(product);
+        return new AuthorityFixture(product, score);
     }
 
     private String scoringAndDecisionSnapshot() {
@@ -793,5 +795,5 @@ class AgentDatabaseIntegrationTest {
                 .getSingleResult();
     }
 
-    private record AuthorityFixture(Product product) {}
+    private record AuthorityFixture(Product product, ProductScore score) {}
 }

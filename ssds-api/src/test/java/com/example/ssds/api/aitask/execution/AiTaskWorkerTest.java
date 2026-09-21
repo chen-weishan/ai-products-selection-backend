@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.aitask.fullanalysis.FullAnalysisOrchestrator;
+import com.example.ssds.api.scoring.PureScoringBatchService;
+import com.example.ssds.api.scoring.factor.ScoringFactorBatchService.PreparedPopulation;
 
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.calibration.WeightCalibrationService;
@@ -36,6 +38,158 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class AiTaskWorkerTest {
+    @Test
+    void fullAnalysisSharesOnePreparedFactorPopulationAcrossAllItems() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        PureScoringBatchService pureScoring = mock(PureScoringBatchService.class);
+        PreparedPopulation factorPopulation = mock(PreparedPopulation.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(768L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(2)
+                .build();
+        AiTaskItem first = AiTaskItem.builder().id(769L).task(task)
+                .product(Product.builder().id(101L).build()).build();
+        AiTaskItem second = AiTaskItem.builder().id(770L).task(task)
+                .product(Product.builder().id(102L).build()).build();
+        when(taskRepository.findById(768L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(768L)).thenReturn(List.of(first, second));
+        when(pureScoring.evaluateProductIds(eq(List.of(101L, 102L)), any())).thenReturn(
+                new PureScoringBatchService.BatchResult(
+                        2, 2, 0, List.of(), List.of(), factorPopulation));
+        when(orchestrator.analyze(anyLong(), eq(false), same(factorPopulation)))
+                .thenReturn(new FullAnalysisOrchestrator.Result(0, ""));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 150);
+        worker.setPureScoringBatchService(pureScoring);
+
+        worker.run(new AiTaskCreatedEvent(768L, false));
+
+        verify(pureScoring).evaluateProductIds(eq(List.of(101L, 102L)), any());
+        verify(orchestrator).analyze(101L, false, factorPopulation);
+        verify(orchestrator).analyze(102L, false, factorPopulation);
+        verify(orchestrator, never()).analyze(anyLong(), anyBoolean());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void recoverySkipsCompletedItemsAndKeepsExistingCounters() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        AiTask task = AiTask.builder()
+                .id(760L)
+                .taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.RUNNING)
+                .totalCount(2)
+                .successCount(1)
+                .build();
+        AiTaskItem completed = AiTaskItem.builder()
+                .id(761L)
+                .task(task)
+                .product(Product.builder().id(101L).build())
+                .status(TaskItemStatus.SUCCEEDED)
+                .build();
+        AiTaskItem pending = AiTaskItem.builder()
+                .id(762L)
+                .task(task)
+                .product(Product.builder().id(102L).build())
+                .status(TaskItemStatus.PENDING)
+                .build();
+        when(taskRepository.findById(760L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(760L)).thenReturn(List.of(completed, pending));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(760L, false));
+
+        assertAll(
+                () -> verify(recommendationService, never()).recommend(101L, false),
+                () -> verify(recommendationService).recommend(102L, false),
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, completed.getStatus()),
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, pending.getStatus()),
+                () -> assertEquals(2, task.getSuccessCount()),
+                () -> assertEquals(0, task.getFailCount()),
+                () -> assertEquals(TaskStatus.SUCCEEDED, task.getStatus()));
+    }
+
+    @Test
+    void recoveryRebuildsCountersWhenNoPendingItemsRemain() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        AiTask task = AiTask.builder()
+                .id(765L)
+                .taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.RUNNING)
+                .totalCount(2)
+                .build();
+        AiTaskItem completed = AiTaskItem.builder()
+                .id(766L).task(task).status(TaskItemStatus.SUCCEEDED).build();
+        AiTaskItem failed = AiTaskItem.builder()
+                .id(767L).task(task).status(TaskItemStatus.FAILED).build();
+        when(taskRepository.findById(765L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(765L)).thenReturn(List.of(completed, failed));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(765L, false));
+
+        assertAll(
+                () -> verifyNoInteractions(recommendationService),
+                () -> assertEquals(1, task.getSuccessCount()),
+                () -> assertEquals(1, task.getFailCount()),
+                () -> assertEquals(TaskStatus.PARTIAL, task.getStatus()),
+                () -> assertEquals(true, task.getFinishedAt() != null));
+    }
+
+    @Test
+    void outerFailureSettlesPersistedPendingItemsInsteadOfLeavingTaskRunning() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        AiTask task = AiTask.builder()
+                .id(763L)
+                .taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.PENDING)
+                .totalCount(1)
+                .build();
+        AiTaskItem executing = AiTaskItem.builder()
+                .id(764L).task(task).product(Product.builder().id(101L).build()).build();
+        AiTaskItem persisted = AiTaskItem.builder()
+                .id(764L).task(task).product(Product.builder().id(101L).build()).build();
+        when(taskRepository.findById(763L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(763L))
+                .thenReturn(List.of(executing), List.of(persisted));
+        when(itemRepository.save(any(AiTaskItem.class)))
+                .thenThrow(new IllegalStateException("暫時無法保存 item"))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(763L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.FAILED, persisted.getStatus()),
+                () -> assertEquals("任務執行中斷：暫時無法保存 item", persisted.getErrorMessage()),
+                () -> assertEquals(0, task.getSuccessCount()),
+                () -> assertEquals(1, task.getFailCount()),
+                () -> assertEquals(TaskStatus.FAILED, task.getStatus()),
+                () -> assertEquals(true, task.getFinishedAt() != null));
+    }
+
     @ParameterizedTest
     @EnumSource(value = AiTaskType.class, names = {
             "SCENE_CLASSIFY", "REVIEW_RISK", "SELLING_POINT",
@@ -505,15 +659,96 @@ class AiTaskWorkerTest {
                 taskRepository, itemRepository, sceneService, reviewRiskService,
                 productInsightService, recommendationService, null, null,
                 orchestrator, budget, 1);
+        PureScoringBatchService pureScoring = mock(PureScoringBatchService.class);
+        when(pureScoring.evaluateProductIds(eq(List.of(101L, 102L)), any())).thenReturn(
+                new PureScoringBatchService.BatchResult(2, 2, 0, List.of(), List.of()));
+        worker.setPureScoringBatchService(pureScoring);
 
         worker.run(new AiTaskCreatedEvent(720L, false));
 
+        verify(pureScoring).evaluateProductIds(eq(List.of(101L, 102L)), any());
         verify(orchestrator).analyze(101L, false);
         verify(orchestrator, never()).analyze(102L, false);
         assertEquals(TaskItemStatus.SUCCEEDED, first.getStatus());
         assertEquals(TaskItemStatus.SKIPPED_QUOTA, second.getStatus());
         assertEquals(4, task.getRequestCount());
         assertEquals(TaskStatus.PARTIAL, task.getStatus());
+    }
+
+    @Test
+    void fullAnalysisMarksPureScoringFailureAsFailedBeforeQuotaDeferral() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(750L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(2)
+                .build();
+        AiTaskItem first = AiTaskItem.builder().id(751L).task(task)
+                .product(Product.builder().id(101L).build()).build();
+        AiTaskItem second = AiTaskItem.builder().id(752L).task(task)
+                .product(Product.builder().id(102L).build()).build();
+        when(taskRepository.findById(750L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(750L)).thenReturn(List.of(first, second));
+        when(orchestrator.analyze(101L, false)).thenReturn(
+                new FullAnalysisOrchestrator.Result(0, ""));
+        PureScoringBatchService pureScoring = mock(PureScoringBatchService.class);
+        when(pureScoring.evaluateProductIds(eq(List.of(101L, 102L)), any())).thenReturn(
+                new PureScoringBatchService.BatchResult(
+                        2, 1, 0, List.of(),
+                        List.of(new PureScoringBatchService.ItemFailure(102L, "資料庫寫入失敗"))));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 1);
+        worker.setPureScoringBatchService(pureScoring);
+
+        worker.run(new AiTaskCreatedEvent(750L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, first.getStatus()),
+                () -> assertEquals(TaskItemStatus.FAILED, second.getStatus()),
+                () -> assertEquals("純評分失敗：資料庫寫入失敗", second.getErrorMessage()),
+                () -> assertEquals(TaskStatus.PARTIAL, task.getStatus()));
+        verify(orchestrator).analyze(101L, false);
+        verify(orchestrator, never()).analyze(102L, false);
+    }
+
+    @Test
+    void fullAnalysisMarksEveryItemFailedWhenPureScoringPreparationCrashes() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        FullAnalysisOrchestrator orchestrator = mock(FullAnalysisOrchestrator.class);
+        DailyAiBudget budget = new DailyAiBudget(100, 0.7, 0.2, 0.1);
+        AiTask task = AiTask.builder()
+                .id(753L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder().id(754L).task(task)
+                .product(Product.builder().id(101L).build()).build();
+        when(taskRepository.findById(753L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(753L)).thenReturn(List.of(item));
+        PureScoringBatchService pureScoring = mock(PureScoringBatchService.class);
+        when(pureScoring.evaluateProductIds(eq(List.of(101L)), any()))
+                .thenThrow(new IllegalStateException("權重版本讀取失敗"));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class), null, null, orchestrator, budget, 150);
+        worker.setPureScoringBatchService(pureScoring);
+
+        worker.run(new AiTaskCreatedEvent(753L, false));
+
+        assertAll(
+                () -> assertEquals(TaskItemStatus.FAILED, item.getStatus()),
+                () -> assertEquals("純評分失敗：權重版本讀取失敗", item.getErrorMessage()),
+                () -> assertEquals(TaskStatus.FAILED, task.getStatus()));
+        verifyNoInteractions(orchestrator);
     }
 
     @Test

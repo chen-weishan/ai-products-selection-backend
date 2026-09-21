@@ -24,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
+import com.example.ssds.api.score.dto.RankingSummaryResponse;
 import com.example.ssds.api.score.dto.SimulateRequest;
 import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.SceneType;
@@ -84,6 +85,17 @@ class ScoreControllerTest {
         assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
         assertThat(captor.getValue().getPageSize()).isEqualTo(20);
         assertThat(captor.getValue().getSort().isSorted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("排行摘要直接回傳全榜統計")
+    void rankingSummaryReturnsWholeFilteredPopulation() {
+        when(queryService.rankingSummary("2026W38", SceneType.VIRAL, 10L))
+                .thenReturn(new RankingSummaryResponse(38, 8, 14, 16));
+
+        var response = controller.rankingSummary("2026W38", SceneType.VIRAL, 10L);
+
+        assertThat(response.data().totalCount()).isEqualTo(38);
     }
 
     /** 試算回的是清單不是分頁：結果不寫入資料庫，也沒有跨頁的概念。 */

@@ -68,6 +68,23 @@ public class RecommendationService {
                 .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(productId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND, "此品項尚無可供進貨建議使用的主情境評分"));
+        return recommend(product, score, forceRefresh);
+    }
+
+    /** FULL_ANALYSIS 專用：固定讀取本次正式評分，不再自行查詢 latest。 */
+    @Transactional
+    public RecommendationResponse recommend(Long productId, Long scoreId, boolean forceRefresh) {
+        Product product = loadTrackAProduct(productId);
+        ProductScore score = scoreRepository.findWithFactorsById(scoreId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND, "找不到本次進貨建議指定的評分快照"));
+        validatePrimaryScore(productId, score);
+        return recommend(product, score, forceRefresh);
+    }
+
+    private RecommendationResponse recommend(
+            Product product, ProductScore score, boolean forceRefresh) {
+        Long productId = product.getId();
         RecommendationInput input = promptSanitizer.sanitizeRecommendation(buildInput(product, score));
         RecommendationResult result = agent.recommend(input, forceRefresh);
         Instant generatedAt = Instant.now();
@@ -76,6 +93,14 @@ public class RecommendationService {
                 productId,
                 result,
                 generatedAt.atZone(BUSINESS_ZONE).toOffsetDateTime());
+    }
+
+    private static void validatePrimaryScore(Long productId, ProductScore score) {
+        if (!score.getProduct().getId().equals(productId) || !score.isPrimary()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "指定評分快照不是此品項的主情境分數");
+        }
     }
 
     @Transactional(readOnly = true)
