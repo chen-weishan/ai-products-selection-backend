@@ -19,10 +19,6 @@ import java.util.Map;
  * <ul>
  *   <li>{@link #EPSILON} 原本誤沿用另一支既有查詢的 0.01，規格書 §5.3.3 明寫
  *       {@code ε = 1.0}，已改正。</li>
- *   <li>{@link #determineStage} 原本用 {@code slope7d} 加 ±5% 門檻判斷階段，
- *       但 §FR-06「熱度階段的統一詞彙」表定義的判定依據是 {@code slope_30d}、
- *       門檻是 ±10%，且 RISING 還要求「連續 3 週合成熱度成長」；已改為依此重寫，
- *       詳見方法註解。</li>
  *   <li>{@link #detectDivergence} 原本用「兩者正負號不同」判斷背離，但 §5.3.3
  *       原文只定義單一方向（{@code slope_7d < 0} 且 {@code slope_30d > 0}）為
  *       「可能見頂」，已改正為單方向判定。</li>
@@ -31,11 +27,28 @@ import java.util.Map;
  *       之後、餵進選品分數引擎之前的最後一步，先前整個專案沒有任何地方計算這個值。</li>
  * </ul>
  *
- * <p><b>⚠️ 待確認：「連續 3 週合成熱度成長」的判定式是本次修正時的暫定實作。</b>
- * §FR-06 只有這句文字，沒有留下具體判定式（要比對哪些觀測點、如何算「成長」）。
- * 本次實作採用「當週、前 1 週、前 2 週的 {@code slope_7d} 皆 &gt; 0」作為代理判斷
- * （見 {@link #determineStage} 參數 {@code threeWeekGrowth}，由呼叫端組出），
- * 上線前務必與產品面確認是否為預期定義，並補進規格書，避免日後又找不到依據。
+ * <p><b>2026-09-22（二次修正）依規格書 v3.0.1 §FR-06「熱度階段的統一詞彙」表
+ * 與 E-07／E-08 裁決重寫階段判定：</b>
+ * <ul>
+ *   <li>{@link #determineStage} 先前用 {@code slope30d > 10%} 且「連續 3 週
+ *       合成熱度成長」兩條件同時成立才判 {@code RISING}，且中間地帶會沿用
+ *       {@code previousStage}。這與 v3.0.1 裁決不符：判定式改為
+ *       {@code slope_30d} 單一變數的三段不等式，門檻對稱 ±10%、三段互斥且窮盡，
+ *       {@code PLATEAU} 為唯一預設歸屬，不再受前一日階段或任何額外條件影響——
+ *       {@code stage} 必須是當日 {@code slope_30d} 的確定性函數。</li>
+ *   <li>「連續 3 週合成熱度成長」從判定門檻**降為顯示屬性**，改由既有的
+ *       {@link #stageWeeksFromContinuousDays} 承載（於 UI 顯示「已上升 N 週」
+ *       供人判讀強度），不再是 {@link #determineStage} 的參數，原本呼叫端
+ *       （{@code HeatCompositeCalibrationService}）組裝「連續 3 週」代理判斷的
+ *       邏輯已一併移除。</li>
+ *   <li>{@code slope30d == null} 時的預設值由 {@code RISING} 改為
+ *       {@code PLATEAU}（安全預設，非捏造成長訊號）。</li>
+ *   <li>{@link #nextStageWeeks}（前一日 {@code stageWeeks} 直接 +1）已刪除，
+ *       因為每日排程執行一次就會把「執行次數」誤當「週數」累加，改為
+ *       {@link #stageWeeksFromContinuousDays}：由呼叫端回溯
+ *       {@code heat_composite_daily} 算出「當日往前連續相同 stage 的天數」，
+ *       此處只做 {@code ceil(continuousDays / 7.0)} 的純換算。</li>
+ * </ul>
  *
  * <p>{@link #estimateLifespanDays} 的壽命對照表是 {@link HeatStage} 類別
  * 註解已經明確記載的數字（RISING 56 天、PLATEAU 42/35 天、DECLINING 17 天），
@@ -59,11 +72,7 @@ public final class HeatTrendCalculator {
     /** §FR-06：PLATEAU／DECLINING 分界，{@code slope_30d < DECLINE_THRESHOLD} 視為衰退。 */
     private static final BigDecimal DECLINE_THRESHOLD = new BigDecimal("-0.10");
 
-    /**
-     * §FR-06：{@code slope_30d > RISE_THRESHOLD} 是 RISING 的必要條件之一；
-     * 另一必要條件是「連續 3 週合成熱度成長」（見 {@link #determineStage} 的
-     * {@code threeWeekGrowth} 參數，兩者須同時成立）。
-     */
+    /** §FR-06：{@code slope_30d > RISE_THRESHOLD} 即為 RISING，唯一條件（v3.0.1）。 */
     private static final BigDecimal RISE_THRESHOLD = new BigDecimal("0.10");
 
     /** §5.3.3 觀測點容錯窗半徑（天）：目標日前後各 3 天，共 7 天窗口。 */
@@ -133,43 +142,53 @@ public final class HeatTrendCalculator {
     }
 
     /**
-     * §FR-06「熱度階段的統一詞彙」：
+     * §FR-06「熱度階段的統一詞彙」（v3.0.1）：只依 {@code slope_30d} 單一變數的
+     * 三段不等式，門檻對稱 ±10%，三段互斥且窮盡：
      * <ul>
-     *   <li>RISING：{@code slope30d > 10%} 且 {@code threeWeekGrowth} 為 true
-     *       （連續 3 週合成熱度成長，判定方式見類別註解的⚠️說明，由呼叫端組出後傳入）。</li>
-     *   <li>DECLINING：{@code slope30d < −10%}。</li>
-     *   <li>PLATEAU：{@code slope30d} 落在 ±10% 內，或 {@code slope30d > 10%} 但
-     *       {@code threeWeekGrowth} 不成立（單週衝高、非持續成長，先保守歸類為高原，
-     *       避免一天的雜訊就把階段判成 RISING）。</li>
+     *   <li>RISING：{@code slope30d > +0.10}</li>
+     *   <li>DECLINING：{@code slope30d < −0.10}</li>
+     *   <li>PLATEAU：{@code −0.10 ≤ slope30d ≤ +0.10}，含邊界值；
+     *       {@code slope30d == null} 時亦歸此（安全預設）。</li>
      * </ul>
-     * 缺 {@code slope30d}（新關鍵字歷史不足 30 日）時，沿用前一日階段；兩者皆缺
-     * （第一天）時，退回 RISING 當預設起點。
+     * 階段不受前一日階段影響——{@code stage} 必須是當日 {@code slope_30d} 的
+     * 確定性函數。「連續 3 週合成熱度成長」已降為顯示屬性，不在此判定，見
+     * {@link #stageWeeksFromContinuousDays}。
      *
      * @param slope30d 30 日斜率（§5.3.3）
-     * @param threeWeekGrowth 是否「連續 3 週合成熱度成長」，由呼叫端依⚠️說明的
-     *                        代理判斷組出
-     * @param previousStage 前一日階段，可為 null（新關鍵字第一天）
      */
-    public static HeatStage determineStage(
-            BigDecimal slope30d, boolean threeWeekGrowth, HeatStage previousStage) {
+    public static HeatStage determineStage(BigDecimal slope30d) {
         if (slope30d == null) {
-            return previousStage != null ? previousStage : HeatStage.RISING;
+            return HeatStage.PLATEAU;
+        }
+        if (slope30d.compareTo(RISE_THRESHOLD) > 0) {
+            return HeatStage.RISING;
         }
         if (slope30d.compareTo(DECLINE_THRESHOLD) < 0) {
             return HeatStage.DECLINING;
         }
-        if (slope30d.compareTo(RISE_THRESHOLD) > 0 && threeWeekGrowth) {
-            return HeatStage.RISING;
-        }
-        return previousStage != null ? previousStage : HeatStage.PLATEAU;
+        return HeatStage.PLATEAU;
     }
 
-    /** 階段延續則週數 +1，階段轉換則歸零重算（第 1 週）。 */
-    public static short nextStageWeeks(HeatStage previousStage, short previousStageWeeks, HeatStage currentStage) {
-        if (previousStage == currentStage) {
-            return (short) (previousStageWeeks + 1);
+    /**
+     * §FR-06：{@code stage_weeks} 的規則式算法——自當日往前逐日回溯
+     * {@code heat_composite_daily}，統計與當日相同 {@code stage} 的連續天數
+     * （包含當日在內；資料不連續或階段不同即中斷，不得跨越缺日繼續累計），
+     * 再除以 7 無條件進位。
+     *
+     * <p>本方法只做最後一步純換算；「回溯算出連續天數」由呼叫端負責
+     * （{@code HeatCompositeCalibrationService}，需查詢
+     * {@code heat_composite_daily} 的歷史列），刻意保持本類別不依賴資料庫。
+     *
+     * <p>注意：同日重跑必須代入相同的 {@code continuousDays} 才能保持結果一致
+     * （即回溯查詢本身要具冪等性，不可把「執行次數」算進連續天數）。
+     *
+     * @param continuousDays 含當日在內、與當日階段相同的連續天數，至少為 1
+     */
+    public static short stageWeeksFromContinuousDays(long continuousDays) {
+        if (continuousDays < 1) {
+            throw new IllegalArgumentException("continuousDays 至少為 1（含當日）：" + continuousDays);
         }
-        return 1;
+        return (short) Math.ceil(continuousDays / 7.0);
     }
 
     /**
@@ -213,4 +232,4 @@ public final class HeatTrendCalculator {
         return slope7d.multiply(new BigDecimal("0.7"))
                 .add(slope30d.multiply(new BigDecimal("0.3")));
     }
-}
+}   
