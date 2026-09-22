@@ -57,7 +57,7 @@ class CategoryProfileServiceTest {
      * 未設定的欄位要回 null，不可用 0 代替。
      *
      * <p>AC-17-5 的判準是「有沒有資料」：0 會讓「適溫 0°C」與「沒填」變成同一件事，
-     * 正是老師在 FR-04 抓到的「資料不足未明確標示」同一型問題。
+     * 而 §5.7 對這兩者的處理完全不同——0 會被權重乘進去拉低總分，無資料則權重分攤。
      */
     @Test
     void unsetFieldsAreNullNotZero() {

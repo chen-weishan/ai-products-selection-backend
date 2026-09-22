@@ -103,8 +103,9 @@ public class FestivalQueryService {
     /**
      * 品項表單的節慶下拉選項：同一個節慶跨年度只回一筆。
      *
-     * <p>行為與原本 {@code ProductReferenceQueryService.getFestivals()} 相同，是
-     * §4-1 方案 (a) 把 {@code GET /festivals} 收攏到 FR-17 的結果。
+     * <p>行為與原本 {@code ProductReferenceQueryService.getFestivals()} 相同。
+     * 規格書 §9 要求 {@code GET /festivals} 同時支援 {@code ?year=} 回年度檔期，
+     * 一個路徑不能有兩個 handler，因此把原本那支一併收攏到這裡。
      * <b>回應欄位不可更動</b>，否則前端的品項表單會壞掉。
      */
     public List<FestivalOptionResponse> getFestivalOptions() {
