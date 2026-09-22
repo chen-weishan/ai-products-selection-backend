@@ -54,18 +54,31 @@ public class FestivalController {
     private final FestivalQueryService festivalQueryService;
     private final FestivalCommandService festivalCommandService;
 
-    /** 帶 year 回年度檔期；不帶 year 維持原本的下拉選項行為。 */
-    @GetMapping
+    /**
+     * 年度檔期（S-20 標記 1、2）。
+     *
+     * <p>與下面那支同路徑，靠 {@code params} 條件區分，兩者互斥所以不會是模糊對應。
+     * 不寫成一支收選用參數再回 {@code ApiResponse<?>}：wildcard 會讓 springdoc
+     * 推不出回應型別而把 schema 整個略過，§3.3 要求後端是 OpenAPI 契約的單一事實來源。
+     */
+    @GetMapping(params = "year")
     @PreAuthorize("isAuthenticated()")
-    public ApiResponse<?> getFestivals(
-            @RequestParam(name = "year", required = false) Integer year) {
-
-        if (year == null) {
-            List<FestivalOptionResponse> options = festivalQueryService.getFestivalOptions();
-            return ApiResponse.success(options);
-        }
+    public ApiResponse<List<FestivalResponse>> getFestivalsByYear(
+            @RequestParam(name = "year") int year) {
         return ApiResponse.success(
                 festivalQueryService.getFestivalsByYear(year, LocalDate.now(BUSINESS_ZONE)));
+    }
+
+    /**
+     * 品項表單的節慶下拉選項：同一節慶跨年度只回一筆。
+     *
+     * <p>原本在 {@code ProductReferenceController}，為了讓規格書 §9 明文的
+     * {@code /festivals?year=} 成立而收攏到這裡。<b>回應格式與原本完全相同。</b>
+     */
+    @GetMapping(params = "!year")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<List<FestivalOptionResponse>> getFestivalOptions() {
+        return ApiResponse.success(festivalQueryService.getFestivalOptions());
     }
 
     @PostMapping
