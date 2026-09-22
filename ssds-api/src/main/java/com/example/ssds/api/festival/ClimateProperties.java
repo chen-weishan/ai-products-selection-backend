@@ -1,0 +1,12 @@
+package com.example.ssds.api.festival;
+
+import java.math.BigDecimal;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "ssds.climate")
+public record ClimateProperties(
+        BigDecimal defaultTolerance, // 預設 12.0（§FR-17-2）
+        String defaultRegion         // 預設 TW_TPE（§7.2，設計決定見 §4-2）
+) {
+}
