@@ -30,9 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>本服務只負責「單一關鍵字、單一日期」的計算與落地；要不要每天跑全部關鍵字
  * 是排程任務（{@code ssds-api} 的 {@code HeatCompositeCalibrationJob}）的責任。
  *
- * <p>⚠️ {@link #computeAndPersist} 產生的 stage／stageWeeks／estimatedLifespanDays／
- * divergenceFlag 依賴 {@link HeatTrendCalculator} 的暫定門檻，上線前請對照規格書
- * §5.3.3／§5.8 原文確認（見該類別的類別註解）。{@code volumeBelowFloor} 目前固定
+ * <p>2026-09-22：{@link #computeAndPersist} 產生 stage 的依據已改為
+ * {@link HeatTrendCalculator} 修正後的 §FR-06 規則（slope30d ±10%、加上
+ * 「連續 3 週成長」訊號，見本檔案 {@code threeWeekGrowth} 的組法與
+ * {@link HeatTrendCalculator} 的類別註解）。{@code volumeBelowFloor} 目前固定
  * 為 false——規格書 §5.3.2 提到這個欄位但本專案現有檔案沒有留下判定門檻，
  * 需要額外確認後才補上真正的判斷邏輯，先保留欄位但不誤植假邏輯。
  */
@@ -94,7 +95,15 @@ public class HeatCompositeCalibrationService {
         HeatStage previousStage = previousDay.map(HeatCompositeDaily::getStage).orElse(null);
         short previousStageWeeks = previousDay.map(HeatCompositeDaily::getStageWeeks).orElse((short) 0);
 
-        HeatStage stage = HeatTrendCalculator.determineStage(slope7d, previousStage);
+        // §FR-06 RISING 的「連續 3 週合成熱度成長」條件：⚠️ 規格書沒留下判定式，
+        // 這裡採用「當週、前 1 週、前 2 週的 slope_7d 皆 > 0」作為代理判斷
+        // （見 HeatTrendCalculator 類別註解），上線前請與產品面確認。
+        boolean threeWeekGrowth = slope7d != null
+                && slope7d.signum() > 0
+                && hasPositiveSlope7d(keywordId, date.minusDays(7))
+                && hasPositiveSlope7d(keywordId, date.minusDays(14));
+
+        HeatStage stage = HeatTrendCalculator.determineStage(slope30d, threeWeekGrowth, previousStage);
         short stageWeeks = HeatTrendCalculator.nextStageWeeks(previousStage, previousStageWeeks, stage);
         int lifespanDays = HeatTrendCalculator.estimateLifespanDays(stage, stageWeeks);
         boolean divergenceFlag = HeatTrendCalculator.detectDivergence(slope7d, slope30d);
@@ -118,6 +127,14 @@ public class HeatCompositeCalibrationService {
         row.setVolumeBelowFloor(false);
 
         return Optional.of(heatCompositeDailyRepository.save(row));
+    }
+
+    /** 供「連續 3 週成長」代理判斷使用：指定日期當天的 slope_7d 是否 &gt; 0。 */
+    private boolean hasPositiveSlope7d(Long keywordId, LocalDate statDate) {
+        return heatCompositeDailyRepository.findByKeywordIdAndStatDate(keywordId, statDate)
+                .map(HeatCompositeDaily::getSlope7d)
+                .filter(s -> s != null && s.signum() > 0)
+                .isPresent();
     }
 
     private static String writeWeightsJson(Map<String, BigDecimal> weights) {
