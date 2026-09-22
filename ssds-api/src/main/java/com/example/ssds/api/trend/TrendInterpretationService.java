@@ -73,7 +73,7 @@ public class TrendInterpretationService {
                 buildInput(keywordId, latest.getStatDate(), composites, readings));
         TrendInterpreterResult result = agent.interpret(input, forceRefresh);
         Instant generatedAt = Instant.now();
-        applyOutput(latest, result.output());
+        applyOutput(latest, result.output(), result.fallbackApplied());
         persistHistory(keyword, input, result, generatedAt);
         sourcingTimeGapRecalculationService.recalculateAffectedByKeyword(keywordId);
         log.info(
@@ -207,12 +207,16 @@ public class TrendInterpretationService {
         };
     }
 
-    private void applyOutput(HeatCompositeDaily latest, TrendInterpreterOutput output) {
+    private void applyOutput(
+            HeatCompositeDaily latest,
+            TrendInterpreterOutput output,
+            boolean fallbackApplied) {
         latest.setStage(output.stage());
         latest.setStageWeeks((short) output.stageWeeks());
         latest.setEstimatedLifespanDays(output.estimatedLifespanDays());
-        latest.setStageSource(HeatValueSource.AGENT);
-        latest.setLifespanSource(HeatValueSource.AGENT);
+        HeatValueSource source = fallbackApplied ? HeatValueSource.RULE : HeatValueSource.AGENT;
+        latest.setStageSource(source);
+        latest.setLifespanSource(source);
         compositeRepository.save(latest);
     }
 

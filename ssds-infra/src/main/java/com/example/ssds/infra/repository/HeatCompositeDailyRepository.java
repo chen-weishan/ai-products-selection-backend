@@ -29,6 +29,9 @@ public interface HeatCompositeDailyRepository
     List<HeatCompositeDaily> findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
             Long keywordId, LocalDate from, LocalDate to);
 
+    List<HeatCompositeDaily> findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(
+            Long keywordId, LocalDate before);
+
     /** 每個關鍵字只取最新列，且至少已有七筆合成資料，供 §5.3.3 選生效關鍵字。 */
     @Query(value = """
             select distinct on (h.keyword_id) h.*

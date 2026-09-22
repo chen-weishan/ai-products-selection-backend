@@ -20,7 +20,7 @@ class TrendInterpreterPromptFactoryTest {
         assertTrue(input.contains("compositeSeries"));
         assertTrue(input.contains("sourceTrends"));
         assertFalse(input.contains("keywordText"));
-        assertEquals("trend-v3", TrendInterpreterPromptFactory.PROMPT_VERSION);
+        assertEquals("trend-v4", TrendInterpreterPromptFactory.PROMPT_VERSION);
         assertTrue(factory.retryInstruction("OUTPUT_NOT_ALLOWED").contains("OUTPUT_NOT_ALLOWED"));
         assertTrue(factory.retryInstruction("OUTPUT_NOT_ALLOWED").contains("allowedOutputs"));
         assertTrue(factory.retryInstruction("OUTPUT_NOT_ALLOWED").contains("不得混搭"));

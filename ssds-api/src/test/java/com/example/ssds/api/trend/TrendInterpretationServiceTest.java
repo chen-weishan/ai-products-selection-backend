@@ -114,10 +114,73 @@ class TrendInterpretationServiceTest {
         ArgumentCaptor<TrendInterpretation> historyCaptor =
                 ArgumentCaptor.forClass(TrendInterpretation.class);
         verify(interpretationRepository).save(historyCaptor.capture());
-        assertEquals("trend-v3", historyCaptor.getValue().getPromptVersion());
+        assertEquals("trend-v4", historyCaptor.getValue().getPromptVersion());
         assertTrue(historyCaptor.getValue().getInputSnapshot().contains("compositeSeries"));
         assertEquals("MODEL_NUMERIC", response.modelAlias());
         verify(timeGapService).recalculateAffectedByKeyword(31L);
+    }
+
+    @Test
+    void marksRuleSourcesWhenAgentFallsBack() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        HeatReadingRepository readingRepository = mock(HeatReadingRepository.class);
+        TrendInterpretationRepository interpretationRepository =
+                mock(TrendInterpretationRepository.class);
+        TrendInterpreterAgent agent = mock(TrendInterpreterAgent.class);
+        SourcingTimeGapRecalculationService timeGapService =
+                mock(SourcingTimeGapRecalculationService.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(32L).keyword("可可").build();
+        LocalDate latestDate = LocalDate.of(2026, 9, 22);
+        HeatCompositeDaily latest = HeatCompositeDaily.builder()
+                .keyword(keyword)
+                .statDate(latestDate)
+                .compositeValue(new BigDecimal("50"))
+                .slope7d(new BigDecimal("0.20"))
+                .slope30d(BigDecimal.ZERO)
+                .stage(HeatStage.PLATEAU)
+                .stageWeeks((short) 1)
+                .estimatedLifespanDays(42)
+                .stageSource(HeatValueSource.RULE)
+                .lifespanSource(HeatValueSource.RULE)
+                .appliedWeights("{}")
+                .build();
+        TrendInterpreterResult fallback = new TrendInterpreterResult(
+                new TrendInterpreterOutput(HeatStage.PLATEAU, 1, 42),
+                true,
+                FallbackReason.AI_UNAVAILABLE,
+                false,
+                "rule-fallback",
+                TrendInterpreterPromptFactory.PROMPT_VERSION,
+                null,
+                null,
+                1);
+        when(keywordRepository.findById(32L)).thenReturn(Optional.of(keyword));
+        when(compositeRepository.findFirstByKeywordIdOrderByStatDateDesc(32L))
+                .thenReturn(Optional.of(latest));
+        when(compositeRepository.findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
+                eq(32L), eq(latestDate.minusDays(89)), eq(latestDate)))
+                .thenReturn(List.of(latest));
+        when(readingRepository.findForKeywordIncludingCategorySources(
+                eq(32L), eq(latestDate.minusDays(89)), eq(latestDate)))
+                .thenReturn(List.of());
+        when(agent.interpret(any(), eq(false))).thenReturn(fallback);
+        TrendInterpretationService service = new TrendInterpretationService(
+                keywordRepository,
+                compositeRepository,
+                readingRepository,
+                interpretationRepository,
+                new PromptSanitizer(),
+                agent,
+                new ObjectMapper().findAndRegisterModules(),
+                timeGapService);
+
+        service.interpret(32L, false);
+
+        assertEquals(HeatValueSource.RULE, latest.getStageSource());
+        assertEquals(HeatValueSource.RULE, latest.getLifespanSource());
+        verify(compositeRepository).save(latest);
+        verify(timeGapService).recalculateAffectedByKeyword(32L);
     }
 
     private static HeatReading reading(
