@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 /** 情境判定紀錄（規格書 §7.2 scene_classification_log）。 */
 @Repository
@@ -56,4 +57,7 @@ public interface SceneClassificationLogRepository
 
     /** 分母。 */
     long countByCreatedAtBetween(Instant from, Instant to);
+
+    @EntityGraph(attributePaths = {"product", "product.category"})
+    List<SceneClassificationLog> findByCreatedAtBetween(Instant from, Instant to);
 }

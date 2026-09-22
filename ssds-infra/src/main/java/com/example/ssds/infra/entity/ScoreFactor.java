@@ -69,6 +69,18 @@ public class ScoreFactor {
     @Builder.Default
     private boolean dataAvailable = true;
 
+    /** 扣分命中原因摘要；不得拿來代替原始量值。 */
+    @Column(length = 120)
+    private String note;
+
+    /** TREND 多關鍵字取最大值後的生效關鍵字；其他因子必須為 null。 */
+    @Column(name = "driving_keyword_id")
+    private Long drivingKeywordId;
+
+    /** FESTIVAL 多節慶取最大值後的生效節慶日；其他因子必須為 null。 */
+    @Column(name = "driving_festival_id")
+    private Long drivingFestivalId;
+
     /** 本因子對加分小計的貢獻（正規化值 × 權重）；扣分列回傳 0。 */
     public BigDecimal contribution() {
         if (penalty || weight == null || normalizedValue == null) {

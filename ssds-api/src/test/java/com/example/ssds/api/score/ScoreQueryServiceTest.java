@@ -37,6 +37,7 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
 import com.example.ssds.core.domain.FactorCode;
+import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.ProductScore;
 import com.example.ssds.infra.entity.ScoreFactor;
@@ -84,6 +85,23 @@ class ScoreQueryServiceTest {
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getTotalElements()).isZero();
         verify(scoreFactorRepository, never()).findByScoreIdIn(any());
+    }
+
+    @Test
+    @DisplayName("排行摘要統計完整篩選結果的 A／B／C 分布")
+    void rankingSummaryCountsAllGrades() {
+        when(productScoreRepository.countRankingByGrade(
+                "2026W38", SceneType.VIRAL, 10L)).thenReturn(List.of(
+                        new Object[] {Grade.A, 8L},
+                        new Object[] {Grade.B, 14L},
+                        new Object[] {Grade.C, 16L}));
+
+        var summary = service.rankingSummary("2026W38", SceneType.VIRAL, 10L);
+
+        assertThat(summary.totalCount()).isEqualTo(38);
+        assertThat(summary.gradeACount()).isEqualTo(8);
+        assertThat(summary.gradeBCount()).isEqualTo(14);
+        assertThat(summary.gradeCCount()).isEqualTo(16);
     }
 
     /**
@@ -235,6 +253,35 @@ class ScoreQueryServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("分數詳情回傳原始值、百分位、權重與貢獻值")
+    void snapshotCarriesExplainableBonusFactorEvidence() {
+        ProductScore s = score(1L, BigDecimal.ZERO);
+        ScoreFactor trend = ScoreFactor.builder()
+                .score(s)
+                .factorCode(FactorCode.TREND)
+                .rawValue(new BigDecimal("0.2500"))
+                .normalizedValue(new BigDecimal("80.00"))
+                .weight(new BigDecimal("0.500"))
+                .dataAvailable(true)
+                .drivingKeywordId(301L)
+                .note("同品類百分位")
+                .build();
+        when(productScoreRepository.findSnapshot(1L, "2026W30", null))
+                .thenReturn(Optional.of(s));
+        when(scoreFactorRepository.findByScoreId(1L)).thenReturn(List.of(trend));
+
+        var detail = service.snapshot(1L, "2026W30", null);
+
+        assertThat(detail.bonusFactors()).singleElement().satisfies(factor -> {
+            assertThat(factor.rawValue()).isEqualByComparingTo("0.2500");
+            assertThat(factor.normalizedValue()).isEqualByComparingTo("80.00");
+            assertThat(factor.weight()).isEqualByComparingTo("0.500");
+            assertThat(factor.contribution()).isEqualByComparingTo("40.00000");
+            assertThat(factor.drivingKeywordId()).isEqualTo(301L);
+        });
     }
 
     /**

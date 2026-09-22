@@ -17,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
+import com.example.ssds.api.score.dto.RankingSummaryResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
 import com.example.ssds.api.score.dto.SimulateRequest;
 import com.example.ssds.core.domain.SceneType;
@@ -24,6 +25,9 @@ import com.example.ssds.core.domain.SceneType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 選品分數（規格書 §FR-04、§8.2）。
@@ -36,6 +40,8 @@ import lombok.RequiredArgsConstructor;
 @Validated
 @RequestMapping("/scores")
 @RequiredArgsConstructor
+@Tag(name = "Scores", description = "正式評分快照、四榜排行、扣分明細與唯讀試算")
+@SecurityRequirement(name = "bearerAuth")
 public class ScoreController {
 
     private final ScoreQueryService queryService;
@@ -52,6 +58,7 @@ public class ScoreController {
     // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/ranking")
+    @Operation(summary = "查詢正式分數排行", description = "只回傳 active 且品項未軟刪除的快照。")
     public ApiResponse<PageResponse<ScoreRankingRowResponse>> ranking(
             @RequestParam String period,
             @RequestParam(required = false) SceneType scene,
@@ -64,9 +71,20 @@ public class ScoreController {
         return ApiResponse.success(PageResponse.from(result));
     }
 
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/ranking/summary")
+    @Operation(summary = "查詢排行全榜分級分布", description = "統計完整篩選結果，不受 page、size 影響。")
+    public ApiResponse<RankingSummaryResponse> rankingSummary(
+            @RequestParam String period,
+            @RequestParam(required = false) SceneType scene,
+            @RequestParam(required = false) Long categoryId) {
+        return ApiResponse.success(queryService.rankingSummary(period, scene, categoryId));
+    }
+
     // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/{id}/deductions")
+    @Operation(summary = "查詢正式分數的三項扣分明細")
     public ApiResponse<ScoreDeductionsResponse> deductions(@PathVariable Long id) {
         return ApiResponse.success(queryService.deductions(id));
     }
@@ -74,6 +92,7 @@ public class ScoreController {
     // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
     @PreAuthorize("isAuthenticated()")
     @PostMapping ("/simulate")
+    @Operation(summary = "依指定權重版本試算排行", description = "唯讀計算，不建立或修改正式快照。")
     public ApiResponse<List<ScoreRankingRowResponse>> simulate(
             @Valid @RequestBody SimulateRequest simulateRequest) {
         return ApiResponse.success(simulationService.simulate(simulateRequest));

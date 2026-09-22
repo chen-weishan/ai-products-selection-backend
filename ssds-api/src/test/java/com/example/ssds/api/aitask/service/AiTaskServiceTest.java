@@ -1,0 +1,452 @@
+package com.example.ssds.api.aitask.service;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
+import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.core.domain.AiTaskType;
+import com.example.ssds.core.domain.TaskStatus;
+import com.example.ssds.core.domain.TrackType;
+import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.infra.entity.*;
+import com.example.ssds.infra.repository.*;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+
+@ExtendWith(MockitoExtension.class)
+class AiTaskServiceTest {
+    @Mock AiTaskRepository taskRepository;
+    @Mock AiTaskItemRepository itemRepository;
+    @Mock ProductRepository productRepository;
+    @Mock ApplicationEventPublisher eventPublisher;
+
+    @Test
+    void getsCompleteTaskProgressAndUsageStatistics() {
+        AiTask task = AiTask.builder()
+                .id(12L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.RUNNING)
+                .totalCount(4)
+                .successCount(1)
+                .failCount(1)
+                .cacheHitCount(2)
+                .requestCount(7)
+                .retryPoolRequestCount(3)
+                .totalCostUsd(new BigDecimal("0.12500"))
+                .startedAt(Instant.parse("2026-09-16T01:00:00Z"))
+                .build();
+        when(taskRepository.findById(12L)).thenReturn(Optional.of(task));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.get(12L);
+
+        assertAll(
+                () -> assertEquals(12L, response.taskId()),
+                () -> assertEquals(AiTaskType.FULL_ANALYSIS, response.taskType()),
+                () -> assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool()),
+                () -> assertEquals(TaskStatus.RUNNING, response.status()),
+                () -> assertEquals(50, response.progressPercent()),
+                () -> assertEquals(2, response.cacheHitCount()),
+                () -> assertEquals(7, response.requestCount()),
+                () -> assertEquals(3, response.retryPoolRequestCount()),
+                () -> assertEquals(new BigDecimal("0.12500"), response.totalCostUsd()));
+    }
+
+    @Test
+    void getRejectsMissingTask() {
+        when(taskRepository.findById(99L)).thenReturn(Optional.empty());
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.get(99L));
+    }
+
+    @Test
+    void createsPendingTaskAndPublishesAfterCommitEvent() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(700L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.SCENE_CLASSIFY,
+                List.of(101L),
+                new CreateAiTaskRequest.Options(false)));
+
+        assertEquals(700L, response.taskId());
+        assertEquals(TaskStatus.PENDING, response.status());
+        assertEquals(1, response.totalCount());
+        ArgumentCaptor<AiTaskCreatedEvent> event = ArgumentCaptor.forClass(AiTaskCreatedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertEquals(700L, event.getValue().taskId());
+        verify(itemRepository).saveAll(argThat(items -> items.iterator().hasNext()));
+    }
+
+    @Test
+    void fr03FullAnalysisUsesCanonicalTaskAndEventPipeline() {
+        Product product = Product.builder()
+                .id(102L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        AppUser actor = AppUser.builder().id(9L).email("buyer@ssds.dev").build();
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(702L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.enqueueFullAnalysis(List.of(product), actor, false);
+
+        assertAll(
+                () -> assertEquals(702L, response.taskId()),
+                () -> assertEquals(AiTaskType.FULL_ANALYSIS, response.taskType()),
+                () -> assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool()),
+                () -> assertEquals(TaskStatus.PENDING, response.status()));
+        verify(taskRepository).save(argThat(task -> task.getCreatedBy() == actor));
+        verify(itemRepository).saveAll(argThat(items ->
+                items.iterator().next().getProduct() == product));
+        ArgumentCaptor<AiTaskCreatedEvent> event = ArgumentCaptor.forClass(AiTaskCreatedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertEquals(702L, event.getValue().taskId());
+    }
+
+    @Test
+    void rejectsTrackBProductBeforeTaskCreation() {
+        Product product = Product.builder().id(120L).trackType(TrackType.B).build();
+        when(productRepository.findAllById(List.of(120L))).thenReturn(List.of(product));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.create(new CreateAiTaskRequest(
+                AiTaskType.SCENE_CLASSIFY, List.of(120L), null)));
+
+        verifyNoInteractions(taskRepository, itemRepository, eventPublisher);
+    }
+
+    @Test
+    void acceptsReviewRiskTaskForTrackAProduct() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(701L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.REVIEW_RISK, List.of(101L), null));
+
+        assertEquals(AiTaskType.REVIEW_RISK, response.taskType());
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void rejectsSoftDeletedProductBeforeTaskCreation() {
+        Product product = Product.builder()
+                .id(121L)
+                .trackType(TrackType.A)
+                .deletedAt(Instant.parse("2026-09-10T00:00:00Z"))
+                .build();
+        when(productRepository.findAllById(List.of(121L))).thenReturn(List.of(product));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.create(new CreateAiTaskRequest(
+                AiTaskType.SCENE_CLASSIFY, List.of(121L), null)));
+
+        verifyNoInteractions(taskRepository, itemRepository, eventPublisher);
+    }
+
+    @Test
+    void retryFailedItemsCreatesNewRetryTaskAndPreservesTarget() {
+        AiTask source = AiTask.builder()
+                .id(40L)
+                .taskType(AiTaskType.SCENE_CLASSIFY)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.FAILED)
+                .totalCount(1)
+                .build();
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        AiTaskItem failed = AiTaskItem.builder()
+                .task(source)
+                .product(product)
+                .status(com.example.ssds.core.domain.TaskItemStatus.FAILED)
+                .build();
+        when(taskRepository.findById(40L)).thenReturn(Optional.of(source));
+        when(itemRepository.findByTaskIdAndStatus(
+                40L, com.example.ssds.core.domain.TaskItemStatus.FAILED))
+                .thenReturn(List.of(failed));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(41L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.retryFailedItems(40L);
+
+        assertEquals(AiTaskType.BudgetPool.RETRY, response.budgetPool());
+        verify(itemRepository).saveAll(argThat(items -> {
+            AiTaskItem item = items.iterator().next();
+            return item.getProduct() == product && item.getTask().getId().equals(41L);
+        }));
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(41L, true));
+    }
+
+    @Test
+    void retryFailedItemsRejectsTaskWithoutFailedItems() {
+        AiTask source = AiTask.builder()
+                .id(40L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.SUCCEEDED)
+                .totalCount(1)
+                .build();
+        when(taskRepository.findById(40L)).thenReturn(Optional.of(source));
+        when(itemRepository.findByTaskIdAndStatus(
+                40L, com.example.ssds.core.domain.TaskItemStatus.FAILED))
+                .thenReturn(List.of());
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.retryFailedItems(40L));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void weeklyScheduleSkipsWhenFullAnalysisIsAlreadyActive() {
+        when(taskRepository.existsByTaskTypeAndStatusIn(
+                eq(AiTaskType.FULL_ANALYSIS), anyList())).thenReturn(true);
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertTrue(service.createScheduledFullAnalysis().isEmpty());
+
+        verify(productRepository, never()).findFullAnalysisCandidates(anyList());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void quotaContinuationSkipsWhenFullAnalysisIsAlreadyActive() {
+        when(taskRepository.existsByTaskTypeAndStatusIn(
+                eq(AiTaskType.FULL_ANALYSIS), anyList())).thenReturn(true);
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertTrue(service.resumeQuotaSkippedFullAnalysis().isEmpty());
+
+        verify(itemRepository, never()).findProductsPendingQuotaRetry(any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void acceptsCombinedProductInsightTaskForTrackAProduct() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(702L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.SELLING_POINT, List.of(101L), null));
+
+        assertEquals(AiTaskType.SELLING_POINT, response.taskType());
+        assertEquals("Product Insight（賣點與風險）", response.taskTypeDisplayName());
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void acceptsRecommendationTaskForTrackAProduct() {
+        Product product = Product.builder().id(101L).trackType(TrackType.A).build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(703L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.RECOMMENDATION, List.of(101L), null));
+
+        assertEquals(AiTaskType.RECOMMENDATION, response.taskType());
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void createsTrendInterpretTaskWithKeywordTargets() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
+        when(keywordRepository.findAllById(List.of(31L))).thenReturn(List.of(keyword));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(704L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.TREND_INTERPRET,
+                List.of(),
+                List.of(31L),
+                new CreateAiTaskRequest.Options(true)));
+
+        assertEquals(AiTaskType.TREND_INTERPRET, response.taskType());
+        assertEquals(AiTaskType.BudgetPool.RETRY, response.budgetPool());
+        verify(itemRepository).saveAll(argThat(items -> {
+            AiTaskItem item = items.iterator().next();
+            return item.getProduct() == null && item.getKeyword().getId().equals(31L);
+        }));
+        verify(eventPublisher).publishEvent(any(AiTaskCreatedEvent.class));
+    }
+
+    @Test
+    void scheduledTrendInterpretationUsesTrackAPool() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
+        when(keywordRepository.findAllById(List.of(31L))).thenReturn(List.of(keyword));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(705L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, eventPublisher);
+
+        var response = service.createScheduledTrendInterpretation(List.of(31L)).orElseThrow();
+
+        assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool());
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(705L, false));
+    }
+
+    @Test
+    void createsWeightCalibrationTaskWithReportTargetInRetryPool() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        CalibrationReportRepository reports = mock(CalibrationReportRepository.class);
+        CalibrationReport report = CalibrationReport.builder().id(7L).quarter("2026Q3").build();
+        when(reports.findAllById(List.of(7L))).thenReturn(List.of(report));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(706L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, reports, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.WEIGHT_CALIBRATION,
+                List.of(),
+                List.of(),
+                List.of(7L),
+                new CreateAiTaskRequest.Options(true)));
+
+        assertEquals(AiTaskType.BudgetPool.RETRY, response.budgetPool());
+        verify(itemRepository).saveAll(argThat(items -> {
+            AiTaskItem item = items.iterator().next();
+            return item.getProduct() == null
+                    && item.getKeyword() == null
+                    && item.getCalibrationReport().getId().equals(7L);
+        }));
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(706L, true));
+    }
+
+    @Test
+    void reusesActiveSourcingTaskForSameProduct() {
+        Product product = Product.builder().id(136L).trackType(TrackType.B).build();
+        AiTask active = AiTask.builder()
+                .id(24L).taskType(AiTaskType.SOURCING_SCOUT)
+                .status(TaskStatus.RUNNING).totalCount(1).build();
+        when(taskRepository.findActiveProductTasks(
+                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+                .thenReturn(List.of(active));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createSourcingScout(product, true);
+
+        assertEquals(24L, response.taskId());
+        assertEquals(TaskStatus.RUNNING, response.status());
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(itemRepository, eventPublisher);
+    }
+
+    @Test
+    void createsSourcingTaskWhenNoActiveTaskExists() {
+        Product product = Product.builder().id(136L).trackType(TrackType.B).build();
+        when(taskRepository.findActiveProductTasks(
+                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(26L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createSourcingScout(product, false);
+
+        assertEquals(26L, response.taskId());
+        verify(itemRepository).save(argThat(item -> item.getProduct().getId().equals(136L)));
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(26L, false));
+    }
+
+    @Test
+    void fullAnalysisUsesTrackABudgetPool() {
+        Product product = Product.builder()
+                .id(101L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(730L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.create(new CreateAiTaskRequest(
+                AiTaskType.FULL_ANALYSIS,
+                List.of(101L),
+                new CreateAiTaskRequest.Options(false)));
+
+        assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool());
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(730L, false));
+    }
+}
