@@ -10,6 +10,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TrendKeywordRepository extends JpaRepository<TrendKeyword, Long> {
 
+    long countByEnabledTrue();
+
     Optional<TrendKeyword> findByKeyword(String keyword);
 
     List<TrendKeyword> findAllByOrderByKeywordAsc();

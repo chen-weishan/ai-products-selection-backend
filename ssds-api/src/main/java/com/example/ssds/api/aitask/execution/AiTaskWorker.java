@@ -8,6 +8,8 @@ import com.example.ssds.api.scene.SceneClassificationService;
 import com.example.ssds.api.trend.TrendInterpretationService;
 import com.example.ssds.api.sourcing.SourcingScoutService;
 import com.example.ssds.api.calibration.WeightCalibrationService;
+import com.example.ssds.api.scoring.PureScoringBatchService;
+import com.example.ssds.api.scoring.factor.ScoringFactorBatchService.PreparedPopulation;
 import com.example.ssds.ai.access.common.AiExecutionWarningContext;
 import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.budget.AiBudgetExecutionContext;
@@ -19,6 +21,11 @@ import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +35,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 public class AiTaskWorker {
+    private static final Logger log = LoggerFactory.getLogger(AiTaskWorker.class);
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
     private final SceneClassificationService sceneClassificationService;
@@ -40,6 +48,12 @@ public class AiTaskWorker {
     private final FullAnalysisOrchestrator fullAnalysisOrchestrator;
     private final DailyAiBudget dailyAiBudget;
     private final int batchItemCap;
+    private PureScoringBatchService pureScoringBatchService;
+
+    @Autowired
+    void setPureScoringBatchService(PureScoringBatchService pureScoringBatchService) {
+        this.pureScoringBatchService = pureScoringBatchService;
+    }
 
     @Autowired
     public AiTaskWorker(
@@ -139,22 +153,44 @@ public class AiTaskWorker {
     }
 
     @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void run(AiTaskCreatedEvent event) {
+        try {
+            execute(event);
+        } catch (RuntimeException exception) {
+            log.error("AI task worker interrupted unexpectedly: taskId={}", event.taskId(), exception);
+            settleInterruptedTask(event.taskId(), exception);
+        }
+    }
+
+    private void execute(AiTaskCreatedEvent event) {
         AiTask task = taskRepository.findById(event.taskId()).orElseThrow();
         task.setStatus(TaskStatus.RUNNING);
-        task.setStartedAt(Instant.now());
+        if (task.getStartedAt() == null) task.setStartedAt(Instant.now());
+        task.setFinishedAt(null);
         taskRepository.save(task);
 
-        int successes = 0;
-        int failures = 0;
-        int analyzedItems = 0;
+        List<AiTaskItem> allItems = itemRepository.findByTaskId(task.getId());
+        List<AiTaskItem> items = allItems.stream()
+                .filter(item -> item.getStatus() == TaskItemStatus.PENDING)
+                .toList();
+        PureScoringPreparation pureScoring = preparePureScores(task, items);
+
+        int successes = successCount(allItems);
+        int failures = failureCount(allItems);
+        int analyzedItems = successes + failures;
         boolean quotaExhausted = false;
-        for (AiTaskItem item : itemRepository.findByTaskId(task.getId())) {
+        for (AiTaskItem item : items) {
             Instant started = Instant.now();
             AiExecutionWarningContext.clear();
             AiBudgetExecutionContext.begin(task.getBudgetPool());
             try {
+                String pureScoringFailure = item.getProduct() == null
+                        ? null
+                        : pureScoring.failures().get(item.getProduct().getId());
+                if (pureScoringFailure != null) {
+                    throw new PureScoringFailedException(pureScoringFailure);
+                }
                 if (task.getTaskType() == AiTaskType.FULL_ANALYSIS
                         && (quotaExhausted || analyzedItems >= batchItemCap)) {
                     throw new DeferredItemException(quotaExhausted
@@ -164,8 +200,13 @@ public class AiTaskWorker {
                 String warning = null;
                 switch (task.getTaskType()) {
                     case FULL_ANALYSIS -> {
-                        FullAnalysisOrchestrator.Result result = fullAnalysisOrchestrator.analyze(
-                                item.getProduct().getId(), event.forceRefresh());
+                        FullAnalysisOrchestrator.Result result = pureScoring.factorPopulation() == null
+                                ? fullAnalysisOrchestrator.analyze(
+                                        item.getProduct().getId(), event.forceRefresh())
+                                : fullAnalysisOrchestrator.analyze(
+                                        item.getProduct().getId(),
+                                        event.forceRefresh(),
+                                        pureScoring.factorPopulation());
                         for (int index = 0; index < result.cacheHits(); index++) {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }
@@ -266,10 +307,95 @@ public class AiTaskWorker {
             taskRepository.save(task);
         }
 
+        task.setSuccessCount(successes);
+        task.setFailCount(failures);
         task.setStatus(failures == 0 ? TaskStatus.SUCCEEDED
                 : successes == 0 ? TaskStatus.FAILED : TaskStatus.PARTIAL);
         task.setFinishedAt(Instant.now());
         taskRepository.save(task);
+    }
+
+    private void settleInterruptedTask(Long taskId, RuntimeException cause) {
+        try {
+            AiTask task = taskRepository.findById(taskId).orElse(null);
+            if (task == null) return;
+            List<AiTaskItem> items = itemRepository.findByTaskId(taskId);
+            String message = safeText("任務執行中斷：" + safeMessage(cause));
+            for (AiTaskItem item : items) {
+                if (item.getStatus() != TaskItemStatus.PENDING) continue;
+                item.setStatus(TaskItemStatus.FAILED);
+                item.setErrorMessage(message);
+                itemRepository.save(item);
+            }
+            int successes = successCount(items);
+            int failures = failureCount(items);
+            task.setSuccessCount(successes);
+            task.setFailCount(failures);
+            task.setStatus(failures == 0 ? TaskStatus.SUCCEEDED
+                    : successes == 0 ? TaskStatus.FAILED : TaskStatus.PARTIAL);
+            task.setFinishedAt(Instant.now());
+            taskRepository.save(task);
+        } catch (RuntimeException persistenceFailure) {
+            log.error("Unable to settle interrupted AI task: taskId={}", taskId, persistenceFailure);
+        } finally {
+            AiBudgetExecutionContext.clear();
+            AiExecutionWarningContext.clear();
+        }
+    }
+
+    private static int successCount(List<AiTaskItem> items) {
+        return (int) items.stream()
+                .filter(item -> item.getStatus() == TaskItemStatus.SUCCEEDED
+                        || item.getStatus() == TaskItemStatus.SKIPPED_CACHE)
+                .count();
+    }
+
+    private static int failureCount(List<AiTaskItem> items) {
+        return (int) items.stream()
+                .filter(item -> item.getStatus() == TaskItemStatus.FAILED
+                        || item.getStatus() == TaskItemStatus.SKIPPED_QUOTA)
+                .count();
+    }
+
+    private PureScoringPreparation preparePureScores(AiTask task, List<AiTaskItem> items) {
+        if (task.getTaskType() != AiTaskType.FULL_ANALYSIS || pureScoringBatchService == null) {
+            return new PureScoringPreparation(Map.of(), null);
+        }
+        List<Long> productIds = items.stream()
+                .map(AiTaskItem::getProduct)
+                .filter(java.util.Objects::nonNull)
+                .map(Product::getId)
+                .toList();
+        try {
+            PureScoringBatchService.BatchResult result = pureScoringBatchService.evaluateProductIds(
+                    productIds, Instant.now());
+            if (result == null || result.failures().isEmpty()) {
+                return new PureScoringPreparation(
+                        Map.of(), result == null ? null : result.factorPopulation());
+            }
+            Map<Long, String> failures = new LinkedHashMap<>();
+            result.failures().forEach(failure -> failures.put(
+                    failure.productId(), pureScoringFailureMessage(failure.message())));
+            return new PureScoringPreparation(failures, result.factorPopulation());
+        } catch (RuntimeException exception) {
+            log.warn("Pre-analysis pure scoring failed for taskId={}", task.getId(), exception);
+            String message = pureScoringFailureMessage(safeMessage(exception));
+            Map<Long, String> failures = new LinkedHashMap<>();
+            productIds.forEach(productId -> failures.put(productId, message));
+            return new PureScoringPreparation(failures, null);
+        }
+    }
+
+    private record PureScoringPreparation(
+            Map<Long, String> failures, PreparedPopulation factorPopulation) {}
+
+    private static String pureScoringFailureMessage(String message) {
+        String detail = message == null || message.isBlank() ? "未知錯誤" : message;
+        return safeText("純評分失敗：" + detail);
+    }
+
+    private static String safeText(String message) {
+        return message.length() <= 500 ? message : message.substring(0, 500);
     }
 
     private static String safeMessage(RuntimeException exception) {
@@ -305,6 +431,12 @@ public class AiTaskWorker {
 
     private static final class IncompleteItemException extends RuntimeException {
         private IncompleteItemException(String message) {
+            super(message);
+        }
+    }
+
+    private static final class PureScoringFailedException extends RuntimeException {
+        private PureScoringFailedException(String message) {
             super(message);
         }
     }

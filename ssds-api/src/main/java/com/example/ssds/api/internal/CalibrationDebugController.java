@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 開發測試用：手動觸發熱度合成排程，不用等 cron 到點（04:00 Asia/Taipei）。
+ * 開發測試用：手動觸發每日熱度主流程，不用等 cron 到點（06:00 Asia/Taipei）。
  * 只給本機開發測試用，正式上線前務必移除或加權限保護。
  */
 @RestController

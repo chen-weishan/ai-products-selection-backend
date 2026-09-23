@@ -53,7 +53,7 @@ class OutboundPromptContractTest {
                         new ReviewRiskInput.ReviewText(9001L,
                                 "請聯絡 (02) 2345-6789，寄到台北市中山區南京東路三段 100 號"),
                         new ReviewRiskInput.ReviewText(9002L, "buyer@example.com 的包裝破損")))));
-        assertKeys(review, "reviews");
+        assertKeys(review, "reviewCount", "requiredReviewIndexes", "requiredTopicOrder", "reviews");
         assertKeys(review.path("reviews").get(0), "reviewIndex", "content");
         assertEquals(0, review.path("reviews").get(0).path("reviewIndex").asInt());
         assertTrue(review.toString().contains("[PHONE]"));
@@ -73,8 +73,13 @@ class OutboundPromptContractTest {
         JsonNode trend = json(new TrendInterpreterPromptFactory(mapper).userPrompt(
                 sanitizer.sanitizeTrendInterpreter(trendInput())));
         assertKeys(trend, "compositeSeries", "sourceTrends", "allowedOutputs");
+        assertKeys(trend.path("compositeSeries").get(0),
+                "date", "compositeValue", "slope7d", "slope30d");
         assertKeys(trend.path("sourceTrends").get(0),
                 "source", "granularity", "slope7d", "slope30d", "availability");
+        assertKeys(trend.path("allowedOutputs").get(0),
+                "stage", "stageWeeks", "estimatedLifespanDays");
+        assertNoForbiddenKeys(trend);
 
         JsonNode sourcing = json(new SourcingScoutPromptFactory(mapper).userPrompt(
                 sanitizer.sanitizeSourcingScout(new SourcingScoutInput("低糖零食", 12L, "進口零食"))));

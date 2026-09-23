@@ -1,13 +1,14 @@
 package com.example.ssds.api.internal;
 
-
+import com.example.ssds.api.schedule.GoogleTrendsHeatIngestJob;
+import com.example.ssds.api.schedule.InstagramHeatIngestJob;
+import com.example.ssds.api.schedule.ThreadsHeatIngestJob;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.example.ssds.api.schedule.InstagramHeatIngestJob;
-import com.example.ssds.api.schedule.ThreadsHeatIngestJob;
-import com.example.ssds.api.schedule.GoogleTrendsHeatIngestJob;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 開發測試用：手動觸發熱度採集排程，不用乾等 cron 時間到
@@ -22,32 +23,40 @@ import com.example.ssds.api.schedule.GoogleTrendsHeatIngestJob;
 @RequestMapping("/internal/ingest")
 class IngestTestController {
 
-    private final InstagramHeatIngestJob instagramJob;
-    private final ThreadsHeatIngestJob threadsJob;
-    private final GoogleTrendsHeatIngestJob googleTrendsJob;
+    private final ObjectProvider<InstagramHeatIngestJob> instagramJobProvider;
+    private final ObjectProvider<ThreadsHeatIngestJob> threadsJobProvider;
+    private final ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsJobProvider;
 
     IngestTestController(
-            InstagramHeatIngestJob instagramJob,
-            ThreadsHeatIngestJob threadsJob,
-            GoogleTrendsHeatIngestJob googleTrendsJob )
-            {
-        this.instagramJob = instagramJob;
-        this.threadsJob = threadsJob;
-        this.googleTrendsJob = googleTrendsJob;
+            ObjectProvider<InstagramHeatIngestJob> instagramJobProvider,
+            ObjectProvider<ThreadsHeatIngestJob> threadsJobProvider,
+            ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsJobProvider) {
+        this.instagramJobProvider = instagramJobProvider;
+        this.threadsJobProvider = threadsJobProvider;
+        this.googleTrendsJobProvider = googleTrendsJobProvider;
     }
 
     @PostMapping("/instagram")
     void runInstagram() {
-        instagramJob.run();
+        requireEnabled(instagramJobProvider, "Instagram").run();
     }
 
     @PostMapping("/threads")
     void runThreads() {
-        threadsJob.run();
+        requireEnabled(threadsJobProvider, "Threads").run();
     }
 
     @PostMapping("/google-trends")
     void runGoogleTrends() {
-        googleTrendsJob.run();
+        requireEnabled(googleTrendsJobProvider, "Google Trends").run();
     }
-}   
+
+    private static <T> T requireEnabled(ObjectProvider<T> provider, String sourceName) {
+        T job = provider.getIfAvailable();
+        if (job == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, sourceName + " ingest is disabled");
+        }
+        return job;
+    }
+}

@@ -48,7 +48,10 @@ class RecommendationServiceTest {
                 .penaltyValue(new BigDecimal("4.0"))
                 .build());
         ProductScore score = ProductScore.builder()
+                .id(701L)
+                .product(product)
                 .sceneType(SceneType.VIRAL)
+                .primary(true)
                 .grade(Grade.B)
                 .bonusSubtotal(new BigDecimal("86.89"))
                 .penaltySubtotal(new BigDecimal("4.00"))
@@ -76,7 +79,7 @@ class RecommendationServiceTest {
                 output, false, null, false, "mistral-small-latest",
                 RecommendationPromptFactory.PROMPT_VERSION, 110, 35, 1);
         when(productRepository.findWithDetailsById(101L)).thenReturn(Optional.of(product));
-        when(scoreRepository.findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(101L))
+        when(scoreRepository.findWithFactorsById(701L))
                 .thenReturn(Optional.of(score));
         when(affinityRepository.findByProductId(101L)).thenReturn(List.of(affinity));
         when(festivalRepository.findByFestivalDateBetweenOrderByFestivalDateAsc(
@@ -93,7 +96,7 @@ class RecommendationServiceTest {
                 agent,
                 new ObjectMapper());
 
-        var response = service.recommend(101L, false);
+        var response = service.recommend(101L, 701L, false);
 
         ArgumentCaptor<RecommendationInput> inputCaptor =
                 ArgumentCaptor.forClass(RecommendationInput.class);
@@ -113,6 +116,8 @@ class RecommendationServiceTest {
         assertEquals(RecommendationPromptFactory.PROMPT_VERSION, insight.getPromptVersion());
         assertEquals(1, insight.getRequestCount());
         assertEquals(DecisionType.ADOPT, response.action());
+        verify(scoreRepository, never())
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(anyLong());
     }
 
     private static ScoreFactor factor(FactorCode code, String percentile) {

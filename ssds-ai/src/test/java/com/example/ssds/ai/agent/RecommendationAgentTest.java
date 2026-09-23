@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.example.ssds.ai.access.tracka.AiClientResponse;
 import com.example.ssds.ai.access.tracka.AiPromptRequest;
 import com.example.ssds.ai.access.tracka.TrackAAiClient;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.recommendation.*;
 import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
@@ -13,7 +14,9 @@ import com.example.ssds.ai.schema.recommendation.RecommendationResponseParser;
 import com.example.ssds.ai.schema.recommendation.RecommendationResponseParserTest;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -104,6 +107,22 @@ class RecommendationAgentTest {
         assertFalse(result.fallbackApplied());
         assertEquals(2, result.requestCount());
         assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+    }
+
+    @Test
+    void exhaustedBudgetReturnsPersistableRuleFallback() {
+        FakeClient client = new FakeClient(new AiBudgetExceededException(
+                AiTaskType.BudgetPool.TRACK_A, OffsetDateTime.parse("2026-09-22T00:00:00+08:00")));
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertTrue(result.fallbackApplied());
+        assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
+        assertEquals("budget-exhausted", result.model());
+        assertEquals(0, result.requestCount());
+        assertEquals("規則式預設建議：分級尚未達採納條件且扣分未達淘汰條件，建議持續觀察。",
+                result.output().reasoning());
     }
 
     private static RecommendationAgent agent(TrackAAiClient client) {

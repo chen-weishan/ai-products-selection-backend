@@ -30,11 +30,17 @@ public class RiskAlert {
     private Product product;
 
     /**
-     * 示警類型。刻意用自由字串而非列舉：FR-10 的示警來源除了三條扣分規則，
-     * 還包含熱度急墜、季節性不匹配、供應商異常等會持續增修的規則，
-     * 每加一種就改一次列舉與 migration 並不划算。
+     * 示警類型。Java 端是字串，資料庫端<b>是列舉</b>——V17 起
+     * {@code ck_risk_alert_type} 限定值域，V27 再加上 {@code DATA_INSUFFICIENT}：
+     * REVIEW_RISK／LOGISTICS_RISK／INVENTORY_RISK／PENALTY_CAP／HEAT_CRASH／
+     * HEAT_SURGE／SEASON_MISMATCH／FESTIVAL_WINDOW_CLOSING／LOW_CONFIDENCE／
+     * DATA_INSUFFICIENT（§FR-10-1 九項，第十項見 V27 的註解）。
+     *
+     * <p>不做成 Java 列舉是因為 §FR-10-1 的規則仍在增修，多一個值就要同時改
+     * 列舉與 migration；但寫入前務必確認值在上述清單內，否則會被資料庫的
+     * CHECK 擋下來。長度為 32（V17 由 30 放寬）。
      */
-    @Column(name = "risk_type", nullable = false, length = 30)
+    @Column(name = "risk_type", nullable = false, length = 32)
     private String riskType;
 
     @Enumerated(EnumType.STRING)

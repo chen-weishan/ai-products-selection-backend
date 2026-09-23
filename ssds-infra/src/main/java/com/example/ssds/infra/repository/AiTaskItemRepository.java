@@ -48,6 +48,19 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
             @Param("statuses") Set<TaskStatus> statuses
     );
 
+    @Query("""
+            select distinct i.keyword.id
+            from AiTaskItem i
+            where i.keyword.id in :keywordIds
+              and i.task.taskType = :taskType
+              and i.task.status in :statuses
+            """)
+    Set<Long> findKeywordIdsInActiveTasks(
+            @Param("keywordIds") Set<Long> keywordIds,
+            @Param("taskType") AiTaskType taskType,
+            @Param("statuses") Set<TaskStatus> statuses
+    );
+
     /** 配額耗盡或單輪上限超出的 FULL_ANALYSIS 品項，供隔日續跑。 */
     @Query("""
             select distinct p from AiTaskItem i join i.product p

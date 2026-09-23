@@ -3,6 +3,8 @@ package com.example.ssds.ingest.GoogleTrends;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -23,10 +25,9 @@ import org.springframework.web.client.RestClient;
  * 那次的修正模式）。
  */
 @Component
-class GoogleTrendsClient {
+public class GoogleTrendsClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
-
     private final RestClient restClient;
     private final GoogleTrendsIngestProperties properties;
 
@@ -35,52 +36,91 @@ class GoogleTrendsClient {
         this.properties = properties;
     }
 
-    /** 查詢關鍵字最新的 Google Trends 相對熱度指數（0–100）。查無資料回傳 null。 */
     Long fetchLatestInterest(String keyword) {
         String json = restClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/actors/santhej~google-trends-scraper/run-sync-get-dataset-items")
+                        .path("/actors/cirkit~google-trends-scraper/run-sync-get-dataset-items")
                         .queryParam("token", properties.apifyToken())
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                         "keywords", List.of(keyword),
-                        "timeRange", properties.timeRangeOrDefault(),
-                        "trendType", "web"))
+                        "geo", properties.geoOrDefault(),
+                        "timeframe", properties.timeRangeOrDefault(),
+                        "dataTypes", List.of("interestOverTime"),
+                        "maxItems", properties.maxItemsOrDefault()))
                 .retrieve()
                 .body(String.class);
 
-        List<TrendResult> results = readValue(json);
-        if (results == null || results.isEmpty()) {
+        List<TrendPoint> points = readValue(json);
+        if (points == null || points.isEmpty()) {
             return null;
         }
-        TrendResult result = results.get(0);
-        Integer value = result.latestInterest() != null ? result.latestInterest() : result.averageInterest();
-        return value != null ? value.longValue() : null;
+
+        List<Integer> usableValues = points.stream()
+                .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
+                .map(TrendPoint::value)
+                .filter(v -> v != null)
+                .toList();
+        List<Integer> effectiveValues = usableValues.isEmpty()
+                ? points.stream().map(TrendPoint::value).filter(v -> v != null).toList()
+                : usableValues;
+        if (effectiveValues.isEmpty()) {
+            return null;
+        }
+        double average = effectiveValues.stream().mapToInt(Integer::intValue).average().orElse(0);
+        return Math.round(average);
     }
 
-    private static List<TrendResult> readValue(String json) {
+    public List<DailyInterest> fetchInterestOverTime(String keyword, String timeframe) {
+    String json = restClient.post()
+            .uri(uriBuilder -> uriBuilder
+                    .path("/actors/cirkit~google-trends-scraper/run-sync-get-dataset-items")
+                    .queryParam("token", properties.apifyToken())
+                    .build())
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(Map.of(
+                    "keywords", List.of(keyword),
+                    "geo", properties.geoOrDefault(),
+                    "timeframe", timeframe,
+                    "dataTypes", List.of("interestOverTime"),
+                    "maxItems", properties.maxItemsOrDefault()))
+            .retrieve()
+            .body(String.class);
+
+    List<TrendPoint> points = readValue(json);
+    if (points == null) {
+        return List.of();
+    }
+
+    return points.stream()
+            .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
+            .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
+            .map(p -> new DailyInterest(LocalDate.parse(p.date().substring(0, 10)), p.value()))
+            .toList();
+}
+
+    public record DailyInterest(LocalDate date, Integer value) {}
+
+    private static List<TrendPoint> readValue(String json) {
         if (json == null || json.isBlank()) {
             return null;
         }
         try {
             return objectMapper.readValue(
                     json,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, TrendResult.class));
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, TrendPoint.class));
         } catch (Exception e) {
             throw new IllegalStateException("Apify google-trends-scraper 回應解析失敗", e);
         }
     }
-
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record TrendResult(
+    private record TrendPoint(
+            String dataType,
             String keyword,
-            @JsonProperty("average_interest") Integer averageInterest,
-            @JsonProperty("peak_interest") Integer peakInterest,
-            @JsonProperty("latest_interest") Integer latestInterest,
-            @JsonProperty("time_range") String timeRange,
-            List<SeriesPoint> series) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record SeriesPoint(String date, Integer value) {}
+            String geo,
+            String timeframe,
+            String date,
+            Integer value,
+            Boolean isPartial) {}
 }

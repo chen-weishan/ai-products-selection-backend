@@ -26,8 +26,25 @@ public interface HeatCompositeDailyRepository
 
     Optional<HeatCompositeDaily> findFirstByKeywordIdOrderByStatDateDesc(Long keywordId);
 
+    long countByStatDateAndKeywordEnabledTrue(LocalDate statDate);
+
+    @Query(value = """
+            select keyword.id
+            from trend_keyword keyword
+            left join heat_composite_daily composite
+              on composite.keyword_id = keyword.id
+             and composite.stat_date = :statDate
+            where keyword.enabled = true
+              and composite.keyword_id is null
+            order by keyword.id
+            """, nativeQuery = true)
+    List<Long> findEnabledKeywordIdsMissingStatDate(@Param("statDate") LocalDate statDate);
+
     List<HeatCompositeDaily> findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
             Long keywordId, LocalDate from, LocalDate to);
+
+    List<HeatCompositeDaily> findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(
+            Long keywordId, LocalDate before);
 
     /** 每個關鍵字只取最新列，且至少已有七筆合成資料，供 §5.3.3 選生效關鍵字。 */
     @Query(value = """

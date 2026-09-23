@@ -59,9 +59,11 @@ public interface ProductRepository
         @Query("""
                         select p from Product p
                         where p.trackType = :trackType
+                          and p.deletedAt is null
                           and p.status not in (com.example.ssds.core.domain.ProductStatus.DRAFT,
                                                com.example.ssds.core.domain.ProductStatus.REJECTED)
                         """)
+        @EntityGraph(attributePaths = {"category", "category.parent", "keywords"})
         List<Product> findScorable(@Param("trackType") TrackType trackType);
 
         /** FULL_ANALYSIS 優先序：從未分析者優先，其餘依最近一次分析時間由舊到新。 */

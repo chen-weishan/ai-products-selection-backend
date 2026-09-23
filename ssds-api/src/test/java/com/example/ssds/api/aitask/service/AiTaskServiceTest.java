@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -350,6 +351,53 @@ class AiTaskServiceTest {
 
         assertEquals(AiTaskType.BudgetPool.TRACK_A, response.budgetPool());
         verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(705L, false));
+    }
+
+    @Test
+    void scheduledTrendInterpretationExcludesKeywordsAlreadyInActiveTasks() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        TrendKeyword pending = TrendKeyword.builder().id(32L).keyword("新關鍵字").build();
+        when(itemRepository.findKeywordIdsInActiveTasks(
+                Set.of(31L, 32L),
+                AiTaskType.TREND_INTERPRET,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of(31L));
+        when(keywordRepository.findAllById(List.of(32L))).thenReturn(List.of(pending));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(707L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, eventPublisher);
+
+        service.createScheduledTrendInterpretation(List.of(31L, 32L)).orElseThrow();
+
+        verify(keywordRepository).findAllById(List.of(32L));
+        verify(itemRepository).saveAll(argThat(items -> {
+            var iterator = items.iterator();
+            AiTaskItem item = iterator.next();
+            return item.getKeyword().getId().equals(32L) && !iterator.hasNext();
+        }));
+    }
+
+    @Test
+    void scheduledTrendInterpretationDoesNotCreateTaskWhenAllKeywordsAreActive() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        when(itemRepository.findKeywordIdsInActiveTasks(
+                Set.of(31L),
+                AiTaskType.TREND_INTERPRET,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of(31L));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository,
+                keywordRepository, eventPublisher);
+
+        assertTrue(service.createScheduledTrendInterpretation(List.of(31L)).isEmpty());
+
+        verifyNoInteractions(keywordRepository, eventPublisher);
+        verify(taskRepository, never()).save(any());
     }
 
     @Test

@@ -56,10 +56,31 @@ public class ProductInsightService {
     @Transactional
     public ProductInsightResponse analyze(Long productId, boolean forceRefresh) {
         Product product = loadTrackAProduct(productId);
+        ProductScore score = scoreRepository
+                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND, "此品項尚無可供賣點分析使用的主情境評分"));
+        return analyze(product, score, forceRefresh);
+    }
+
+    /** FULL_ANALYSIS 專用：固定讀取本次正式評分，不再自行查詢 latest。 */
+    @Transactional
+    public ProductInsightResponse analyze(Long productId, Long scoreId, boolean forceRefresh) {
+        Product product = loadTrackAProduct(productId);
+        ProductScore score = scoreRepository.findWithFactorsById(scoreId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND, "找不到本次賣點分析指定的評分快照"));
+        validatePrimaryScore(productId, score);
+        return analyze(product, score, forceRefresh);
+    }
+
+    private ProductInsightResponse analyze(
+            Product product, ProductScore score, boolean forceRefresh) {
+        Long productId = product.getId();
         List<ProductReview> reviews = latestReviews(productId);
         long totalReviewCount = reviewRepository.countByProductId(productId);
         ProductInsightInput input = promptSanitizer.sanitizeProductInsight(
-                buildInput(product, reviews));
+                buildInput(product, reviews, score));
         ProductInsightResult result = agent.analyze(
                 input,
                 Math.toIntExact(totalReviewCount / REVIEW_BUCKET_SIZE),
@@ -114,7 +135,8 @@ public class ProductInsightService {
         return product;
     }
 
-    private ProductInsightInput buildInput(Product product, List<ProductReview> reviews) {
+    private ProductInsightInput buildInput(
+            Product product, List<ProductReview> reviews, ProductScore score) {
         ProductInsightInput.ProductBasic basic = new ProductInsightInput.ProductBasic(
                 product.getName(),
                 product.getCategory().getName(),
@@ -123,18 +145,16 @@ public class ProductInsightService {
         List<ProductInsightInput.ReviewText> reviewTexts = reviews.stream()
                 .map(review -> new ProductInsightInput.ReviewText(review.getId(), review.getContent()))
                 .toList();
-        List<ProductInsightInput.PenaltyDetail> penalties = penaltyDetails(product.getId(), reviews);
+        List<ProductInsightInput.PenaltyDetail> penalties = penaltyDetails(score, reviews);
         return new ProductInsightInput(product.getId(), basic, reviewTexts, penalties);
     }
 
     private List<ProductInsightInput.PenaltyDetail> penaltyDetails(
-            Long productId, List<ProductReview> reviews) {
+            ProductScore score, List<ProductReview> reviews) {
         Map<FactorCode, ScoreFactor> factors = new EnumMap<>(FactorCode.class);
-        scoreRepository
-                .findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(productId)
-                .ifPresent(score -> score.getFactors().stream()
-                        .filter(ScoreFactor::isPenalty)
-                        .forEach(factor -> factors.put(factor.getFactorCode(), factor)));
+        score.getFactors().stream()
+                .filter(ScoreFactor::isPenalty)
+                .forEach(factor -> factors.put(factor.getFactorCode(), factor));
         List<String> reviewTopics = reviews.stream()
                 .map(ProductReview::getAnalysis)
                 .filter(Objects::nonNull)
@@ -149,6 +169,14 @@ public class ProductInsightService {
                 penalty(FactorCode.REVIEW_RISK, factors.get(FactorCode.REVIEW_RISK), reviewTopics),
                 penalty(FactorCode.LOGISTICS_RISK, factors.get(FactorCode.LOGISTICS_RISK), List.of("LOGISTICS")),
                 penalty(FactorCode.INVENTORY_RISK, factors.get(FactorCode.INVENTORY_RISK), List.of("INVENTORY")));
+    }
+
+    private static void validatePrimaryScore(Long productId, ProductScore score) {
+        if (!score.getProduct().getId().equals(productId) || !score.isPrimary()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "指定評分快照不是此品項的主情境分數");
+        }
     }
 
     private static ProductInsightInput.PenaltyDetail penalty(
