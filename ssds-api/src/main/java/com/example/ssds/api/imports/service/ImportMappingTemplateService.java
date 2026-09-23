@@ -112,7 +112,7 @@ public class ImportMappingTemplateService {
         requestedMappings.forEach((source, target) -> {
             String cleanSource = source.trim();
             String cleanTarget = target.trim();
-            if (fieldRegistry.isPersonalDataHeader(ImportHeaderMapper.normalize(cleanSource))) {
+            if (fieldRegistry.isPersonalDataHeader(dataType, ImportHeaderMapper.normalize(cleanSource))) {
                 errors.add(new FieldError("mappings." + source, "可識別個資欄位不得匯入"));
             } else if (!allowed.contains(cleanTarget)) {
                 errors.add(new FieldError("mappings." + source, "不是此資料類型可用的系統欄位"));

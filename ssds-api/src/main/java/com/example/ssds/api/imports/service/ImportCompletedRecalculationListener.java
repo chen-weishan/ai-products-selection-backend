@@ -17,10 +17,6 @@ public class ImportCompletedRecalculationListener {
 
     @EventListener
     public void onImportCompleted(ImportCompletedEvent event) {
-        if ((event.status() == TaskStatus.SUCCEEDED || event.status() == TaskStatus.PARTIAL)
-                && event.successRows() > 0
-                && !event.affectedProductIds().isEmpty()) {
-            recalculationService.recalculate(event);
-        }
+        recalculationService.recalculate(event);
     }
 }

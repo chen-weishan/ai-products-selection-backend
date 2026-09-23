@@ -14,9 +14,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 每 500 列獨立提交資料、錯誤與進度，讓非同步狀態查詢能看到實際進展。 */
+/** 一般資料每 500 列提交；客群完整檔案共用交易，避免品類組成分段提交。 */
 @Service
 public class ImportChunkWriter {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.ssds.infra.dao.ImportIntegrityDao integrity;
+    private final org.springframework.transaction.support.TransactionTemplate audienceTransaction;
+    private final ThreadLocal<java.util.Set<Long>> replacedCategories=new ThreadLocal<>();
+
     private final BulkImportDao bulkImportDao;
     private final ImportBatchRepository batchRepository;
     private final AudienceSegmentRepository audienceRepository;
@@ -37,9 +42,21 @@ public class ImportChunkWriter {
         transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         transaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         transaction.setTimeout(databaseLimits.seconds());
+        audienceTransaction=new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        audienceTransaction.setTimeout(1800);
+    }
+
+    public void writeAudienceFile(Runnable action) {
+        audienceTransaction.executeWithoutResult(status -> {
+            integrity.lockAudienceImport();
+            replacedCategories.set(new java.util.HashSet<>());
+            try { action.run(); } finally { replacedCategories.remove(); }
+        });
     }
 
     public void write(Long batchId, ImportWriteChunk chunk) {
+        // One transaction for all accepted audience groups; never commit an incomplete category.
+        if(replacedCategories.get()!=null) { writeTransaction(batchId,chunk); return; }
         try {
             transaction.executeWithoutResult(status -> writeTransaction(batchId, chunk));
         } catch (org.springframework.dao.DataIntegrityViolationException error) {
@@ -54,11 +71,15 @@ public class ImportChunkWriter {
                     var failed = new ImportWriteChunk();
                     failed.expectedProcessedRows = row.expectedProcessedRows;
                     failed.deadlineNanos = row.deadlineNanos;
-                    failed.failedRows = 1;
-                    failed.errors.add(new BulkImportDao.ErrorRow(batchId, source.rowNumber(), null,
+                    boolean duplicate=rowError instanceof DuplicateImportRowException
+                            || rowError instanceof com.example.ssds.infra.dao.ImportIntegrityDao.DuplicateSaleException;
+                    failed.failedRows = duplicate ? 0 : 1;
+                    failed.skippedRows = duplicate ? 1 : 0;
+                    if(!duplicate) failed.errors.add(new BulkImportDao.ErrorRow(batchId, source.rowNumber(), null,
                             rowError instanceof DuplicateImportRowException
                                     ? "資料已存在，已略過重複列"
-                                    : "資料不符合資料庫限制，請確認參照資料與欄位值", source.rawRow()));
+                                    : rowError instanceof com.example.ssds.infra.dao.ImportIntegrityDao.ConflictingSaleException
+                                        ? rowError.getMessage() : "資料不符合資料庫限制，請確認參照資料與欄位值", source.rawRow()));
                     transaction.executeWithoutResult(status -> writeTransaction(batchId, failed));
                 }
             }
@@ -76,10 +97,13 @@ public class ImportChunkWriter {
         if (batch.getStatus() != TaskStatus.RUNNING) {
             throw new java.util.concurrent.CancellationException("匯入批次已不在執行狀態");
         }
-        if (batch.getSuccessRows() + batch.getFailRows() != chunk.expectedProcessedRows) {
+        if (batch.getSuccessRows() + batch.getFailRows() + batch.getSkippedRows() != chunk.expectedProcessedRows) {
             throw new StaleImportCheckpointException();
         }
         int inserted = 0;
+        var identities=new java.util.LinkedHashMap<String,String>();
+        for(var identity:chunk.salesIdentities) if(identity.key()!=null) identities.put(identity.key(),identity.payload());
+        integrity.reserveSales(batchId,identities);
         if (!chunk.sales.isEmpty()) inserted += bulkImportDao.batchInsertSalesRecords(chunk.sales);
         if (!chunk.reviews.isEmpty()) inserted += bulkImportDao.batchInsertReviews(chunk.reviews);
         if (!chunk.audiences.isEmpty()) {
@@ -87,11 +111,19 @@ public class ImportChunkWriter {
             if (inserted != chunk.audiences.size()) throw new DuplicateImportRowException();
             writeAudienceMixes(chunk.audienceMixes);
         }
-        if (!chunk.products.isEmpty()) inserted += bulkImportDao.batchInsertProducts(chunk.products);
+        if (!chunk.products.isEmpty()) inserted += bulkImportDao.batchInsertProducts(chunk.products, batchId);
         if (!chunk.errors.isEmpty()) bulkImportDao.batchInsertImportErrors(chunk.errors);
 
         int conflicts = Math.max(0, chunk.validRows() - inserted);
         if (conflicts != 0) throw new DuplicateImportRowException();
+        var affected=new java.util.HashSet<Long>();
+        chunk.sales.stream().map(BulkImportDao.SalesRow::productId).filter(java.util.Objects::nonNull).forEach(affected::add);
+        chunk.reviews.stream().map(BulkImportDao.ReviewRow::productId).forEach(affected::add);
+        integrity.enqueue(batchId,affected);
+        if(!chunk.audiences.isEmpty()) integrity.enqueueAudience(batchId,
+                chunk.audiences.stream().map(BulkImportDao.AudienceRow::audienceCode).toList(),
+                chunk.audienceMixes.stream().map(ImportWriteChunk.AudienceMixInput::categoryId).toList());
+        batch.setSkippedRows(batch.getSkippedRows()+chunk.skippedRows);
         batch.setSuccessRows(batch.getSuccessRows() + inserted);
         batch.setFailRows(batch.getFailRows() + chunk.failedRows + conflicts);
         batchRepository.save(batch);
@@ -104,6 +136,10 @@ public class ImportChunkWriter {
 
     private void writeAudienceMixes(List<ImportWriteChunk.AudienceMixInput> inputs) {
         if (inputs.isEmpty()) return;
+        for(Long category:inputs.stream().map(ImportWriteChunk.AudienceMixInput::categoryId).distinct().sorted().toList()) {
+            if(replacedCategories.get()==null) throw new IllegalStateException("客群組成必須在完整檔案交易內寫入");
+            if(replacedCategories.get().add(category)) integrity.clearMix(category);
+        }
         List<String> codes = inputs.stream().map(ImportWriteChunk.AudienceMixInput::audienceCode).toList();
         Map<String, AudienceSegment> byCode = audienceRepository.findByAudienceCodeIn(codes).stream()
                 .collect(Collectors.toMap(AudienceSegment::getAudienceCode, Function.identity()));
@@ -112,6 +148,8 @@ public class ImportChunkWriter {
                 .map(input -> new BulkImportDao.AudienceMixRow(
                         input.categoryId(), byCode.get(input.audienceCode()).getId(), input.share()))
                 .toList();
-        if (!rows.isEmpty()) bulkImportDao.batchUpsertAudienceMix(rows);
+        if (rows.size()!=inputs.size()) throw new IllegalStateException("客群主檔不存在，組成更新已回滾");
+        if (!rows.isEmpty() && bulkImportDao.batchUpsertAudienceMix(rows)!=rows.size())
+            throw new IllegalStateException("客群組成未完整寫入，更新已回滾");
     }
 }

@@ -52,6 +52,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class ImportPreviewService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.ssds.infra.dao.ImportIntegrityDao integrity;
+
     private static final int PREVIEW_ROWS = 20;
 
     private final ImportBatchRepository batchRepository;
@@ -91,7 +94,9 @@ public class ImportPreviewService {
     }
 
     public ImportPreviewResponse preview(Long batchId, ImportPreviewRequest request) {
-        return preview(batchId, request, row -> {});
+        ImportPreviewResponse response = preview(batchId, request, row -> {});
+        stagingStorage.saveDraftMapping(batchId, request.mappings());
+        return response;
     }
 
     /** Revalidate the current mapping without writing import_error or changing batch status. */
@@ -110,7 +115,7 @@ public class ImportPreviewService {
                         .setHeader(headers.toArray(String[]::new)).get())) {
             preview(batchId, request, row -> {
                 var rejected = row.issues().stream()
-                        .filter(issue -> "ERROR".equals(issue.type()) || "DUPLICATE".equals(issue.type()))
+                        .filter(issue -> "ERROR".equals(issue.type()))
                         .toList();
                 if (rejected.isEmpty()) return;
                 var values = new ArrayList<String>();
@@ -146,6 +151,8 @@ public class ImportPreviewService {
         ReferenceCatalog references = loadReferences(batch.getDataType());
         PreviewAccumulator accumulator = new PreviewAccumulator(
                 batch.getDataType(), request.mappings(), references, rowConsumer);
+        accumulator.audiencePlan = audiencePlan(batch, staged.path(), request.mappings(), references);
+        accumulator.existingSales = salesCatalog(batch, staged.path(), request.mappings(), references);
         try {
             fileScanner.scan(staged.path(), batch.getFileName(), accumulator);
         } catch (ImportFileParseException exception) {
@@ -173,7 +180,7 @@ public class ImportPreviewService {
         mappings.forEach((source, target) -> {
             String normalizedSource = ImportHeaderMapper.normalize(source);
             Integer sourceIndex = headerIndexes.get(normalizedSource);
-            if (fieldRegistry.isPersonalDataHeader(normalizedSource)) {
+            if (fieldRegistry.isPersonalDataHeader(dataType, normalizedSource)) {
                 errors.add(new FieldError("mappings." + source, "可識別個資欄位不得匯入"));
             } else if (sourceIndex == null) {
                 errors.add(new FieldError("mappings." + source, "上傳檔案中不存在此欄位"));
@@ -238,6 +245,9 @@ public class ImportPreviewService {
         private final Set<String> fileDuplicateKeys = new HashSet<>();
         private final List<ImportPreviewRow> previewRows = new ArrayList<>();
         private final java.util.function.Consumer<ImportPreviewRow> rowConsumer;
+        private AudienceImportPlan audiencePlan;
+        private Map<String,String> existingSales=Map.of();
+        private final Map<String,String> salesPayloads = new HashMap<>();
         private int totalRows;
         private int errorRows;
         private int duplicateRows;
@@ -264,10 +274,12 @@ public class ImportPreviewService {
             totalRows++;
             Map<String, String> values = mappedValues(sourceValues);
             List<ImportPreviewIssue> issues = validateRow(dataType, values, references);
+            if (audiencePlan != null) audiencePlan.addIssue(values, issues);
+            if (dataType == ImportDataType.SALES && issues.isEmpty()) checkSales(values,references,salesPayloads,existingSales,issues);
             boolean hasError = issues.stream().anyMatch(issue -> "ERROR".equals(issue.type()));
             if (!hasError) {
                 String duplicateKey = duplicateKey(dataType, values, references);
-                if (duplicateKey != null && !fileDuplicateKeys.add(duplicateKey)) {
+                if (dataType != ImportDataType.SALES && duplicateKey != null && !fileDuplicateKeys.add(duplicateKey)) {
                     issues.add(ImportPreviewIssue.duplicate(null, "與檔案內先前資料重複，匯入時將略過"));
                 } else {
                     checkExistingDuplicate(dataType, values, references, issues);
@@ -301,8 +313,65 @@ public class ImportPreviewService {
                     errorRows,
                     duplicateRows,
                     batch.isAsync(),
-                    List.copyOf(previewRows));
+                    List.copyOf(previewRows),
+                    audiencePlan==null ? List.of() : audiencePlan.changes(integrity));
         }
+    }
+
+    void checkSales(Map<String,String> values,ReferenceCatalog references,Map<String,String> seen,List<ImportPreviewIssue> issues) {
+        String id=com.example.ssds.ingest.importer.SalesImportIdentity.key(values,matchProduct(values,references).productId());
+        String prior=id==null?null:integrity.existingPayload(id);
+        checkSales(values,references,seen,prior==null?Map.of():Map.of(id,prior),issues);
+    }
+    void checkSales(Map<String,String> values,ReferenceCatalog references,Map<String,String> seen,Map<String,String> existing,List<ImportPreviewIssue> issues) {
+        Long productId=matchProduct(values,references).productId();
+        String identity=com.example.ssds.ingest.importer.SalesImportIdentity.key(values,productId);
+        if(identity==null) return;
+        String payload=com.example.ssds.ingest.importer.SalesImportIdentity.payload(values,productId);
+        String prior=seen.get(identity);
+        if(prior==null) prior=existing.get(identity);
+        if(prior==null) seen.put(identity,payload);
+        if(prior!=null) issues.add(prior.equals(payload)
+                ? ImportPreviewIssue.duplicate("sourceSystem","相同來源識別與內容已存在，將略過")
+                : ImportPreviewIssue.error("sourceSystem","相同來源識別已有不同內容，不會自動覆蓋"));
+    }
+
+    Map<String,String> salesCatalog(ImportBatch batch,java.nio.file.Path path,Map<String,String> mappings,ReferenceCatalog refs) {
+        if(batch.getDataType()!=ImportDataType.SALES || !mappings.containsValue("sourceSystem")) return Map.of();
+        var result=new HashMap<String,String>();
+        var keys=new HashSet<String>();
+        fileScanner.scan(path,batch.getFileName(),new ImportSheetHandler() {
+            Map<String,Integer> indexes;
+            public void onHeaders(List<String> headers) {indexes=validateMappings(ImportDataType.SALES,headers,mappings);}
+            public void onRow(int number,List<String> source) {
+                var values=new HashMap<String,String>();
+                indexes.forEach((k,i)->values.put(k,i<source.size()?source.get(i).trim():""));
+                if(validateRow(ImportDataType.SALES,values,refs).isEmpty()) {
+                    String id=com.example.ssds.ingest.importer.SalesImportIdentity.key(values,matchProduct(values,refs).productId());
+                    if(id!=null) keys.add(id);
+                }
+                if(keys.size()>=500) flush();
+            }
+            private void flush(){result.putAll(integrity.existingPayloads(keys));keys.clear();}
+        });
+        result.putAll(integrity.existingPayloads(keys));
+        return result;
+    }
+
+    AudienceImportPlan audiencePlan(ImportBatch batch,java.nio.file.Path path,Map<String,String> mappings,ReferenceCatalog refs) {
+        if(batch.getDataType()!=ImportDataType.AUDIENCE) return null;
+        var plan=new AudienceImportPlan(this,refs);
+        fileScanner.scan(path,batch.getFileName(),new ImportSheetHandler() {
+            Map<String,Integer> indexes;
+            public void onHeaders(List<String> headers) { indexes=validateMappings(ImportDataType.AUDIENCE,headers,mappings); }
+            public void onRow(int number,List<String> source) {
+                var values=new LinkedHashMap<String,String>();
+                indexes.forEach((key,index)->values.put(key,index<source.size()?source.get(index).trim():""));
+                plan.accept(values);
+            }
+        });
+        plan.finish();
+        return plan;
     }
 
     List<ImportPreviewIssue> validateRow(
@@ -357,6 +426,19 @@ public class ImportPreviewService {
             List<ImportPreviewIssue> issues
     ) {
         maxLength(values, "productName", 150, issues);
+        for (String field : List.of("sourceSystem","orderNo","lineNo","channel","summaryDimension")) maxLength(values,field,200,issues);
+        String kind=values.getOrDefault("salesKind", "");
+        if (!blank(kind) && !List.of("DETAIL","SUMMARY").contains(kind.toUpperCase(java.util.Locale.ROOT)))
+            addErrorOnce(issues,"salesKind","資料粒度只允許 DETAIL 或 SUMMARY");
+        boolean identified=!blank(values.get("sourceSystem")) || !blank(values.get("orderNo")) || !blank(values.get("lineNo"));
+        if ("SUMMARY".equalsIgnoreCase(kind)) {
+            if(blank(values.get("sourceSystem")) || blank(values.get("channel")))
+                addErrorOnce(issues,"sourceSystem","每日彙總必須提供來源系統與通路");
+            if(!blank(values.get("orderNo")) || !blank(values.get("lineNo")))
+                addErrorOnce(issues,"orderNo","每日彙總不可混用訂單明細識別");
+        } else if(identified && (blank(values.get("sourceSystem")) || blank(values.get("orderNo")) || blank(values.get("lineNo")))) {
+            addErrorOnce(issues,"sourceSystem","訂單明細識別需同時提供來源系統、訂單編號與明細編號");
+        }
         maxLength(values, "audienceCode", 24, issues);
         decimalShape(values, "price", 10, 2, issues);
         positive(values, "price", "單價必須大於 0", issues);
@@ -370,8 +452,11 @@ public class ImportPreviewService {
         ProductMatchingRule.ProductMatchResult match = matchProduct(values, references);
         if (match.status() == ProductMatchingRule.ProductMatchStatus.AMBIGUOUS) {
             addErrorOnce(issues, "productName", "品名符合多個品項，請提供品項 ID 或類別");
+        } else if (!blank(values.get("productId"))
+                && match.status() == ProductMatchingRule.ProductMatchStatus.UNMATCHED) {
+            addErrorOnce(issues, "productId", "指定的品項 ID 不存在");
         }
-        // SALES 允許找不到品項，保留 product_name_raw 供後續人工對應。
+        // 未提供 ID 的 SALES 仍允許找不到品項，保留 product_name_raw 供後續人工對應。
     }
 
     private void validateReview(
@@ -420,7 +505,18 @@ public class ImportPreviewService {
             addErrorOnce(issues, "category", "類別與客群佔比必須同時提供");
         }
         validateCategory(values.get("category"), references, issues);
+        String action=values.getOrDefault("masterAction", "");
+        if(!blank(action) && !List.of("REUSE","UPDATE").contains(action.toUpperCase(java.util.Locale.ROOT)))
+            addErrorOnce(issues,"masterAction","客群主檔操作只允許 REUSE 或 UPDATE");
+        var existing=references.audiences().get(key(values.get("audienceCode")));
+        if(existing!=null && !"UPDATE".equalsIgnoreCase(action) &&
+                (!java.util.Objects.equals(existing.getName(),values.get("name"))
+                || !sameDecimal(existing.getPriceMin(),min) || !sameDecimal(existing.getPriceMax(),max)
+                || !java.util.Objects.equals(java.util.Objects.toString(existing.getNote(),""),values.getOrDefault("note",""))))
+            addErrorOnce(issues,"masterAction","既有客群內容不同；如確定更新請填 UPDATE，會影響所有引用品類");
     }
+
+    private boolean sameDecimal(BigDecimal a,BigDecimal b) { return a==null ? b==null : b!=null && a.compareTo(b)==0; }
 
     private void validateProduct(
             Map<String, String> values,
@@ -485,11 +581,7 @@ public class ImportPreviewService {
                     && references.reviewKeys().contains(match.productId() + ":" + sha256(content))) {
                 issues.add(ImportPreviewIssue.duplicate("content", "評論已存在，匯入時將略過"));
             }
-        } else if (dataType == ImportDataType.AUDIENCE) {
-            String code = values.get("audienceCode");
-            if (!blank(code) && references.audiences().containsKey(key(code))) {
-                issues.add(ImportPreviewIssue.duplicate("audienceCode", "客群代碼已存在"));
-            }
+
         } else if (dataType == ImportDataType.PRODUCT) {
             boolean exists = references.products().stream().anyMatch(product ->
                     key(product.category()).equals(key(values.get("category")))
@@ -506,23 +598,14 @@ public class ImportPreviewService {
             ReferenceCatalog references
     ) {
         if (dataType == ImportDataType.SALES) {
-            ProductMatchingRule.ProductMatchResult match = matchProduct(values, references);
-            return SalesDeduplicationKey.sha256(
-                    date(values.get("orderDate")),
-                    match.productId(),
-                    values.get("productName"),
-                    values.get("category"),
-                    decimal(values.get("price")),
-                    integer(values.get("qty")),
-                    integer(values.get("impression")),
-                    values.get("audienceCode"));
+            return com.example.ssds.ingest.importer.SalesImportIdentity.key(values,matchProduct(values,references).productId());
         }
         if (dataType == ImportDataType.REVIEW) {
             ProductMatchingRule.ProductMatchResult match = matchProduct(values, references);
             return match.productId() + ":" + sha256(values.get("content"));
         }
         if (dataType == ImportDataType.AUDIENCE) {
-            return "audience:" + key(values.get("audienceCode"));
+            return "audience:" + key(values.get("audienceCode")) + ":" + key(values.get("category"));
         }
         return "product:" + key(values.get("category")) + ":" + key(values.get("name"));
     }

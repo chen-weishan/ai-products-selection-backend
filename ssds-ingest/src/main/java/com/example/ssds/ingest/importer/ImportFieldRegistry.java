@@ -37,9 +37,20 @@ public class ImportFieldRegistry {
         return PERSONAL_DATA_HEADERS.contains(normalizedHeader);
     }
 
+    public boolean isPersonalDataHeader(ImportDataType type,String header) {
+        if(type==ImportDataType.SALES && Set.of("訂單編號","orderno","orderid").contains(header)) return false;
+        return isPersonalDataHeader(header);
+    }
+
     private static Map<ImportDataType, List<ImportSystemField>> fields() {
         Map<ImportDataType, List<ImportSystemField>> fields = new EnumMap<>(ImportDataType.class);
         fields.put(ImportDataType.SALES, List.of(
+                field("salesKind", "銷售資料粒度", ImportValueType.STRING, false, "DETAIL或SUMMARY"),
+                field("sourceSystem", "來源系統", ImportValueType.STRING, false, "source_system"),
+                field("orderNo", "訂單編號", ImportValueType.STRING, false, "order_no", "orderId"),
+                field("lineNo", "明細編號", ImportValueType.STRING, false, "line_no"),
+                field("channel", "通路", ImportValueType.STRING, false, "銷售通路"),
+                field("summaryDimension", "其他彙總維度", ImportValueType.STRING, false, "summary_dimension"),
                 field("orderDate", "訂單日期", ImportValueType.DATE, true,
                         "order_date", "saleDate", "交易日期", "日期"),
                 field("productId", "品項 ID", ImportValueType.LONG, false,
@@ -72,6 +83,7 @@ public class ImportFieldRegistry {
                         "reviewed_at", "reviewDate", "留言日期")
         ));
         fields.put(ImportDataType.AUDIENCE, List.of(
+                field("masterAction", "客群主檔操作", ImportValueType.STRING, false, "REUSE或UPDATE"),
                 field("audienceCode", "客群代碼", ImportValueType.STRING, true,
                         "audience_code", "segmentCode", "區隔代碼"),
                 field("name", "客群名稱", ImportValueType.STRING, true,

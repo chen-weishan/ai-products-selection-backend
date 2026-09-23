@@ -28,6 +28,9 @@ dependencies {
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
+	// FR09 資料庫交易測試沿用專案既有的 Testcontainers 與 PostgreSQL 版本。
+	testImplementation "org.testcontainers:postgresql:1.20.4"
+	testImplementation "org.testcontainers:junit-jupiter:1.20.4"
 }
 
 // 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改

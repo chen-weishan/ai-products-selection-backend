@@ -15,6 +15,7 @@ import com.example.ssds.api.imports.service.ImportBatchQueryService;
 import com.example.ssds.api.imports.service.ImportConfirmService;
 import com.example.ssds.api.imports.service.ImportPreviewService;
 import com.example.ssds.api.imports.service.ImportUploadService;
+import com.example.ssds.api.imports.service.ImportPendingResumeService;
 import com.example.ssds.core.domain.ImportDataType;
 import com.example.ssds.ingest.importer.ImportFieldRegistry;
 import jakarta.validation.Valid;
@@ -52,6 +53,7 @@ public class ImportContractController {
     private final ImportPreviewService previewService;
     private final ImportConfirmService confirmService;
     private final ImportBatchQueryService queryService;
+    private final ImportPendingResumeService pendingResumeService;
 
     public ImportContractController(
             ImportFieldRegistry fieldRegistry,
@@ -59,7 +61,8 @@ public class ImportContractController {
             ImportUploadService uploadService,
             ImportPreviewService previewService,
             ImportConfirmService confirmService,
-            ImportBatchQueryService queryService
+            ImportBatchQueryService queryService,
+            ImportPendingResumeService pendingResumeService
     ) {
         this.fieldRegistry = fieldRegistry;
         this.templateService = templateService;
@@ -67,6 +70,7 @@ public class ImportContractController {
         this.previewService = previewService;
         this.confirmService = confirmService;
         this.queryService = queryService;
+        this.pendingResumeService = pendingResumeService;
     }
 
     @PostMapping("/upload")
@@ -85,6 +89,13 @@ public class ImportContractController {
             @Valid @RequestBody ImportPreviewRequest request
     ) {
         return ApiResponse.success(previewService.preview(batchId, request));
+    }
+
+    @GetMapping("/{batchId}/resume")
+    public ApiResponse<ImportUploadResponse> resumePending(
+            @PathVariable(name = "batchId") Long batchId
+    ) {
+        return ApiResponse.success(pendingResumeService.resume(batchId));
     }
 
     /** Uses the current preview mapping; does not confirm or persist validation errors. */
@@ -138,6 +149,18 @@ public class ImportContractController {
                         .filename("import-" + batchId + "-errors.csv", java.nio.charset.StandardCharsets.UTF_8)
                         .build().toString())
                 .body(content);
+    }
+
+    @PostMapping("/{batchId}/recalculation/retry")
+    public ApiResponse<Integer> retryRecalculation(@PathVariable(name="batchId") Long batchId) {
+        return ApiResponse.success(queryService.retryRecalculation(batchId));
+    }
+
+    @GetMapping("/{batchId}/unprocessed/download")
+    public ResponseEntity<byte[]> downloadUnprocessed(@PathVariable(name="batchId") Long batchId) {
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=import-"+batchId+"-unprocessed.csv")
+                .body(queryService.unprocessedCsv(batchId));
     }
 
     @GetMapping("/fields")

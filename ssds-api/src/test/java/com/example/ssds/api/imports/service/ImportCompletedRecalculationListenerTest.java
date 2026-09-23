@@ -29,11 +29,11 @@ class ImportCompletedRecalculationListenerTest {
     }
 
     @Test
-    void failedOrEmptyImportsNeverTriggerRecalculation() {
+    void failedAndEmptyEventsAlsoCheckDurableWork() {
         listener.onImportCompleted(event(TaskStatus.FAILED, 0, Set.of(10L)));
         listener.onImportCompleted(event(TaskStatus.SUCCEEDED, 1, Set.of()));
 
-        verify(service, never()).recalculate(org.mockito.ArgumentMatchers.any());
+        verify(service, org.mockito.Mockito.times(2)).recalculate(org.mockito.ArgumentMatchers.any());
     }
 
     private ImportCompletedEvent event(TaskStatus status, int successRows, Set<Long> ids) {

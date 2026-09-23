@@ -14,6 +14,10 @@ final class ImportWriteChunk {
     final List<BulkImportDao.ProductRow> products = new ArrayList<>();
     final List<BulkImportDao.ErrorRow> errors = new ArrayList<>();
     int failedRows;
+    int skippedRows;
+    final List<Integer> skippedSourceRows=new ArrayList<>();
+    final List<SalesIdentity> salesIdentities = new ArrayList<>();
+    record SalesIdentity(String key,String payload) {}
     int expectedProcessedRows;
     long deadlineNanos;
     final List<BulkImportDao.ErrorRow> sources = new ArrayList<>();
@@ -24,7 +28,7 @@ final class ImportWriteChunk {
             var source = sources.get(i);
             var row = new ImportWriteChunk();
             row.sources.add(source);
-            if (!sales.isEmpty()) row.sales.add(sales.get(i));
+            if (!sales.isEmpty()) { row.sales.add(sales.get(i)); if(!salesIdentities.isEmpty()) row.salesIdentities.add(salesIdentities.get(i)); }
             if (!reviews.isEmpty()) row.reviews.add(reviews.get(i));
             if (!products.isEmpty()) row.products.add(products.get(i));
             if (!audiences.isEmpty()) {
@@ -40,6 +44,7 @@ final class ImportWriteChunk {
             row.errors.add(error);
             row.failedRows = 1;
         }
+        for(int number:skippedSourceRows) {var row=new ImportWriteChunk(); row.skippedRows=1; result.put(number,row);}
         int checkpoint = expectedProcessedRows;
         for (var row : result.values()) {
             row.expectedProcessedRows = checkpoint++;
@@ -53,7 +58,7 @@ final class ImportWriteChunk {
     }
 
     boolean isEmpty() {
-        return validRows() == 0 && failedRows == 0;
+        return validRows() == 0 && failedRows == 0 && skippedRows == 0;
     }
 
     record AudienceMixInput(String audienceCode, Long categoryId, BigDecimal share) {}

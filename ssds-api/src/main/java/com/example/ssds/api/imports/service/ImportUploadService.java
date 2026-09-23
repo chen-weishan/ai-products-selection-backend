@@ -91,7 +91,8 @@ public class ImportUploadService {
                     parsed.totalRows(),
                     async,
                     parsed.headers(),
-                    parsed.suggestions());
+                    parsed.suggestions(),
+                    java.util.Map.of());
         } catch (IOException exception) {
             cleanupRejectedBatch(batch.getId(), staged);
             throw validation("無法讀取上傳檔案");

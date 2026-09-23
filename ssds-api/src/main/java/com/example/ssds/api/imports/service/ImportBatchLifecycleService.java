@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 /** 鎖定並驅動 ImportBatch 狀態，防止重複 confirm 造成重複寫入。 */
 @Service
 public class ImportBatchLifecycleService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.ssds.infra.dao.ImportIntegrityDao integrity;
+
     private final ImportBatchRepository batchRepository;
     private final ImportErrorRepository errorRepository;
     private final ImportStagingStorage stagingStorage;
@@ -56,6 +59,22 @@ public class ImportBatchLifecycleService {
             var staged = stagingStorage.findForBatch(batchId);
             var headers = fileScanner.readHeaders(staged.path(), batch.getFileName());
             previewService.validateMappings(batch.getDataType(), headers, request.mappings());
+            if (batch.getDataType() == com.example.ssds.core.domain.ImportDataType.SALES) {
+                try (var input = java.nio.file.Files.newInputStream(staged.path())) {
+                    var digest = java.security.MessageDigest.getInstance("SHA-256");
+                    byte[] buffer = new byte[8192];
+                    for (int n; (n=input.read(buffer)) != -1;) digest.update(buffer,0,n);
+                    String fileHash=java.util.HexFormat.of().formatHex(digest.digest());
+                    var parts=new java.util.ArrayList<String>();
+                    parts.add(fileHash);
+                    new java.util.TreeMap<>(request.mappings()).forEach((k,v)->{parts.add(k);parts.add(v);});
+                    integrity.claimFile(batchId,com.example.ssds.ingest.importer.SalesImportIdentity.hash(parts));
+                } catch (java.io.IOException | java.security.NoSuchAlgorithmException error) {
+                    throw new ImportFileParseException("無法讀取匯入檔案指紋",error);
+                } catch (IllegalArgumentException error) {
+                    throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE,error.getMessage());
+                }
+            }
             stagingStorage.saveMapping(batchId, request.mappings());
         } catch (ImportFileParseException exception) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, exception.getMessage());
@@ -63,6 +82,7 @@ public class ImportBatchLifecycleService {
         errorRepository.deleteByBatchId(batchId);
         batch.setSuccessRows(0);
         batch.setFailRows(0);
+        batch.setSkippedRows(0);
         batch.setFinishedAt(null);
         batch.setStatus(TaskStatus.RUNNING);
         return batchRepository.saveAndFlush(batch);
@@ -80,7 +100,7 @@ public class ImportBatchLifecycleService {
         }
         if (batch.getFailRows() == 0) {
             batch.setStatus(TaskStatus.SUCCEEDED);
-        } else if (batch.getSuccessRows() == 0) {
+        } else if (batch.getSuccessRows() + batch.getSkippedRows() == 0) {
             batch.setStatus(TaskStatus.FAILED);
         } else {
             batch.setStatus(TaskStatus.PARTIAL);
@@ -100,7 +120,6 @@ public class ImportBatchLifecycleService {
             return false;
         }
         batch.setStatus(TaskStatus.FAILED);
-        batch.setFailRows(Math.max(batch.getFailRows(), batch.getTotalRows() - batch.getSuccessRows()));
         batch.setFinishedAt(Instant.now());
         batchRepository.saveAndFlush(batch);
         String safeMessage = message == null || message.isBlank()
@@ -126,8 +145,6 @@ public class ImportBatchLifecycleService {
                     batch.setFinishedAt(Instant.now());
                 } else if (batch.getStatus() == TaskStatus.RUNNING) {
                     batch.setStatus(TaskStatus.FAILED);
-                    batch.setFailRows(Math.max(
-                            batch.getFailRows(), batch.getTotalRows() - batch.getSuccessRows()));
                     batch.setFinishedAt(Instant.now());
                     errorRepository.save(ImportError.builder()
                             .batch(batch)

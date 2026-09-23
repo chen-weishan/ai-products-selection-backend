@@ -11,5 +11,9 @@ public record ImportPreviewResponse(
         int errorRows,
         int duplicateRows,
         boolean async,
-        List<ImportPreviewRow> previewRows
-) {}
+        List<ImportPreviewRow> previewRows,
+        List<AudienceChange> audienceChanges
+) {
+    public record AudienceChange(String category, java.util.Map<String,java.math.BigDecimal> before,
+            java.util.Map<String,java.math.BigDecimal> after) {}
+}

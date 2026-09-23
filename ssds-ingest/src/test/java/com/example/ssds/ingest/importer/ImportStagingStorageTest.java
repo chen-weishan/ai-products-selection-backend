@@ -30,10 +30,13 @@ class ImportStagingStorageTest {
         mappings.put("品名", "productName");
 
         storage.saveMapping(42L, mappings);
+        storage.saveDraftMapping(42L, Map.of("品名", "sku"));
 
         assertThat(storage.loadMapping(42L)).containsExactlyEntriesOf(mappings);
+        assertThat(storage.loadDraftMapping(42L)).containsEntry("品名", "sku");
         storage.deleteForBatch(42L);
         assertThat(temporaryDirectory.resolve("42.mapping.json")).doesNotExist();
+        assertThat(temporaryDirectory.resolve("42.draft.mapping.json")).doesNotExist();
     }
 
     @Test
@@ -45,6 +48,7 @@ class ImportStagingStorageTest {
         storage.stageForBatch(7L, "sales.csv", new ByteArrayInputStream(
                 "日期,品名\n2026-09-08,奶茶".getBytes(StandardCharsets.UTF_8)));
         storage.saveMapping(7L, Map.of("日期", "orderDate"));
+        storage.saveDraftMapping(7L, Map.of("品名", "productName"));
         Files.setLastModifiedTime(temporaryDirectory.resolve("7.csv"),
                 FileTime.from(Instant.now().minus(Duration.ofHours(2))));
 
@@ -52,6 +56,7 @@ class ImportStagingStorageTest {
 
         assertThat(temporaryDirectory.resolve("7.csv")).doesNotExist();
         assertThat(temporaryDirectory.resolve("7.mapping.json")).doesNotExist();
+        assertThat(temporaryDirectory.resolve("7.draft.mapping.json")).doesNotExist();
         assertThat(events).singleElement().isEqualTo(new ImportArtifactsExpiredEvent(java.util.Set.of(7L)));
     }
 }

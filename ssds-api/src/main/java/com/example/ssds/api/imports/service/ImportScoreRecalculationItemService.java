@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FR-09 單一品項的純計算重算；每個品項使用獨立交易，且不建立 AI task。 */
+/** FR-09 單一品項的純計算重算；加入工作佇列提供的單一品項交易，且不建立 AI task。 */
 @Service
 public class ImportScoreRecalculationItemService {
 
@@ -34,7 +34,7 @@ public class ImportScoreRecalculationItemService {
         this.scoringService = scoringService;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRED)
     public Result recalculate(Long productId) {
         Product product = productRepository.findWithDetailsById(productId).orElse(null);
         if (product == null || !product.isScorable() || product.getDeletedAt() != null) {

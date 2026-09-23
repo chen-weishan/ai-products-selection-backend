@@ -31,7 +31,7 @@ public class ImportHeaderMapper {
 
         return headers.stream().map(header -> {
             String normalized = normalize(header);
-            if (registry.isPersonalDataHeader(normalized)) {
+            if (registry.isPersonalDataHeader(dataType, normalized)) {
                 return new ImportColumnSuggestion(
                         header, null, ImportMappingStatus.BLOCKED_PERSONAL_DATA, 100);
             }

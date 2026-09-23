@@ -32,6 +32,28 @@ import org.junit.jupiter.api.Test;
 class ImportPreviewServiceTest {
 
     @Test
+    void rejectsExplicitUnknownSalesProductIdButAllowsUnmatchedNameWithoutId() {
+        var service = new ImportPreviewService(
+                mock(ImportBatchRepository.class), mock(ImportStagingStorage.class),
+                mock(ImportFileScanner.class), new ImportFieldRegistry(),
+                mock(ProductRepository.class), mock(CategoryRepository.class),
+                mock(SupplierRepository.class), mock(AudienceSegmentRepository.class),
+                mock(ProductReviewRepository.class), directTransactions());
+        var references = new ImportPreviewService.ReferenceCatalog(
+                List.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
+        Map<String, String> values = new LinkedHashMap<>(Map.of(
+                "orderDate", "2026-09-01", "productName", "奶茶",
+                "price", "100", "qty", "2", "productId", "9999"));
+
+        assertThat(service.validateRow(ImportDataType.SALES, values, references))
+                .anyMatch(issue -> "productId".equals(issue.field())
+                        && issue.message().contains("不存在"));
+
+        values.remove("productId");
+        assertThat(service.validateRow(ImportDataType.SALES, values, references)).isEmpty();
+    }
+
+    @Test
     void rejectsReviewWhenReferencedProductDoesNotExist() throws Exception {
         ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
         ImportStagingStorage storage = mock(ImportStagingStorage.class);
@@ -72,7 +94,7 @@ class ImportPreviewServiceTest {
     }
 
     @Test
-    void validatesAllRowsAndSeparatesValidErrorAndDuplicateCounts() throws Exception {
+    void preservesIdenticalAnonymousSalesAndReportsInvalidRows() throws Exception {
         ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
         ImportStagingStorage storage = mock(ImportStagingStorage.class);
         ImportFileScanner scanner = mock(ImportFileScanner.class);
@@ -126,8 +148,8 @@ class ImportPreviewServiceTest {
         var response = service.preview(42L, new ImportPreviewRequest(mappings));
 
         assertThat(response.totalRows()).isEqualTo(3);
-        assertThat(response.validRows()).isEqualTo(1);
-        assertThat(response.duplicateRows()).isEqualTo(1);
+        assertThat(response.validRows()).isEqualTo(2);
+        assertThat(response.duplicateRows()).isZero();
         assertThat(response.errorRows()).isEqualTo(1);
         assertThat(response.previewRows()).hasSize(3);
 
@@ -149,11 +171,10 @@ class ImportPreviewServiceTest {
                 .setHeader().setSkipHeaderRecord(true).get()
                 .parse(new java.io.StringReader(csv.substring(1)))) {
             var rows = parser.getRecords();
-            assertThat(rows).hasSize(2);
+            assertThat(rows).hasSize(1);
             assertThat(rows.get(0).get("_import_row_number")).isEqualTo("23");
             assertThat(rows.get(0).get("productName")).isEqualTo("奶茶,\"大杯\"");
             assertThat(rows.get(0).get("_import_errors")).contains("qty");
-            assertThat(rows.get(1).get("_import_errors")).contains("重複");
             assertThat(parser.getHeaderNames()).doesNotContain("email");
         }
         org.mockito.Mockito.verify(batchRepository, org.mockito.Mockito.never()).save(any());

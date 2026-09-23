@@ -127,7 +127,11 @@ public class BulkImportDao {
             String name,
             java.math.BigDecimal priceMin,
             java.math.BigDecimal priceMax,
-            String note) {}
+            String note, boolean updateExisting) {
+        public AudienceRow(String code,String name,java.math.BigDecimal min,java.math.BigDecimal max,String note) {
+            this(code,name,min,max,note,false);
+        }
+    }
 
     @Transactional
     public int batchInsertAudiences(List<AudienceRow> rows) {
@@ -135,7 +139,10 @@ public class BulkImportDao {
                 INSERT INTO audience_segment
                     (audience_code, name, price_min, price_max, note)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (audience_code) DO NOTHING
+                ON CONFLICT (audience_code) DO UPDATE SET
+                    name=EXCLUDED.name, price_min=EXCLUDED.price_min, price_max=EXCLUDED.price_max, note=EXCLUDED.note
+                WHERE ? OR (audience_segment.name=EXCLUDED.name AND audience_segment.price_min=EXCLUDED.price_min
+                    AND audience_segment.price_max=EXCLUDED.price_max AND audience_segment.note IS NOT DISTINCT FROM EXCLUDED.note)
                 """;
         return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
             ps.setString(1, row.audienceCode());
@@ -143,6 +150,7 @@ public class BulkImportDao {
             ps.setBigDecimal(3, row.priceMin());
             ps.setBigDecimal(4, row.priceMax());
             ps.setString(5, row.note());
+            ps.setBoolean(6, row.updateExisting());
         }));
     }
 
@@ -184,14 +192,15 @@ public class BulkImportDao {
             Long createdBy) {}
 
     @Transactional
-    public int batchInsertProducts(List<ProductRow> rows) {
+    public int batchInsertProducts(List<ProductRow> rows, Long batchId) {
         String sql = """
-                INSERT INTO product
+                WITH inserted AS (INSERT INTO product
                     (name, category_id, supplier_id, cost, suggested_price, margin_rate,
                      moq, season, status, track_type, logistics_condition,
                      ideal_temp_min, ideal_temp_max, shelf_life_days, created_by,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, now(), now())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, now(), now()) RETURNING id)
+                INSERT INTO import_recalculation_task(batch_id,product_id) SELECT ?,id FROM inserted
                 """;
         return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
             ps.setString(1, row.name());
@@ -208,6 +217,7 @@ public class BulkImportDao {
             ps.setBigDecimal(12, row.idealTempMax());
             ps.setObject(13, row.shelfLifeDays());
             ps.setObject(14, row.createdBy());
+            ps.setObject(15, batchId);
         }));
     }
 

@@ -104,7 +104,7 @@ public class ImportExecutionService {
             ImportBatch batch = batchRepository.findById(batchId)
                     .orElseThrow(() -> new IllegalStateException("匯入批次不存在：" + batchId));
             if (batch.getStatus() != com.example.ssds.core.domain.TaskStatus.RUNNING) return;
-            int resumeAfterRows = batch.getSuccessRows() + batch.getFailRows();
+            int resumeAfterRows = batch.getSuccessRows() + batch.getFailRows() + batch.getSkippedRows();
             if ((resumeAfterRows == 0 && stagingStorage.mappingSavedAt(batchId)
                     .plus(queueTimeout).isBefore(java.time.Instant.now()))
                     || (queuedAt != null && queuedAt.plus(queueTimeout).isBefore(java.time.Instant.now()))) {
@@ -119,8 +119,22 @@ public class ImportExecutionService {
             ImportHandler handler = new ImportHandler(
                     batch, mappings, references, actorId, resumeAfterRows,
                     affectedProductIds, importedProductKeys, lease);
-            fileScanner.scan(staged.path(), batch.getFileName(), handler);
-            handler.flush();
+            if (batch.getDataType() == ImportDataType.AUDIENCE) {
+                chunkWriter.writeAudienceFile(() -> {
+                    var freshReferences=validationService.loadReferences(batch.getDataType());
+                    ImportHandler audienceHandler=new ImportHandler(batch,mappings,freshReferences,actorId,resumeAfterRows,
+                            affectedProductIds,importedProductKeys,lease);
+                    audienceHandler.audiencePlan=validationService.audiencePlan(batch,staged.path(),mappings,freshReferences);
+                    fileScanner.scan(staged.path(),batch.getFileName(),audienceHandler);
+                    audienceHandler.flush();
+                    if(audienceHandler.totalRows!=batch.getTotalRows()) throw new IllegalStateException("匯入檔案列數與上傳時不一致");
+                });
+                handler.totalRows=batch.getTotalRows();
+            } else {
+                handler.existingSales=validationService.salesCatalog(batch,staged.path(),mappings,references);
+                fileScanner.scan(staged.path(), batch.getFileName(), handler);
+                handler.flush();
+            }
             if (handler.totalRows != batch.getTotalRows()) {
                 throw new IllegalStateException("匯入檔案列數與上傳時不一致");
             }
@@ -174,6 +188,9 @@ public class ImportExecutionService {
         private ImportWriteChunk chunk = new ImportWriteChunk();
         private int rowsInChunk;
         private int totalRows;
+        private AudienceImportPlan audiencePlan;
+        private final Map<String,String> salesPayloads=new LinkedHashMap<>();
+        private Map<String,String> existingSales=Map.of();
         private final ImportWorkerLock.Lease lease;
         private final long deadline = System.nanoTime() + executionTimeout.toNanos();
 
@@ -216,9 +233,12 @@ public class ImportExecutionService {
             }
             List<ImportPreviewIssue> issues = new ArrayList<>(
                     validationService.validateRow(batch.getDataType(), values, references));
+            if(audiencePlan!=null) audiencePlan.addIssue(values,issues);
+            if(batch.getDataType()==ImportDataType.SALES && issues.isEmpty())
+                validationService.checkSales(values,references,salesPayloads,existingSales,issues);
             if (issues.isEmpty()) {
                 String key = validationService.duplicateKey(batch.getDataType(), values, references);
-                if (key != null && !duplicateKeys.add(key)) {
+                if (batch.getDataType()!=ImportDataType.SALES && key != null && !duplicateKeys.add(key)) {
                     issues.add(ImportPreviewIssue.duplicate(null, "與檔案內先前資料重複"));
                 } else {
                     validationService.checkExistingDuplicate(
@@ -234,7 +254,10 @@ public class ImportExecutionService {
                     issues.add(ImportPreviewIssue.error(null, "資料轉換失敗"));
                 }
             }
-            if (!issues.isEmpty()) addErrors(rowNumber, values, issues);
+            if (!issues.isEmpty()) {
+                if(issues.stream().allMatch(issue -> "DUPLICATE".equals(issue.type()))) {chunk.skippedRows++; chunk.skippedSourceRows.add(rowNumber); }
+                else addErrors(rowNumber, values, issues);
+            }
             rowsInChunk++;
             if (rowsInChunk >= BulkImportDao.BATCH_SIZE) flush();
         }
@@ -259,6 +282,9 @@ public class ImportExecutionService {
             var match = validationService.matchProduct(values, references);
             Long productId = match.productId();
             if (productId != null) affectedProductIds.add(productId);
+            chunk.salesIdentities.add(new ImportWriteChunk.SalesIdentity(
+                    com.example.ssds.ingest.importer.SalesImportIdentity.key(values,productId),
+                    com.example.ssds.ingest.importer.SalesImportIdentity.payload(values,productId)));
             Long categoryId = category(values.get("category"));
             chunk.sales.add(new BulkImportDao.SalesRow(
                     validationService.date(values.get("orderDate")), productId,
@@ -282,9 +308,12 @@ public class ImportExecutionService {
 
         private void addAudience(Map<String, String> values) {
             String code = values.get("audienceCode");
+            var existing=references.audiences().get(validationService.key(code));
+            code=existing==null ? code.toUpperCase(java.util.Locale.ROOT) : existing.getAudienceCode();
             chunk.audiences.add(new BulkImportDao.AudienceRow(
                     code, values.get("name"), validationService.decimal(values.get("priceMin")),
-                    validationService.decimal(values.get("priceMax")), emptyToNull(values.get("note"))));
+                    validationService.decimal(values.get("priceMax")), emptyToNull(values.get("note")),
+                    "UPDATE".equalsIgnoreCase(values.get("masterAction"))));
             if (!validationService.blank(values.get("category"))) {
                 addProductsInCategory(values.get("category"));
                 chunk.audienceMixes.add(new ImportWriteChunk.AudienceMixInput(
@@ -331,6 +360,10 @@ public class ImportExecutionService {
                 String duplicateKey = validationService.duplicateKey(
                         batch.getDataType(), values, references);
                 if (duplicateKey != null) duplicateKeys.add(duplicateKey);
+                if(batch.getDataType()==ImportDataType.SALES) {
+                    String identity=com.example.ssds.ingest.importer.SalesImportIdentity.key(values,validationService.matchProduct(values,references).productId());
+                    if(identity!=null) salesPayloads.putIfAbsent(identity,com.example.ssds.ingest.importer.SalesImportIdentity.payload(values,validationService.matchProduct(values,references).productId()));
+                }
             }
             switch (batch.getDataType()) {
                 case SALES, REVIEW -> {

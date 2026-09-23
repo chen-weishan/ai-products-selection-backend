@@ -98,6 +98,22 @@ public class ImportStagingStorage {
             deleteQuietly(path);
         }
         deleteQuietly(mappingPath(batchId));
+        deleteQuietly(draftMappingPath(batchId));
+    }
+
+    /** Keep a validated preview mapping separate from the confirmed worker mapping. */
+    public void saveDraftMapping(Long batchId, Map<String, String> mappings) {
+        writeMapping(draftMappingPath(batchId), mappings);
+    }
+
+    public Map<String, String> loadDraftMapping(Long batchId) {
+        Path path = draftMappingPath(batchId);
+        if (!Files.isRegularFile(path)) return Map.of();
+        try {
+            return objectMapper.readValue(path.toFile(), new TypeReference<>() {});
+        } catch (IOException exception) {
+            throw new ImportFileParseException("匯入欄位草稿無法讀取", exception);
+        }
     }
 
     /**
@@ -105,8 +121,11 @@ public class ImportStagingStorage {
      * 不需要為短生命週期資料擴充 import_batch schema。
      */
     public void saveMapping(Long batchId, Map<String, String> mappings) {
-        Path target = mappingPath(batchId);
-        Path temporary = root.resolve(batchId + ".mapping.json.tmp").normalize();
+        writeMapping(mappingPath(batchId), mappings);
+    }
+
+    private void writeMapping(Path target, Map<String, String> mappings) {
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp").normalize();
         ensureInsideRoot(temporary);
         try {
             Files.createDirectories(root);
@@ -148,6 +167,15 @@ public class ImportStagingStorage {
             throw new IllegalArgumentException("batchId 必須是正整數");
         }
         Path path = root.resolve(batchId + ".mapping.json").normalize();
+        ensureInsideRoot(path);
+        return path;
+    }
+
+    private Path draftMappingPath(Long batchId) {
+        if (batchId == null || batchId <= 0) {
+            throw new IllegalArgumentException("batchId 必須是正整數");
+        }
+        Path path = root.resolve(batchId + ".draft.mapping.json").normalize();
         ensureInsideRoot(path);
         return path;
     }
@@ -237,8 +265,10 @@ public class ImportStagingStorage {
     }
 
     private boolean isMappingWithExistingSource(String fileName) {
-        if (!fileName.endsWith(".mapping.json")) return false;
-        String stem = fileName.substring(0, fileName.length() - ".mapping.json".length());
+        String suffix = fileName.endsWith(".draft.mapping.json") ? ".draft.mapping.json"
+                : fileName.endsWith(".mapping.json") ? ".mapping.json" : null;
+        if (suffix == null) return false;
+        String stem = fileName.substring(0, fileName.length() - suffix.length());
         return Files.isRegularFile(root.resolve(stem + ".csv"))
                 || Files.isRegularFile(root.resolve(stem + ".xlsx"));
     }
