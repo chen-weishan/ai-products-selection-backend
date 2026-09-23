@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.example.ssds.api.common.response.ApiError;
 import com.example.ssds.api.common.response.ApiResponse;
@@ -131,6 +132,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException e) {
         return toResponse(ErrorCode.FORBIDDEN, ErrorCode.FORBIDDEN.getDefaultMessage(), null);
+    }
+
+    /**
+     * 路徑打錯（沒有任何 Controller 對應，也不是靜態資源）。
+     *
+     * <p>不單獨攔會被兜底吃成 <b>500</b>，讓「使用者把網址打錯」看起來像「伺服器壞了」。
+     * 2026-09-22 實際踩到：從文件複製網址時帶進了零寬空格 U+200B，
+     * 路徑變成 {@code /api/v1/\u200b\u200bclimate-normals\u200b}，回了 500 害人查了半天。
+     *
+     * <p>訊息帶上實際收到的路徑，這樣肉眼看不見的字元至少會在 JSON 的
+     * {@code \u200b} 逸出序列裡現形。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException e) {
+        return toResponse(ErrorCode.RESOURCE_NOT_FOUND,
+                "找不到這個路徑：" + e.getResourcePath(), null);
     }
 
     /** 兜底：任何沒被上面攔到的例外。 */

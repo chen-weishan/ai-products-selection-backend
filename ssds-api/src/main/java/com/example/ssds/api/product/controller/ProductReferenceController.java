@@ -5,7 +5,6 @@ import com.example.ssds.api.product.dto.CategoryTreeResponse;
 import com.example.ssds.api.product.dto.CategoryUpsertRequest;
 import com.example.ssds.api.product.dto.CategoryResponse;
 import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
-import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.SupplierUpsertRequest;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
@@ -154,11 +153,8 @@ public class ProductReferenceController {
         );
     }
 
-    @GetMapping("/festivals")
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<List<FestivalOptionResponse>> getFestivals() {
-        return ApiResponse.success(queryService.getFestivals());
-    }
+    // GET /festivals 已移至 FestivalController（FR-17）：規格書 §9 要求同一路徑支援
+    // ?year= 回年度檔期，一個路徑不能有兩個 handler。不帶 year 的回應格式完全未變。
 
     @GetMapping("/categories/{categoryId}/margin-median")
     @PreAuthorize("isAuthenticated()")

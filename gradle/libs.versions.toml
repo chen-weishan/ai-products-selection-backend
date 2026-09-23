@@ -17,6 +17,10 @@ commonsCsv = "1.14.1"
 apachePoi = "5.4.1"
 # Resilience4j 不在 Spring Boot BOM 管理範圍內
 resilience4j = "2.4.0"
+# JJWT 不在 Spring Boot BOM 管理範圍內（FR-01 登入）
+jjwt = "0.13.0"
+# ICU4J：農曆換算（FR-17 AC-17-1），不在 Spring Boot BOM 管理範圍內
+icu4j = "77.1"
 
 [libraries]
 # --- Spring Boot starters（版本由 BOM 決定，故不寫 version） ---
@@ -62,6 +66,14 @@ springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-u
 shedlock-spring   = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
 shedlock-jdbc     = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
 commons-math3     = { module = "org.apache.commons:commons-math3", version.ref = "commonsMath" }
+
+# --- 農曆換算（FR-17 AC-17-1）---
+icu4j             = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
+
+# --- JWT（FR-01） ---
+jjwt-api     = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
+jjwt-impl    = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

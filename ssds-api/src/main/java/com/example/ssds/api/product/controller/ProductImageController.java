@@ -73,7 +73,7 @@ public class ProductImageController {
 
     @DeleteMapping("/{imageId}")
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
-    public ApiResponse<Void> delete(
+    public ApiResponse<Void> deleteProductImage(
             @PathVariable(name = "productId") Long productId,
             @PathVariable(name = "imageId") Long imageId
     ) {

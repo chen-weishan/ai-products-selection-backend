@@ -9,12 +9,10 @@ import com.example.ssds.api.product.dto.CategoryTreeResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
 import com.example.ssds.infra.entity.Category;
-import com.example.ssds.infra.entity.FestivalCalendar;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
 import com.example.ssds.infra.repository.CategoryRepository;
-import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.util.List;
@@ -26,7 +24,6 @@ class ProductReferenceQueryServiceTest {
     private CategoryRepository categoryRepository;
     private ProductMarginStatisticsDao marginStatisticsDao;
     private SupplierRepository supplierRepository;
-    private FestivalCalendarRepository festivalCalendarRepository;
     private TrendKeywordRepository trendKeywordRepository;
     private ProductReferenceQueryService service;
 
@@ -35,12 +32,10 @@ class ProductReferenceQueryServiceTest {
         categoryRepository = mock(CategoryRepository.class);
         marginStatisticsDao = mock(ProductMarginStatisticsDao.class);
         supplierRepository = mock(SupplierRepository.class);
-        festivalCalendarRepository = mock(FestivalCalendarRepository.class);
         trendKeywordRepository = mock(TrendKeywordRepository.class);
         service = new ProductReferenceQueryService(
                 categoryRepository,
                 marginStatisticsDao,
-                festivalCalendarRepository,
                 supplierRepository,
                 trendKeywordRepository
         );
@@ -133,27 +128,8 @@ class ProductReferenceQueryServiceTest {
         verify(trendKeywordRepository).findAllByOrderByKeywordAsc();
     }
 
-    @Test
-    void festivalsAreDeduplicatedAcrossYears() {
-        when(festivalCalendarRepository.findAllByOrderByFestivalNameAscYearDesc())
-                .thenReturn(List.of(
-                        FestivalCalendar.builder()
-                                .festivalCode("MID_AUTUMN")
-                                .festivalName("中秋節")
-                                .year((short) 2027)
-                                .build(),
-                        FestivalCalendar.builder()
-                                .festivalCode("MID_AUTUMN")
-                                .festivalName("中秋節")
-                                .year((short) 2026)
-                                .build()
-                ));
+    // festivalsAreDeduplicatedAcrossYears 已隨端點移至 FestivalQueryServiceTest（FR-17）。
 
-        var result = service.getFestivals();
-
-        assertEquals(1, result.size());
-        assertEquals("MID_AUTUMN", result.getFirst().festivalCode());
-    }
 
     private Category category(Long id, String name, int sortOrder) {
         return Category.builder()
