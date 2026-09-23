@@ -22,7 +22,7 @@ public class AiTaskController {
 
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AiTaskStatusResponse> getById(@PathVariable(name = "id") Long id) {
+    public ApiResponse<AiTaskStatusResponse> getAiTaskById(@PathVariable(name = "id") Long id) {
         return ApiResponse.success(queryService.getStatus(id));
     }
 }

@@ -28,7 +28,7 @@ public class AuditLogController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('BUYER_LEAD', 'SYS_ADMIN')")
-    public ApiResponse<PageResponse<AuditLogResponse>> search(
+    public ApiResponse<PageResponse<AuditLogResponse>> searchAuditLogs(
             @RequestParam(name = "from", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime from,
