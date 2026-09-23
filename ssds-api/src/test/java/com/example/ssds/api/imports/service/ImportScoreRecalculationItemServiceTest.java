@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.example.ssds.api.product.service.InsufficientDataException;
 import com.example.ssds.api.product.service.ProductFallbackScoringService;
 import com.example.ssds.core.domain.LastScoringStatus;
+import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Category;
@@ -19,6 +20,8 @@ import com.example.ssds.infra.repository.SceneClassificationLogRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 
 class ImportScoreRecalculationItemServiceTest {
@@ -36,8 +39,25 @@ class ImportScoreRecalculationItemServiceTest {
         scoring = org.mockito.Mockito.mock(ProductFallbackScoringService.class);
         service = new ImportScoreRecalculationItemService(products, scenes, scoring);
         product = Product.builder().id(10L).name("奶茶")
-                .category(Category.builder().id(3L).build()).trackType(TrackType.A).build();
+                .category(Category.builder().id(3L).build())
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
         when(products.findWithDetailsById(10L)).thenReturn(Optional.of(product));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = {"DRAFT", "REJECTED"})
+    void skipsProductsWhoseStatusMustNotBeScored(ProductStatus status) {
+        product.setStatus(status);
+
+        assertThat(service.recalculate(10L))
+                .isEqualTo(ImportScoreRecalculationItemService.Result.SKIPPED);
+
+        verify(scenes, never()).findFirstByProductIdOrderByCreatedAtDesc(any());
+        verify(scoring, never()).score(any(Product.class), any(SceneType.class));
+        assertThat(product.getLastScoringStatus()).isNull();
+        assertThat(product.getLastScoringAttemptedAt()).isNull();
     }
 
     @Test

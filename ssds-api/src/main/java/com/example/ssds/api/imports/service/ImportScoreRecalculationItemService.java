@@ -3,6 +3,7 @@ package com.example.ssds.api.imports.service;
 import com.example.ssds.api.product.service.InsufficientDataException;
 import com.example.ssds.api.product.service.ProductFallbackScoringService;
 import com.example.ssds.core.domain.LastScoringStatus;
+import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.SceneClassificationLog;
@@ -37,7 +38,11 @@ public class ImportScoreRecalculationItemService {
     @Transactional(propagation = Propagation.REQUIRED)
     public Result recalculate(Long productId) {
         Product product = productRepository.findWithDetailsById(productId).orElse(null);
-        if (product == null || !product.isScorable() || product.getDeletedAt() != null) {
+        if (product == null
+                || !product.isScorable()
+                || product.getDeletedAt() != null
+                || product.getStatus() == ProductStatus.DRAFT
+                || product.getStatus() == ProductStatus.REJECTED) {
             return Result.SKIPPED;
         }
 
