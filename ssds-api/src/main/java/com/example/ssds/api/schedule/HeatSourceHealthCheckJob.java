@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +31,17 @@ import org.springframework.transaction.annotation.Transactional;
  * 本專案目前沒有 ShedLock 依賴，其他既有排程（ThreadsHeatIngestJob 等）也都沒有用，
  * 沿用既有慣例先不加；多節點部署時這支排程可能被重複執行，屬於已知風險，
  * 不是本次補實作的範圍。
+ *
+ * <p><b>2026-09-23 暫停：</b>{@code probe()} 的預設實作是真的打一次 {@code fetch()}，
+ * 不是輕量探測，每 15 分鐘跑一次會持續消耗 Apify 額度。FR-14 這塊功能先暫停，
+ * 用 {@code @ConditionalOnProperty} 讓這個 bean（連同它的 {@code @Scheduled}）
+ * 整個不被 Spring 建立，不是只是把 cron 改很長——這樣可以保證絕對不會被漏改
+ * 或誤觸發。之後要重新啟用，把
+ * {@code ssds.heat-source-probe.enabled=true} 設回去即可，不用改程式碼。
+ * 同一個開關也擋掉了「測試連線」的手動探測，見 {@code HeatSourceCommandService}。
  */
 @Component
+@ConditionalOnProperty(name = "ssds.heat-source-probe.enabled", havingValue = "true")
 public class HeatSourceHealthCheckJob {
 
     private static final Logger log = LoggerFactory.getLogger(HeatSourceHealthCheckJob.class);

@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,14 @@ public class HeatSourceCommandService {
     private final AppUserRepository appUserRepository;
     private final ManualHeatTagRepository manualHeatTagRepository;
     private final List<HeatSourceAdapter> adapters;
+
+    /**
+     * 與 {@code HeatSourceHealthCheckJob} 共用同一個開關（2026-09-23 暫停 FR-14 探測，
+     * 見該類別註解）。手動「測試連線」也會真的打一次 Apify，暫停期間一併擋掉，
+     * 避免變成繞過排程停用的漏洞。
+     */
+    @Value("${ssds.heat-source-probe.enabled:false}")
+    private boolean probeEnabled;
 
     /**
      * AC-14-5：僅 SYS_ADMIN 可調整合成權重（由 controller 的 {@code @PreAuthorize} 把關，
@@ -92,6 +101,16 @@ public class HeatSourceCommandService {
     public HeatSourceTestResponse testConnection(Long id) {
         HeatSource source = heatSourceRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到熱度來源 id=" + id));
+
+        if (!probeEnabled) {
+            // 暫停期間直接短路，不呼叫 probe()、不動 heat_source 任何欄位，
+            // 保證這個按鈕不會消耗 Apify 額度。
+            return new HeatSourceTestResponse(
+                    source.getSourceCode().name(),
+                    false,
+                    source.getAvailability().name(),
+                    "熱度來源探測功能目前暫停中（額度控管，FR-14-2），未實際發送探測請求");
+        }
 
         boolean success = probe(source.getSourceCode());
         source.applyProbeResult(success, LocalDate.now(TAIPEI));
