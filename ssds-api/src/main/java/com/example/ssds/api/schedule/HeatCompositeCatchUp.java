@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -110,6 +111,10 @@ public class HeatCompositeCatchUp {
         if (instagramCatchUpDue) {
             log.info("本週尚無 Instagram 熱度資料，開始補跑：weekStart={}", weekStart);
             instagramIngestJob.run();
+        } else if (instagramIngestJob != null
+                && instagramScheduledAt != null
+                && !now.isBefore(instagramScheduledAt)) {
+            log.info("本週 Instagram 熱度資料已存在，不需補跑：weekStart={}", weekStart);
         }
 
         ZonedDateTime dailyScheduledAt = dailySchedule.next(startOfDay.minusNanos(1));
@@ -123,9 +128,10 @@ public class HeatCompositeCatchUp {
         if (enabledKeywords == 0) {
             return;
         }
-        long completedKeywords = compositeRepository
-                .countByStatDateAndKeywordEnabledTrue(businessDate);
-        boolean dailyCatchUpDue = completedKeywords < enabledKeywords;
+        List<Long> missingKeywordIds =
+                compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate);
+        long completedKeywords = enabledKeywords - missingKeywordIds.size();
+        boolean dailyCatchUpDue = !missingKeywordIds.isEmpty();
         if (!dailyCatchUpDue && !instagramCatchUpDue) {
             log.info(
                     "每日熱度主流程今日已完成，不需補跑：date={}, completed={}/{}",
@@ -143,14 +149,14 @@ public class HeatCompositeCatchUp {
                     enabledKeywords);
             ThreadsHeatIngestJob threadsIngestJob = threadsIngestJobProvider.getIfAvailable();
             if (threadsIngestJob != null) {
-                threadsIngestJob.run();
+                threadsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
             }
             GoogleTrendsHeatIngestJob googleTrendsIngestJob =
                     googleTrendsIngestJobProvider.getIfAvailable();
             if (googleTrendsIngestJob != null) {
-                googleTrendsIngestJob.run();
+                googleTrendsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
             }
         }
-        calibrationJob.run(businessDate);
+        calibrationJob.runCatchUp(businessDate, missingKeywordIds);
     }
 }

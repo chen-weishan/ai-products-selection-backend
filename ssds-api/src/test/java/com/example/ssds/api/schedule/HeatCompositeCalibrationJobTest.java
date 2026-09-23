@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -129,5 +130,35 @@ class HeatCompositeCalibrationJobTest {
         verify(calibrationService).computeAndPersist(8L, businessDate);
         verify(timeGapJob).recalculateAfterDailyHeatComposition();
         verify(trendJob).enqueueSignificantKeywords(businessDate);
+    }
+
+    @Test
+    void catchUpLimitsAgentEnqueueToPreviouslyMissingKeywords() {
+        HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeCalibrationService calibrationService = mock(HeatCompositeCalibrationService.class);
+        TrendInterpretationJob trendJob = mock(TrendInterpretationJob.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<SourcingTimeGapRecalculationJob> timeGapProvider = mock(ObjectProvider.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<TrendInterpretationJob> trendProvider = mock(ObjectProvider.class);
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        TrendKeyword existing = TrendKeyword.builder().id(7L).keyword("既有關鍵字").build();
+        TrendKeyword added = TrendKeyword.builder().id(8L).keyword("新增關鍵字").build();
+        when(keywordRepository.findByEnabledTrue()).thenReturn(List.of(existing, added));
+        when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
+                percentileDao,
+                keywordRepository,
+                calibrationService,
+                timeGapProvider,
+                trendProvider);
+
+        job.runCatchUp(businessDate, List.of(8L));
+
+        verify(calibrationService).computeAndPersist(7L, businessDate);
+        verify(calibrationService).computeAndPersist(8L, businessDate);
+        verify(trendJob).enqueueSignificantKeywords(businessDate, List.of(8L));
+        verify(trendJob, never()).enqueueSignificantKeywords(businessDate);
     }
 }

@@ -40,8 +40,21 @@ public class TrendInterpretationJob {
     }
 
     public void enqueueSignificantKeywords(LocalDate businessDate) {
+        enqueueSignificantKeywords(businessDate, keywordRepository.findByEnabledTrue());
+    }
+
+    public void enqueueSignificantKeywords(
+            LocalDate businessDate, Collection<Long> keywordIds) {
+        List<TrendKeyword> keywords = keywordRepository.findAllById(keywordIds).stream()
+                .filter(TrendKeyword::isEnabled)
+                .toList();
+        enqueueSignificantKeywords(businessDate, keywords);
+    }
+
+    private void enqueueSignificantKeywords(
+            LocalDate businessDate, List<TrendKeyword> keywords) {
         List<Long> keywordIds = new ArrayList<>();
-        for (TrendKeyword keyword : keywordRepository.findByEnabledTrue()) {
+        for (TrendKeyword keyword : keywords) {
             try {
                 if (isSignificant(keyword, businessDate)) {
                     keywordIds.add(keyword.getId());

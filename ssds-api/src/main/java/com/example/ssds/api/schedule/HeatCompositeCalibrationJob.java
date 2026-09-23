@@ -8,6 +8,7 @@ import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationJob;
 import com.example.ssds.api.trend.TrendInterpretationJob;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
@@ -62,6 +63,14 @@ public class HeatCompositeCalibrationJob {
     }
 
     void run(LocalDate businessDate) {
+        run(businessDate, null);
+    }
+
+    void runCatchUp(LocalDate businessDate, Collection<Long> agentKeywordIds) {
+        run(businessDate, List.copyOf(agentKeywordIds));
+    }
+
+    private void run(LocalDate businessDate, List<Long> agentKeywordIds) {
         int updated = percentileDao.applyPercentiles(businessDate);
         log.info("百分位重算完成：{} 筆讀值（{}）。", updated, businessDate);
 
@@ -89,7 +98,11 @@ public class HeatCompositeCalibrationJob {
         }
         TrendInterpretationJob trendJob = trendInterpretationJobProvider.getIfAvailable();
         if (trendJob != null) {
-            trendJob.enqueueSignificantKeywords(businessDate);
+            if (agentKeywordIds == null) {
+                trendJob.enqueueSignificantKeywords(businessDate);
+            } else {
+                trendJob.enqueueSignificantKeywords(businessDate, agentKeywordIds);
+            }
         }
     }
 }

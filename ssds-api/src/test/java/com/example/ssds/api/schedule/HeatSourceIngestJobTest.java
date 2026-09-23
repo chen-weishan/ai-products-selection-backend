@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,6 +101,48 @@ class HeatSourceIngestJobTest {
         verify(sources).save(source);
     }
 
+    @Test
+    void targetedCatchUpFetchesOnlyMissingThreadsKeyword() {
+        HeatSource source = enabledSource(HeatSourceCode.THREADS);
+        TrendKeyword missing = enabledKeyword(1L, "新增關鍵字");
+        TrendKeyword completed = enabledKeyword(2L, "已有資料");
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        ThreadsHeatSourceAdapter adapter = mock(ThreadsHeatSourceAdapter.class);
+        when(keywords.findAllById(List.of(1L, 2L))).thenReturn(List.of(missing, completed));
+        when(readings.existsByKeywordIdAndSourceSourceCodeAndReadingDate(
+                        eq(2L), eq(HeatSourceCode.THREADS), any(LocalDate.class)))
+                .thenReturn(true);
+        when(adapter.fetch(anyList(), any(LocalDate.class))).thenReturn(List.of());
+        ThreadsHeatIngestJob job = new ThreadsHeatIngestJob(
+                keywords, sourceRepository(source), readings, adapter);
+
+        job.runForKeywordIds(List.of(1L, 2L), LocalDate.of(2026, 9, 23));
+
+        verify(adapter).fetch(eq(List.of("新增關鍵字")), any(LocalDate.class));
+    }
+
+    @Test
+    void targetedCatchUpFetchesOnlyMissingGoogleTrendsKeyword() {
+        HeatSource source = enabledSource(HeatSourceCode.GOOGLE_TRENDS);
+        TrendKeyword missing = enabledKeyword(1L, "新增關鍵字");
+        TrendKeyword completed = enabledKeyword(2L, "已有資料");
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        GoogleTrendsHeatSourceAdapter adapter = mock(GoogleTrendsHeatSourceAdapter.class);
+        when(keywords.findAllById(List.of(1L, 2L))).thenReturn(List.of(missing, completed));
+        when(readings.existsByKeywordIdAndSourceSourceCodeAndReadingDate(
+                        eq(2L), eq(HeatSourceCode.GOOGLE_TRENDS), any(LocalDate.class)))
+                .thenReturn(true);
+        when(adapter.fetch(anyList(), any(LocalDate.class))).thenReturn(List.of());
+        GoogleTrendsHeatIngestJob job = new GoogleTrendsHeatIngestJob(
+                keywords, sourceRepository(source), readings, adapter);
+
+        job.runForKeywordIds(List.of(1L, 2L), LocalDate.of(2026, 9, 23));
+
+        verify(adapter).fetch(eq(List.of("新增關鍵字")), any(LocalDate.class));
+    }
+
     private static void assertSourceSwitch(Class<?> jobType, String propertyName) {
         ConditionalOnProperty condition = jobType.getAnnotation(ConditionalOnProperty.class);
         assertEquals(propertyName, condition.name()[0]);
@@ -123,5 +166,9 @@ class HeatSourceIngestJobTest {
 
     private static TrendKeyword enabledKeyword() {
         return TrendKeyword.builder().keyword("agent5").enabled(true).build();
+    }
+
+    private static TrendKeyword enabledKeyword(Long id, String keyword) {
+        return TrendKeyword.builder().id(id).keyword(keyword).enabled(true).build();
     }
 }

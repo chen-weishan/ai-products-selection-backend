@@ -28,6 +28,18 @@ public interface HeatCompositeDailyRepository
 
     long countByStatDateAndKeywordEnabledTrue(LocalDate statDate);
 
+    @Query(value = """
+            select keyword.id
+            from trend_keyword keyword
+            left join heat_composite_daily composite
+              on composite.keyword_id = keyword.id
+             and composite.stat_date = :statDate
+            where keyword.enabled = true
+              and composite.keyword_id is null
+            order by keyword.id
+            """, nativeQuery = true)
+    List<Long> findEnabledKeywordIdsMissingStatDate(@Param("statDate") LocalDate statDate);
+
     List<HeatCompositeDaily> findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
             Long keywordId, LocalDate from, LocalDate to);
 

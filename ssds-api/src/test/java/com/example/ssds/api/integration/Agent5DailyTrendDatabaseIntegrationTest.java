@@ -79,6 +79,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -679,6 +680,26 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                 () -> assertEquals(DecisionType.WATCH, unchangedDecision.getDecision()),
                 () -> assertFalse(unchangedDecision.isFollowedAi()),
                 () -> assertEquals("人工維持觀察", unchangedDecision.getReason()));
+    }
+
+    @Test
+    void findsOnlyEnabledKeywordsMissingTheRequestedDailyComposite() {
+        LocalDate businessDate = LocalDate.of(2031, 1, 2);
+        TrendKeyword missing = keywords.saveAndFlush(
+                TrendKeyword.builder().keyword("補跑缺漏關鍵字").enabled(true).build());
+        TrendKeyword completed = keywords.saveAndFlush(
+                TrendKeyword.builder().keyword("補跑完成關鍵字").enabled(true).build());
+        TrendKeyword disabled = keywords.saveAndFlush(
+                TrendKeyword.builder().keyword("補跑停用關鍵字").enabled(false).build());
+        saveComposite(completed, businessDate, "50.00", HeatStage.PLATEAU);
+        composites.flush();
+
+        List<Long> result = composites.findEnabledKeywordIdsMissingStatDate(businessDate);
+
+        assertAll(
+                () -> assertTrue(result.contains(missing.getId())),
+                () -> assertFalse(result.contains(completed.getId())),
+                () -> assertFalse(result.contains(disabled.getId())));
     }
 
     private HeatSource saveSource(

@@ -49,6 +49,9 @@ public interface HeatReadingRepository extends JpaRepository<HeatReading, Long> 
     boolean existsBySourceSourceCodeAndReadingDateBetween(
             HeatSourceCode sourceCode, LocalDate from, LocalDate to);
 
+    boolean existsByKeywordIdAndSourceSourceCodeAndReadingDate(
+            Long keywordId, HeatSourceCode sourceCode, LocalDate readingDate);
+
     /** 某日某來源的全部讀值，供「同來源內百分位化」批次計算（§5.3.2）。 */
     List<HeatReading> findBySourceIdAndReadingDate(Long sourceId, LocalDate readingDate);
 }

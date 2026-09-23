@@ -13,6 +13,7 @@ import com.example.ssds.ingest.Threads.ThreadsHeatSourceAdapter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,22 @@ public class ThreadsHeatIngestJob {
     @Scheduled(cron = "${ssds.ingest.threads.cron:0 0 3 * * *}", zone = "Asia/Taipei")
     @Transactional
     public void run() {
+        ingest(trendKeywordRepository.findByEnabledTrue(), LocalDate.now(TAIPEI));
+    }
+
+    /** 啟動補跑只查指定且今日尚無 Threads 讀值的啟用關鍵字。 */
+    @Transactional
+    public void runForKeywordIds(Collection<Long> keywordIds, LocalDate today) {
+        List<TrendKeyword> keywords = trendKeywordRepository.findAllById(keywordIds).stream()
+                .filter(TrendKeyword::isEnabled)
+                .filter(keyword -> !heatReadingRepository
+                        .existsByKeywordIdAndSourceSourceCodeAndReadingDate(
+                                keyword.getId(), HeatSourceCode.THREADS, today))
+                .toList();
+        ingest(keywords, today);
+    }
+
+    private void ingest(List<TrendKeyword> keywords, LocalDate today) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.THREADS).orElse(null);
         if (source == null) {
             log.warn("heat_source 尚未註冊 THREADS 這筆，略過採集。");
@@ -67,13 +84,11 @@ public class ThreadsHeatIngestJob {
             return;
         }
 
-        List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
         if (keywords.isEmpty()) {
-            log.info("沒有啟用中的關鍵字，略過 Threads 採集。");
+            log.info("沒有需要採集的啟用關鍵字，略過 Threads 採集。");
             return;
         }
 
-        LocalDate today = LocalDate.now(TAIPEI);
         List<String> keywordTexts = keywords.stream().map(TrendKeyword::getKeyword).toList();
 
         List<HeatDataPoint> points;

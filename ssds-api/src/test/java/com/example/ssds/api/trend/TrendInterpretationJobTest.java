@@ -43,6 +43,33 @@ class TrendInterpretationJobTest {
     }
 
     @Test
+    void catchUpScopeDoesNotEvaluateExistingKeywords() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        TrendInterpretationRepository interpretationRepository = mock(TrendInterpretationRepository.class);
+        AiTaskService taskService = mock(AiTaskService.class);
+        TrendKeyword added = TrendKeyword.builder()
+                .id(30L).keyword("新增關鍵字").enabled(true).build();
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        when(keywordRepository.findAllById(List.of(30L))).thenReturn(List.of(added));
+        when(compositeRepository.findFirstByKeywordIdOrderByStatDateDesc(30L))
+                .thenReturn(Optional.of(HeatCompositeDaily.builder()
+                        .keyword(added).stage(HeatStage.RISING)
+                        .statDate(businessDate)
+                        .slope30d(new BigDecimal("0.20")).build()));
+        when(interpretationRepository.findByKeywordIdAndCurrentTrue(30L))
+                .thenReturn(Optional.empty());
+
+        new TrendInterpretationJob(keywordRepository, compositeRepository,
+                interpretationRepository, taskService, new ObjectMapper())
+                .enqueueSignificantKeywords(businessDate, List.of(30L));
+
+        verify(keywordRepository, never()).findByEnabledTrue();
+        verify(compositeRepository, never()).findFirstByKeywordIdOrderByStatDateDesc(31L);
+        verify(taskService).createScheduledTrendInterpretation(List.of(30L));
+    }
+
+    @Test
     void enqueuesOnlyKeywordCrossingSlopeBucket() throws Exception {
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
