@@ -2,10 +2,14 @@ package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.AdapterType;
 import com.example.ssds.core.domain.HeatSourceCode;
+import com.example.ssds.core.domain.HeatSourceGranularity;
 import com.example.ssds.core.domain.SourceAvailability;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import lombok.*;
 
 /**
@@ -23,6 +27,17 @@ import lombok.*;
 @Table(name = "heat_source")
 public class HeatSource {
 
+    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
+
+    /** §FR-14-2 可用性判定：額度用量達此比例（未達 100%）即視為 DEGRADED。 */
+    private static final BigDecimal DEGRADED_QUOTA_RATIO = new BigDecimal("0.8");
+
+    /** §FR-14-2 可用性判定：最後採集資料落後超過這麼多天即視為 DEGRADED。 */
+    private static final long STALE_AFTER_DAYS = 2;
+
+    /** §FR-14-2 可用性判定：連續探測失敗達此次數即視為 UNAVAILABLE。 */
+    private static final int UNAVAILABLE_AFTER_CONSECUTIVE_FAILURES = 2;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -34,6 +49,15 @@ public class HeatSource {
     @Enumerated(EnumType.STRING)
     @Column(name = "adapter_type", nullable = false, length = 32)
     private AdapterType adapterType;
+
+    /**
+     * 資料粒度（§7.2.3 V17 裁決）：關鍵字級（THREADS／GOOGLE_TRENDS／MANUAL）寫
+     * {@code heat_reading.keyword_id}，品類級（INSTAGRAM）寫 {@code category_id}。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    @Builder.Default
+    private HeatSourceGranularity granularity = HeatSourceGranularity.KEYWORD;
 
     /** §5.3.2 合成權重。 */
     @Column(name = "composite_weight", nullable = false, precision = 4, scale = 3)
@@ -56,6 +80,15 @@ public class HeatSource {
     @Column(name = "last_fetched_at")
     private Instant lastFetchedAt;
 
+    /** 每 15 分鐘健康檢查排程最後一次探測此來源的時間（§FR-14-2）。 */
+    @Column(name = "last_probed_at")
+    private Instant lastProbedAt;
+
+    /** 連續探測失敗次數；探測成功即歸零（§FR-14-2 UNAVAILABLE 判定用）。 */
+    @Column(name = "consecutive_probe_failures", nullable = false)
+    @Builder.Default
+    private short consecutiveProbeFailures = 0;
+
     @Column(nullable = false)
     @Builder.Default
     private boolean enabled = true;
@@ -67,5 +100,49 @@ public class HeatSource {
      */
     public boolean contributesToComposite() {
         return enabled && availability != SourceAvailability.UNAVAILABLE;
+    }
+
+    /**
+     * 套用一次健康檢查探測結果，依 §FR-14-2 表格判定三態並寫回
+     * {@link #availability}／{@link #lastProbedAt}／{@link #consecutiveProbeFailures}。
+     *
+     * <p>判定優先序（由重到輕，符合規格書表格的字面意思——UNAVAILABLE 的兩個條件
+     * 本身就比 DEGRADED 嚴重，先判先贏）：
+     * <ol>
+     *   <li><b>UNAVAILABLE</b>：連續 2 次探測失敗，或當日額度用量 = 100%</li>
+     *   <li><b>DEGRADED</b>：探測失敗未達 2 次、或探測成功但額度用量 ≥ 80%、
+     *       或最後一次採集的資料日期落後 > 2 日</li>
+     *   <li><b>AVAILABLE</b>：以上皆非</li>
+     * </ol>
+     *
+     * <p>「探測失敗未達 2 次」歸入 DEGRADED 而非 AVAILABLE 是本次補實作的判斷：
+     * 規格書表格只明列 AVAILABLE／DEGRADED／UNAVAILABLE 各自的<b>已列出</b>條件，
+     * 沒有交代單次失敗（尚未達 UNAVAILABLE 門檻）算哪一態；把「探測本身失敗」
+     * 視為健康度下降的訊號，歸入 DEGRADED 比直接判 AVAILABLE 合理，但非規格書
+     * 原文明文——待與規格書作者確認。
+     *
+     * @param probeSuccess 本次探測是否成功（連線／回應正常）
+     * @param today        評估用的「今天」（Asia/Taipei），供資料落後天數判定
+     */
+    public void applyProbeResult(boolean probeSuccess, LocalDate today) {
+        consecutiveProbeFailures = probeSuccess
+                ? 0
+                : (short) (consecutiveProbeFailures + 1);
+        lastProbedAt = Instant.now();
+
+        boolean quotaFull = quotaLimit != null && quotaLimit > 0 && quotaUsed >= quotaLimit;
+        boolean quotaHigh = quotaLimit != null && quotaLimit > 0
+                && BigDecimal.valueOf(quotaUsed)
+                        .compareTo(BigDecimal.valueOf(quotaLimit).multiply(DEGRADED_QUOTA_RATIO)) >= 0;
+        boolean stale = lastFetchedAt != null
+                && ChronoUnit.DAYS.between(lastFetchedAt.atZone(TAIPEI).toLocalDate(), today) > STALE_AFTER_DAYS;
+
+        if (consecutiveProbeFailures >= UNAVAILABLE_AFTER_CONSECUTIVE_FAILURES || quotaFull) {
+            availability = SourceAvailability.UNAVAILABLE;
+        } else if (!probeSuccess || quotaHigh || stale) {
+            availability = SourceAvailability.DEGRADED;
+        } else {
+            availability = SourceAvailability.AVAILABLE;
+        }
     }
 }

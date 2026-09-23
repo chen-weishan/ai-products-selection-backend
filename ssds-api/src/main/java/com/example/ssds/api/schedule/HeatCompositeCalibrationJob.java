@@ -1,5 +1,7 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.product.service.ProductScoringBatchResult;
+import com.example.ssds.api.product.service.ProductScoringBatchService;
 import com.example.ssds.infra.dao.HeatReadingPercentileDao;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
@@ -30,6 +32,15 @@ import org.springframework.stereotype.Component;
  * 補上「合成計算」這一層——真正每天有新讀值可合成，還要等其餘來源的 ingest
  * 一併補齊。cron 之後應該改成「晚於全部來源當天 ingest 完成」的時間，
  * 目前先用一個合理預設。
+ *
+ * <p><b>AC-14-5</b>：規格書明講「於下一次每日熱度合成生效，並觸發該次合成後的
+ * 全量重新評分」——這件事先前完全沒有串接（{@code HeatSourceCommandService#update}
+ * 的註解也提到「由每日排程讀到新權重後才算數」，但排程端一直沒有真的去觸發）。
+ * 這裡選擇「每次合成跑完就觸發」而非「偵測到 composite_weight 異動才觸發」，
+ * 因為即使權重沒變，heat_reading 每天都有新值，合成結果本來就每天在變，
+ * 產品分數理應每天跟著最新熱度走；{@link ProductScoringBatchService#enqueueWeeklyBatch()}
+ * 內部本來就會排除「已有進行中 FULL_ANALYSIS 任務」的品項，所以就算每天都呼叫，
+ * 也不會跟每週一 07:00 的既有排程或彼此重疊出重複任務。
  */
 @Component
 public class HeatCompositeCalibrationJob {
@@ -40,14 +51,17 @@ public class HeatCompositeCalibrationJob {
     private final HeatReadingPercentileDao percentileDao;
     private final TrendKeywordRepository trendKeywordRepository;
     private final HeatCompositeCalibrationService calibrationService;
+    private final ProductScoringBatchService scoringBatchService;
 
     public HeatCompositeCalibrationJob(
             HeatReadingPercentileDao percentileDao,
             TrendKeywordRepository trendKeywordRepository,
-            HeatCompositeCalibrationService calibrationService) {
+            HeatCompositeCalibrationService calibrationService,
+            ProductScoringBatchService scoringBatchService) {
         this.percentileDao = percentileDao;
         this.trendKeywordRepository = trendKeywordRepository;
         this.calibrationService = calibrationService;
+        this.scoringBatchService = scoringBatchService;
     }
 
     @Scheduled(cron = "${ssds.calibration.heat-composite.cron:0 0 4 * * *}", zone = "Asia/Taipei")
@@ -74,5 +88,26 @@ public class HeatCompositeCalibrationJob {
             }
         }
         log.info("熱度合成完成：{} 個關鍵字，成功 {} 筆、無資料略過 {} 筆。", keywords.size(), computed, skipped);
+
+        triggerFullRescoring();
+    }
+
+    /**
+     * AC-14-5：合成完成後觸發一次全量重新評分。合成失敗（例外拋出）不會走到這裡，
+     * 避免用還沒算完整的熱度資料去跑評分；但合成「部分關鍵字略過」不算失敗，
+     * 仍視為當天合成已完成，照樣觸發。
+     */
+    private void triggerFullRescoring() {
+        try {
+            ProductScoringBatchResult result = scoringBatchService.enqueueWeeklyBatch();
+            log.info(
+                    "AC-14-5 熱度合成後全量重新評分已排入：taskId={}, queued={}, skippedActive={}",
+                    result.taskId(), result.queuedCount(), result.skippedActiveCount()
+            );
+        } catch (Exception e) {
+            // 評分排入失敗不應讓「今天的熱度合成」被標記失敗（兩者是各自獨立的批次），
+            // 但一定要留下明確紀錄，否則會變成第二個「靜默沒發生」的 AC-14-5。
+            log.error("AC-14-5 熱度合成後觸發全量重新評分失敗", e);
+        }
     }
 }
