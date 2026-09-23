@@ -84,14 +84,14 @@ public class FestivalController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('BUYER_LEAD','DATA_ADMIN','SYS_ADMIN')")
-    public ApiResponse<FestivalResponse> create(
+    public ApiResponse<FestivalResponse> createFestival(
             @Valid @RequestBody FestivalCreateRequest request) {
         return ApiResponse.success(festivalCommandService.create(request, LocalDate.now(BUSINESS_ZONE)));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('BUYER_LEAD','DATA_ADMIN','SYS_ADMIN')")
-    public ApiResponse<FestivalResponse> update(
+    public ApiResponse<FestivalResponse> updateFestival(
             @PathVariable Long id,
             @Valid @RequestBody FestivalUpdateRequest request) {
         return ApiResponse.success(festivalCommandService.update(id, request, LocalDate.now(BUSINESS_ZONE)));
@@ -101,7 +101,7 @@ public class FestivalController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAnyRole('BUYER_LEAD','DATA_ADMIN','SYS_ADMIN')")
-    public void delete(@PathVariable Long id) {
+    public void deleteFestival(@PathVariable Long id) {
         festivalCommandService.delete(id);
     }
 }
