@@ -35,7 +35,7 @@ public class ProductReviewFileController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
-    public ApiResponse<ProductReviewFileUploadResponse> upload(
+    public ApiResponse<ProductReviewFileUploadResponse> uploadReviewFile(
             @PathVariable(name = "productId") Long productId,
             @RequestPart(name = "file") MultipartFile file
     ) {

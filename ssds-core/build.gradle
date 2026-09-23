@@ -6,6 +6,8 @@ dependencies {
 	// 需要 @Component / @Service 等註解，但不要整個 web 或 jpa
 	implementation 'org.springframework:spring-context'
 	implementation libs.jackson.databind
+	// 農曆→國曆換算（FR-17 AC-17-1）。選型理由見 progress.md
+	implementation libs.icu4j
 
 	testImplementation libs.test.spring.boot
 
