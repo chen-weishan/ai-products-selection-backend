@@ -34,6 +34,19 @@ public class TrendInterpreterResponseParserTest {
                 () -> parser.parse(validJson().replace("56", "42"), input()));
     }
 
+    @Test
+    void acceptsEveryCompleteRuleTuple() {
+        assertEquals(
+                new TrendInterpreterOutput(HeatStage.RISING, 4, 56),
+                parser.parse("{\"stage\":\"RISING\",\"stageWeeks\":4,\"estimatedLifespanDays\":56}", input()));
+        assertEquals(
+                new TrendInterpreterOutput(HeatStage.PLATEAU, 1, 42),
+                parser.parse("{\"stage\":\"PLATEAU\",\"stageWeeks\":1,\"estimatedLifespanDays\":42}", input()));
+        assertEquals(
+                new TrendInterpreterOutput(HeatStage.DECLINING, 1, 17),
+                parser.parse("{\"stage\":\"DECLINING\",\"stageWeeks\":1,\"estimatedLifespanDays\":17}", input()));
+    }
+
     public static TrendInterpreterInput input() {
         LocalDate latest = LocalDate.of(2026, 8, 26);
         return new TrendInterpreterInput(

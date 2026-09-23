@@ -26,6 +26,8 @@ public interface HeatCompositeDailyRepository
 
     Optional<HeatCompositeDaily> findFirstByKeywordIdOrderByStatDateDesc(Long keywordId);
 
+    long countByStatDateAndKeywordEnabledTrue(LocalDate statDate);
+
     List<HeatCompositeDaily> findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
             Long keywordId, LocalDate from, LocalDate to);
 

@@ -89,16 +89,20 @@ public class HeatCompositeCalibrationService {
         HeatCompositeDaily row = heatCompositeDailyRepository
                 .findByKeywordIdAndStatDate(keywordId, date)
                 .orElseGet(() -> HeatCompositeDaily.builder().keyword(keyword).statDate(date).build());
+        // 同日補跑仍刷新量測欄位，但不能抹除已完成的 Agent 5 判讀。
+        boolean preserveAgentOverride = row.getStageSource() == HeatValueSource.AGENT
+                && row.getLifespanSource() == HeatValueSource.AGENT;
 
         row.setCompositeValue(heatT);
         row.setSlope7d(slope7d);
         row.setSlope30d(slope30d);
-        row.setStage(stage);
-        row.setStageWeeks(stageWeeks);
-        row.setEstimatedLifespanDays(lifespanDays);
-        // 每日基準層永遠由 §5.8 規則式重算；AI 覆寫只屬於解讀層，不可污染基準來源。
-        row.setStageSource(HeatValueSource.RULE);
-        row.setLifespanSource(HeatValueSource.RULE);
+        if (!preserveAgentOverride) {
+            row.setStage(stage);
+            row.setStageWeeks(stageWeeks);
+            row.setEstimatedLifespanDays(lifespanDays);
+            row.setStageSource(HeatValueSource.RULE);
+            row.setLifespanSource(HeatValueSource.RULE);
+        }
         row.setAppliedWeights(writeWeightsJson(appliedWeights));
         row.setDivergenceFlag(divergenceFlag);
         // TODO(volume floor)：§5.3.2 提過這個欄位，但現有規格片段沒留下門檻數字，

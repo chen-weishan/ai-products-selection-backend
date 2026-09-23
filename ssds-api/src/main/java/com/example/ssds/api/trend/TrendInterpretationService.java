@@ -14,7 +14,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.*;
 import java.time.*;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.slf4j.*;
@@ -187,16 +186,18 @@ public class TrendInterpretationService {
             List<HeatCompositeDaily> composites, LocalDate latestDate, HeatStage candidate) {
         List<HeatCompositeDaily> prior = composites.stream()
                 .filter(value -> value.getStatDate().isBefore(latestDate))
-                .sorted(Comparator.comparing(HeatCompositeDaily::getStatDate))
+                .sorted(Comparator.comparing(HeatCompositeDaily::getStatDate).reversed())
                 .toList();
-        if (prior.isEmpty() || prior.getLast().getStage() != candidate) return 1;
-        LocalDate started = prior.getLast().getStatDate();
-        for (int index = prior.size() - 2; index >= 0; index--) {
-            HeatCompositeDaily value = prior.get(index);
-            if (value.getStage() != candidate) break;
-            started = value.getStatDate();
+        int continuousDays = 1;
+        LocalDate expectedDate = latestDate.minusDays(1);
+        for (HeatCompositeDaily value : prior) {
+            if (!expectedDate.equals(value.getStatDate()) || value.getStage() != candidate) {
+                break;
+            }
+            continuousDays++;
+            expectedDate = expectedDate.minusDays(1);
         }
-        return Math.max(1, Math.toIntExact(ChronoUnit.DAYS.between(started, latestDate) / 7 + 1));
+        return HeatTrendCalculator.stageWeeksFromContinuousDays(continuousDays);
     }
 
     private static int lifespan(HeatStage stage, int stageWeeks) {

@@ -25,11 +25,13 @@ import com.example.ssds.ai.access.common.AiExecutionWarningContext;
 import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.ai.access.trackb.SourcingConnectorQuotaExceededException;
 import com.example.ssds.ai.budget.DailyAiBudget;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -595,6 +597,42 @@ class AiTaskWorkerTest {
         verify(trendService).interpret(31L, true);
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void trendBudgetExhaustionMarksItemSkippedQuota() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        TrendInterpretationService trendService = mock(TrendInterpretationService.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(31L).keyword("抹茶").build();
+        AiTask task = AiTask.builder()
+                .id(710L)
+                .taskType(AiTaskType.TREND_INTERPRET)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder().id(711L).task(task).keyword(keyword).build();
+        when(taskRepository.findById(710L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(710L)).thenReturn(List.of(item));
+        when(trendService.interpret(31L, false)).thenThrow(new AiBudgetExceededException(
+                AiTaskType.BudgetPool.TRACK_A,
+                OffsetDateTime.parse("2026-09-23T00:00:00+08:00")));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository,
+                itemRepository,
+                mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class),
+                mock(ProductInsightService.class),
+                mock(RecommendationService.class),
+                trendService);
+
+        worker.run(new AiTaskCreatedEvent(710L, false));
+
+        assertEquals(TaskItemStatus.SKIPPED_QUOTA, item.getStatus());
+        assertEquals(TaskStatus.FAILED, task.getStatus());
+        assertEquals(0, task.getSuccessCount());
+        assertEquals(1, task.getFailCount());
+        verify(trendService).interpret(31L, false);
     }
 
     @Test

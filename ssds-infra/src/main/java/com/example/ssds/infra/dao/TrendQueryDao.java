@@ -66,6 +66,8 @@ public class TrendQueryDao {
                            stage                   AS stage,
                            stage_weeks             AS stageWeeks,
                            estimated_lifespan_days AS estimatedLifespanDays,
+                           stage_source            AS stageSource,
+                           lifespan_source         AS lifespanSource,
                            applied_weights::text   AS appliedWeights,
                            divergence_flag         AS divergenceFlag
                     FROM heat_composite_daily

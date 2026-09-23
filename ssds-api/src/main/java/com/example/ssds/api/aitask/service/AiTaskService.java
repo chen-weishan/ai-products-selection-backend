@@ -188,10 +188,19 @@ public class AiTaskService {
     @Transactional
     public Optional<AiTaskResponse> createScheduledTrendInterpretation(List<Long> keywordIds) {
         if (keywordIds == null || keywordIds.isEmpty()) return Optional.empty();
+        List<Long> distinctIds = keywordIds.stream().distinct().toList();
+        Set<Long> activeKeywordIds = itemRepository.findKeywordIdsInActiveTasks(
+                new LinkedHashSet<>(distinctIds),
+                AiTaskType.TREND_INTERPRET,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING));
+        List<Long> pendingIds = distinctIds.stream()
+                .filter(keywordId -> !activeKeywordIds.contains(keywordId))
+                .toList();
+        if (pendingIds.isEmpty()) return Optional.empty();
         CreateAiTaskRequest request = new CreateAiTaskRequest(
                 AiTaskType.TREND_INTERPRET,
                 List.of(),
-                keywordIds,
+                pendingIds,
                 List.of(),
                 new CreateAiTaskRequest.Options(false));
         return Optional.of(createKeywordTask(request, AiTaskType.BudgetPool.TRACK_A));

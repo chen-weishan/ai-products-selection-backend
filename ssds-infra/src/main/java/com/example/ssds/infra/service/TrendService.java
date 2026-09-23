@@ -47,7 +47,7 @@ public class TrendService {
                 .orElseThrow(() -> new IllegalArgumentException("找不到關鍵字 id=" + keywordId));
 
         LocalDate to = LocalDate.now();
-        LocalDate from = to.minusDays(parseRangeDays(range));
+        LocalDate from = to.minusDays(parseRangeDays(range) - 1L);
         List<TrendPointRow> points = trendQueryDao.findTrendRange(List.of(keywordId), from, to);
 
         TrendCompositeSnapshot snapshot = trendQueryDao.findLatestComposite(keywordId)
@@ -68,6 +68,8 @@ public class TrendService {
         response.setStage(snapshot.stage());
         response.setStageWeeks(snapshot.stageWeeks());
         response.setEstimatedLifespanDays(snapshot.estimatedLifespanDays());
+        response.setStageSource(snapshot.stageSource());
+        response.setLifespanSource(snapshot.lifespanSource());
         response.setDivergenceFlag(snapshot.divergenceFlag());
 
         response.setSourceDetails(sources.stream()
@@ -75,6 +77,7 @@ public class TrendService {
                         s.sourceCode(),
                         s.percentileWithinSource(),
                         s.availability(),
+                        s.granularity(),
                         "CATEGORY".equals(s.granularity()),
                         appliedWeights.getOrDefault(s.sourceCode(), BigDecimal.ZERO),
                         s.slope7d(),

@@ -7,10 +7,10 @@ import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.*;
+import java.time.LocalDate;
 import java.util.*;
 import org.slf4j.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /** 每日合成完成後，把首次分析或跨階段／斜率分箱的關鍵字送入 AI task。 */
@@ -39,12 +39,20 @@ public class TrendInterpretationJob {
         this.objectMapper = objectMapper;
     }
 
-    @Scheduled(cron = "${ai.trend.schedule-cron:0 10 6 * * *}", zone = "Asia/Taipei")
-    public void enqueueSignificantKeywords() {
-        List<Long> keywordIds = keywordRepository.findByEnabledTrue().stream()
-                .filter(this::isSignificant)
-                .map(TrendKeyword::getId)
-                .toList();
+    public void enqueueSignificantKeywords(LocalDate businessDate) {
+        List<Long> keywordIds = new ArrayList<>();
+        for (TrendKeyword keyword : keywordRepository.findByEnabledTrue()) {
+            try {
+                if (isSignificant(keyword, businessDate)) {
+                    keywordIds.add(keyword.getId());
+                }
+            } catch (Exception exception) {
+                log.warn(
+                        "TrendInterpreter significance check failed; skipping keywordId={}",
+                        keyword.getId(),
+                        exception);
+            }
+        }
         for (int from = 0; from < keywordIds.size(); from += TASK_CHUNK_SIZE) {
             List<Long> chunk = keywordIds.subList(
                     from, Math.min(from + TASK_CHUNK_SIZE, keywordIds.size()));
@@ -53,10 +61,10 @@ public class TrendInterpretationJob {
         log.info("TrendInterpreter daily enqueue completed: keywordCount={}", keywordIds.size());
     }
 
-    private boolean isSignificant(TrendKeyword keyword) {
+    private boolean isSignificant(TrendKeyword keyword, LocalDate businessDate) {
         Optional<HeatCompositeDaily> latest = compositeRepository
                 .findFirstByKeywordIdOrderByStatDateDesc(keyword.getId());
-        if (latest.isEmpty()) return false;
+        if (latest.isEmpty() || !businessDate.equals(latest.get().getStatDate())) return false;
         Optional<TrendInterpretation> previous = interpretationRepository
                 .findByKeywordIdAndCurrentTrue(keyword.getId());
         if (previous.isEmpty()) return true;
