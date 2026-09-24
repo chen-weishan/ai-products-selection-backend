@@ -3,19 +3,17 @@ package com.example.ssds.api.product.service;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeRequest;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeResponse;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.ProductStatus;
-import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.AiTask;
-import com.example.ssds.infra.entity.AiTaskItem;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.AiTaskItemRepository;
-import com.example.ssds.infra.repository.AiTaskRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import java.util.LinkedHashSet;
@@ -34,19 +32,19 @@ public class ProductAnalysisQueueService {
 
     private final ProductRepository productRepository;
     private final AppUserRepository appUserRepository;
-    private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository taskItemRepository;
+    private final AiTaskService taskService;
 
     public ProductAnalysisQueueService(
             ProductRepository productRepository,
             AppUserRepository appUserRepository,
-            AiTaskRepository taskRepository,
-            AiTaskItemRepository taskItemRepository
+            AiTaskItemRepository taskItemRepository,
+            AiTaskService taskService
     ) {
         this.productRepository = productRepository;
         this.appUserRepository = appUserRepository;
-        this.taskRepository = taskRepository;
         this.taskItemRepository = taskItemRepository;
+        this.taskService = taskService;
     }
 
     public ProductBatchAnalyzeResponse enqueue(
@@ -98,24 +96,12 @@ public class ProductAnalysisQueueService {
                         ErrorCode.UNAUTHORIZED,
                         "登入使用者不存在或已失效"
                 ));
-        AiTask task = taskRepository.saveAndFlush(AiTask.builder()
-                .taskType(AiTaskType.FULL_ANALYSIS)
-                .status(TaskStatus.PENDING)
-                .totalCount(products.size())
-                .createdBy(actor)
-                .build());
-        taskItemRepository.saveAllAndFlush(products.stream()
-                .map(product -> AiTaskItem.builder()
-                        .task(task)
-                        .product(product)
-                        .status(TaskItemStatus.PENDING)
-                        .build())
-                .toList());
+        AiTaskResponse task = taskService.enqueueFullAnalysis(products, actor, false);
 
         return new ProductBatchAnalyzeResponse(
-                task.getId(),
-                task.getTaskType(),
-                task.getStatus(),
+                task.taskId(),
+                task.taskType(),
+                task.status(),
                 products.size(),
                 requestedIds
         );

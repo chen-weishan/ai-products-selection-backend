@@ -15,6 +15,8 @@ import org.springframework.stereotype.Repository;
 public interface ItemFestivalAffinityRepository
         extends JpaRepository<ItemFestivalAffinity, ItemFestivalAffinityId> {
 
+    List<ItemFestivalAffinity> findByProductId(Long productId);
+
     List<ItemFestivalAffinity> findByProductIdOrderByFestivalCodeAsc(Long productId);
 
     Optional<ItemFestivalAffinity> findByProductIdAndFestivalCode(

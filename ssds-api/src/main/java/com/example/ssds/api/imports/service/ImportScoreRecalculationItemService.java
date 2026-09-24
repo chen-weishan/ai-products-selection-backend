@@ -1,7 +1,7 @@
 package com.example.ssds.api.imports.service;
 
-import com.example.ssds.api.product.service.InsufficientDataException;
-import com.example.ssds.api.product.service.ProductFallbackScoringService;
+import com.example.ssds.api.scoring.ScoreExecutionService;
+import com.example.ssds.api.scoring.ScoreExecutionService.EvaluationCommand;
 import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SceneType;
@@ -23,12 +23,12 @@ public class ImportScoreRecalculationItemService {
 
     private final ProductRepository productRepository;
     private final SceneClassificationLogRepository sceneRepository;
-    private final ProductFallbackScoringService scoringService;
+    private final ScoreExecutionService scoringService;
 
     public ImportScoreRecalculationItemService(
             ProductRepository productRepository,
             SceneClassificationLogRepository sceneRepository,
-            ProductFallbackScoringService scoringService
+            ScoreExecutionService scoringService
     ) {
         this.productRepository = productRepository;
         this.sceneRepository = sceneRepository;
@@ -47,21 +47,36 @@ public class ImportScoreRecalculationItemService {
         }
 
         var latestScene = sceneRepository.findFirstByProductIdOrderByCreatedAtDesc(productId);
-        SceneType scene = latestScene.map(SceneClassificationLog::getFinalSceneType)
-                .orElse(SceneType.REPLENISHMENT);
-        try {
-            scoringService.score(product, scene);
-            product.setLastScoringStatus(LastScoringStatus.SCORED);
-            product.setLastScoringAttemptedAt(Instant.now());
-            if (latestScene.isEmpty()) {
-                sceneRepository.save(defaultSceneLog(product));
-            }
-            return Result.SCORED;
-        } catch (InsufficientDataException error) {
-            product.setLastScoringStatus(LastScoringStatus.INSUFFICIENT_DATA);
-            product.setLastScoringAttemptedAt(Instant.now());
+        Instant attemptedAt = Instant.now();
+        var evaluation = scoringService.evaluate(command(productId, latestScene.orElse(null), attemptedAt));
+        product.setLastScoringStatus(evaluation.status());
+        product.setLastScoringAttemptedAt(attemptedAt);
+        if (evaluation.status() == LastScoringStatus.INSUFFICIENT_DATA) {
             return Result.INSUFFICIENT_DATA;
         }
+        if (latestScene.isEmpty()) {
+            sceneRepository.save(defaultSceneLog(product));
+        }
+        return Result.SCORED;
+    }
+
+    private EvaluationCommand command(
+            Long productId, SceneClassificationLog scene, Instant attemptedAt
+    ) {
+        if (scene == null) {
+            return new EvaluationCommand(
+                    productId, SceneType.REPLENISHMENT, null, null, true, attemptedAt);
+        }
+        SceneType alternative = scene.isFallbackApplied() || scene.isOverridden()
+                ? null
+                : scene.getAlternativeSceneType();
+        return new EvaluationCommand(
+                productId,
+                scene.getFinalSceneType(),
+                alternative,
+                scene.isOverridden() ? null : scene.getAiConfidence(),
+                scene.isFallbackApplied() && !scene.isOverridden(),
+                attemptedAt);
     }
 
     private SceneClassificationLog defaultSceneLog(Product product) {

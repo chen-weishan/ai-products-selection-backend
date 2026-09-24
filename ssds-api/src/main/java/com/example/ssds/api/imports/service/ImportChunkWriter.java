@@ -116,10 +116,12 @@ public class ImportChunkWriter {
 
         int conflicts = Math.max(0, chunk.validRows() - inserted);
         if (conflicts != 0) throw new DuplicateImportRowException();
-        var affected=new java.util.HashSet<Long>();
-        chunk.sales.stream().map(BulkImportDao.SalesRow::productId).filter(java.util.Objects::nonNull).forEach(affected::add);
-        chunk.reviews.stream().map(BulkImportDao.ReviewRow::productId).forEach(affected::add);
-        integrity.enqueue(batchId,affected);
+        // 銷售匯入沿用 SalesImportCompletedEvent 的正式批次評分，不再建立 V31 任務；
+        // V31 只排入沒有其他正式重算入口的評論等匯入資料，避免同一品項被評分兩次。
+        var recalculationProductIds=new java.util.HashSet<Long>();
+        chunk.reviews.stream().map(BulkImportDao.ReviewRow::productId)
+                .filter(java.util.Objects::nonNull).forEach(recalculationProductIds::add);
+        integrity.enqueue(batchId,recalculationProductIds);
         if(!chunk.audiences.isEmpty()) integrity.enqueueAudience(batchId,
                 chunk.audiences.stream().map(BulkImportDao.AudienceRow::audienceCode).toList(),
                 chunk.audienceMixes.stream().map(ImportWriteChunk.AudienceMixInput::categoryId).toList());

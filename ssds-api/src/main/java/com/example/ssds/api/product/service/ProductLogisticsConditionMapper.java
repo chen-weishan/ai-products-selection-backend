@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /** 在 API 的物流條件集合與既有 VARCHAR 欄位之間轉換。 */
-final class ProductLogisticsConditionMapper {
+public final class ProductLogisticsConditionMapper {
 
     private ProductLogisticsConditionMapper() {
     }
@@ -24,7 +24,7 @@ final class ProductLogisticsConditionMapper {
                 .collect(Collectors.joining(","));
     }
 
-    static Set<LogisticsCondition> decode(String storedValue) {
+    public static Set<LogisticsCondition> decode(String storedValue) {
         if (storedValue == null || storedValue.isBlank()) {
             return Set.of();
         }

@@ -92,7 +92,7 @@ public class GoogleTrendsClient {
     if (points == null) {
         return List.of();
     }
-    
+
     return points.stream()
             .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
             .filter(p -> !Boolean.TRUE.equals(p.isPartial()))

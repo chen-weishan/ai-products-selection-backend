@@ -64,14 +64,44 @@ public interface ProductRepository
         @Query("""
                         select p from Product p
                         where p.trackType = :trackType
+                          and p.deletedAt is null
                           and p.status not in (com.example.ssds.core.domain.ProductStatus.DRAFT,
                                                com.example.ssds.core.domain.ProductStatus.REJECTED)
                         """)
+        @EntityGraph(attributePaths = {"category", "category.parent", "keywords"})
         List<Product> findScorable(@Param("trackType") TrackType trackType);
+
+        /** FULL_ANALYSIS 優先序：從未分析者優先，其餘依最近一次分析時間由舊到新。 */
+        @Query("""
+                        select p from Product p
+                        where p.trackType = com.example.ssds.core.domain.TrackType.A
+                          and p.deletedAt is null
+                          and p.status in :statuses
+                        order by
+                          case when (select count(l.id) from SceneClassificationLog l where l.product.id = p.id) = 0
+                               then 0 else 1 end,
+                          (select max(l2.createdAt) from SceneClassificationLog l2 where l2.product.id = p.id) asc,
+                          p.id asc
+                        """)
+        List<Product> findFullAnalysisCandidates(@Param("statuses") List<ProductStatus> statuses);
 
         /** B 軌尋源清單（FR-16-2）。 */
         @EntityGraph(attributePaths = { "category" })
         List<Product> findByTrackTypeAndSourcingStatus(TrackType trackType, SourcingStatus sourcingStatus);
+
+        /** FR-16-2：探索以（關鍵字、品類）冪等重用未刪除且尚未成案的 B 軌品項。 */
+        @EntityGraph(attributePaths = { "category", "keywords" })
+        @Query("""
+                        select distinct p from Product p join p.keywords k
+                        where k.id = :keywordId
+                          and p.category.id = :categoryId
+                          and p.trackType = com.example.ssds.core.domain.TrackType.B
+                          and p.sourcingStatus <> com.example.ssds.core.domain.SourcingStatus.PROMOTED
+                          and p.deletedAt is null
+                        """)
+        Optional<Product> findReusableSourcingProduct(
+                        @Param("keywordId") Long keywordId,
+                        @Param("categoryId") Long categoryId);
 
         /** §5.3.1 判斷同品類樣本數是否達 10 筆，未達則退回全品類百分位並降低信心度。 */
         long countByCategoryIdAndTrackType(Long categoryId, TrackType trackType);

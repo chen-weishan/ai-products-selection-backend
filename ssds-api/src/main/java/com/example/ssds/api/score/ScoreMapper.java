@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
 import com.example.ssds.api.score.dto.ScoreDetailResponse;
 import com.example.ssds.api.score.dto.ScoreFactorBarResponse;
+import com.example.ssds.api.score.dto.ScoreFactorDetailResponse;
 import com.example.ssds.api.score.dto.ScoreHistoryPointResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
 import com.example.ssds.core.domain.Grade;
@@ -157,7 +158,8 @@ public final class ScoreMapper {
                 factor.getFactorCode(),
                 factor.getPenaltyValue(),
                 factor.getRawValue(),
-                factor.isDataAvailable());
+                factor.isDataAvailable(),
+                factor.getNote());
     }
 
     /**
@@ -175,10 +177,10 @@ public final class ScoreMapper {
      */
     public static ScoreDetailResponse toDetail(ProductScore score, List<ScoreFactor> factors) {
 
-        List<ScoreFactorBarResponse> bonusFactors = factors.stream()
+        List<ScoreFactorDetailResponse> bonusFactors = factors.stream()
                 .filter(f -> !f.isPenalty())
                 .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
-                .map(ScoreMapper::toBar)
+                .map(ScoreMapper::toDetailFactor)
                 .toList();
 
         List<ScoreDeductionsResponse.DeductionItem> penaltyFactors = factors.stream()
@@ -207,6 +209,20 @@ public final class ScoreMapper {
                 score.isRiskSuppressed(),
                 bonusFactors,
                 penaltyFactors);
+    }
+
+    private static ScoreFactorDetailResponse toDetailFactor(ScoreFactor factor) {
+        return new ScoreFactorDetailResponse(
+                factor.getFactorCode(),
+                factor.getRawValue(),
+                factor.getNormalizedValue(),
+                factor.getWeight(),
+                factor.contribution(),
+                factor.isDataAvailable(),
+                factor.isImputed(),
+                factor.getDrivingKeywordId(),
+                factor.getDrivingFestivalId(),
+                factor.getNote());
     }
 
     /**

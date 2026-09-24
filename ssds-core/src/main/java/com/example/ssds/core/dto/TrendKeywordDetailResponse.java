@@ -33,6 +33,10 @@ public class TrendKeywordDetailResponse {
     /** 預估剩餘壽命（天）；資料不足時可能為 null。 */
     private Integer estimatedLifespanDays;
 
+    /** 階段與壽命目前由 RULE 基準或 AGENT 覆寫產生。 */
+    private String stageSource;
+    private String lifespanSource;
+
     /** 7 日與 30 日斜率背離（可能見頂），AC-06-4。 */
     private boolean divergenceFlag;
 
@@ -66,6 +70,12 @@ public class TrendKeywordDetailResponse {
     public Integer getEstimatedLifespanDays() { return estimatedLifespanDays; }
     public void setEstimatedLifespanDays(Integer estimatedLifespanDays) { this.estimatedLifespanDays = estimatedLifespanDays; }
 
+    public String getStageSource() { return stageSource; }
+    public void setStageSource(String stageSource) { this.stageSource = stageSource; }
+
+    public String getLifespanSource() { return lifespanSource; }
+    public void setLifespanSource(String lifespanSource) { this.lifespanSource = lifespanSource; }
+
     public boolean isDivergenceFlag() { return divergenceFlag; }
     public void setDivergenceFlag(boolean divergenceFlag) { this.divergenceFlag = divergenceFlag; }
 
@@ -80,6 +90,7 @@ public class TrendKeywordDetailResponse {
         private String sourceName;
         private BigDecimal percentile;
         private String status;          // AVAILABLE / DEGRADED / UNAVAILABLE
+        private String granularity;     // KEYWORD / CATEGORY
         private boolean categoryLevel;  // AC-06-5：品類級來源標示
         private BigDecimal appliedWeight; // 本次實際採用的合成權重（來自 applied_weights JSON）
         private BigDecimal slope7d;
@@ -88,11 +99,12 @@ public class TrendKeywordDetailResponse {
         public SourceDetail() {}
 
         public SourceDetail(String sourceName, BigDecimal percentile, String status,
-                             boolean categoryLevel, BigDecimal appliedWeight,
+                             String granularity, boolean categoryLevel, BigDecimal appliedWeight,
                              BigDecimal slope7d, BigDecimal slope30d) {
             this.sourceName = sourceName;
             this.percentile = percentile;
             this.status = status;
+            this.granularity = granularity;
             this.categoryLevel = categoryLevel;
             this.appliedWeight = appliedWeight;
             this.slope7d = slope7d;
@@ -107,6 +119,9 @@ public class TrendKeywordDetailResponse {
 
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
+
+        public String getGranularity() { return granularity; }
+        public void setGranularity(String granularity) { this.granularity = granularity; }
 
         public boolean isCategoryLevel() { return categoryLevel; }
         public void setCategoryLevel(boolean categoryLevel) { this.categoryLevel = categoryLevel; }

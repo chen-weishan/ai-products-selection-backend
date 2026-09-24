@@ -28,6 +28,16 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
         @EntityGraph(attributePaths = { "factors", "weightVersion" })
         Optional<ProductScore> findFirstByProductIdOrderByCalculatedAtDesc(Long productId);
 
+        /** Agent 輸入只採用最新的主情境現行分數，避免把次要情境扣分重複送出。 */
+        @EntityGraph(attributePaths = { "factors" })
+        Optional<ProductScore> findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(
+                        Long productId);
+
+        /** FULL_ANALYSIS 下游 Agent 以本次明確 scoreId 取值，避免併發重評時讀到別次快照。 */
+        @EntityGraph(attributePaths = { "factors" })
+        @Query("select s from ProductScore s where s.id = :scoreId")
+        Optional<ProductScore> findWithFactorsById(@Param("scoreId") Long scoreId);
+
         List<ProductScore> findByProductIdOrderByCalculatedAtDesc(Long productId);
 
         @Query("""
@@ -67,6 +77,23 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
             @Param("categoryId") Long categoryId,
             Pageable pageable);
 
+    /** FR-04 排行分級分布卡；統計範圍是完整篩選結果，不受分頁影響。 */
+    @Query("""
+            select s.grade, count(s)
+            from ProductScore s
+            join s.product p
+            where s.period = :period
+              and s.active = true
+              and p.deletedAt is null
+              and (:scene is null or s.sceneType = :scene)
+              and (:categoryId is null or p.category.id = :categoryId)
+            group by s.grade
+            """)
+    List<Object[]> countRankingByGrade(
+            @Param("period") String period,
+            @Param("scene") SceneType scene,
+            @Param("categoryId") Long categoryId);
+
     /**
      * FR-04 單一品項的分數快照（規格書 §8.2 GET /products/{id}/scores）。
      *
@@ -99,6 +126,14 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
             @Param("productId") Long productId,
             @Param("period") String period,
             @Param("scene") SceneType scene);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update ProductScore s set s.active = false
+            where s.product.id = :productId and s.period = :period and s.active = true
+            """)
+    int deactivateCurrentScores(
+            @Param("productId") Long productId, @Param("period") String period);
 
     @Modifying
     @Query("""

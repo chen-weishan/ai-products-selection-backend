@@ -21,6 +21,36 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 class ImportCorrectionTest {
+    @Test
+    void salesUseCompletionEventWhileOnlyReviewsEnterTheV31Queue() {
+        var dao = mock(BulkImportDao.class);
+        var batches = mock(ImportBatchRepository.class);
+        var manager = mock(PlatformTransactionManager.class);
+        var integrity = mock(com.example.ssds.infra.dao.ImportIntegrityDao.class);
+        when(manager.getTransaction(any())).thenAnswer(i -> new SimpleTransactionStatus());
+        when(batches.findByIdForUpdate(1L)).thenReturn(Optional.of(
+                ImportBatch.builder().id(1L).status(TaskStatus.RUNNING).build()));
+        when(dao.batchInsertSalesRecords(anyList())).thenReturn(1);
+        when(dao.batchInsertReviews(anyList())).thenReturn(1);
+
+        var chunk = new ImportWriteChunk();
+        chunk.sales.add(new BulkImportDao.SalesRow(
+                LocalDate.now(), 10L, "銷售品項", 1L, BigDecimal.TEN, 1, null, null, 1L));
+        chunk.reviews.add(new BulkImportDao.ReviewRow(
+                20L, "SHOP", "評論", BigDecimal.ONE, LocalDate.now(), "hash"));
+
+        var limits = mock(ImportDatabaseLimits.class);
+        when(limits.seconds()).thenReturn(30);
+        var writer = new ImportChunkWriter(
+                dao, batches, mock(AudienceSegmentRepository.class), manager, limits);
+        org.springframework.test.util.ReflectionTestUtils.setField(writer, "integrity", integrity);
+
+        writer.write(1L, chunk);
+
+        verify(integrity).enqueue(eq(1L), argThat(ids ->
+                ids.size() == 1 && ids.contains(20L) && !ids.contains(10L)));
+    }
+
     @Test void unprocessedDownloadUsesCommittedRowsAndNeverIncludesProcessedData() throws Exception {
         var batches=mock(ImportBatchRepository.class);
         var batch=ImportBatch.builder().id(1L).dataType(ImportDataType.SALES).fileName("sales.csv")

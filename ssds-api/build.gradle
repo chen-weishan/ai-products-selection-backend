@@ -28,7 +28,7 @@ dependencies {
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
-	// FR09 資料庫交易測試沿用專案既有的 Testcontainers 與 PostgreSQL 版本。
+	// FR09 與正式評分的資料庫整合測試沿用既有 Testcontainers，使用獨立 PostgreSQL，不連接共享 Supabase。
 	testImplementation "org.testcontainers:postgresql:1.20.4"
 	testImplementation "org.testcontainers:junit-jupiter:1.20.4"
 }
