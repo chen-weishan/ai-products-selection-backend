@@ -95,7 +95,8 @@ public class GoogleTrendsClient {
 
     return points.stream()
             .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
-            .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
+            // 不再過濾 isPartial：最近幾天未統計完的點也寫入，以取得最新日期。
+            // 這些點的值之後可能被 Google 修正，重跑回補會以 upsert 覆蓋。
             .map(p -> new DailyInterest(LocalDate.parse(p.date().substring(0, 10)), p.value()))
             .toList();
 }
