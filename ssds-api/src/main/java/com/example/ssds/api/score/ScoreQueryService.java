@@ -16,7 +16,9 @@ import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
 import com.example.ssds.api.score.dto.ScoreDetailResponse;
 import com.example.ssds.api.score.dto.ScoreHistoryPointResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
+import com.example.ssds.api.score.dto.RankingSummaryResponse;
 import com.example.ssds.core.domain.FactorCode;
+import com.example.ssds.core.domain.Grade;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.ProductScore;
 import com.example.ssds.infra.entity.ScoreFactor;
@@ -66,6 +68,21 @@ public class ScoreQueryService {
                 page.getContent().stream().map(s -> s.getProduct().getId()).distinct().toList());
 
         return ScoreMapper.toRankingRows(page, factorsByScoreId, overriddenProductIds);
+    }
+
+    @Transactional(readOnly = true)
+    public RankingSummaryResponse rankingSummary(
+            String period, SceneType scene, Long categoryId) {
+        Map<Grade, Long> counts = productScoreRepository
+                .countRankingByGrade(period, scene, categoryId)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Grade) row[0],
+                        row -> (Long) row[1]));
+        long gradeA = counts.getOrDefault(Grade.A, 0L);
+        long gradeB = counts.getOrDefault(Grade.B, 0L);
+        long gradeC = counts.getOrDefault(Grade.C, 0L);
+        return new RankingSummaryResponse(gradeA + gradeB + gradeC, gradeA, gradeB, gradeC);
     }
 
     @Transactional(readOnly = true)

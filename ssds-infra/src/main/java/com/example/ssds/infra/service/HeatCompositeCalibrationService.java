@@ -2,6 +2,7 @@ package com.example.ssds.infra.service;
 
 import com.example.ssds.core.domain.HeatStage;
 import com.example.ssds.core.domain.HeatTrendCalculator;
+import com.example.ssds.core.domain.HeatValueSource;
 import com.example.ssds.infra.dao.TrendQueryDao;
 import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.TrendKeyword;
@@ -11,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -89,13 +91,9 @@ public class HeatCompositeCalibrationService {
         BigDecimal slope7d = HeatTrendCalculator.slope(heatT, anchorT7);
         BigDecimal slope30d = HeatTrendCalculator.slope(heatT, anchorT30);
 
-        Optional<HeatCompositeDaily> previousDay =
-                heatCompositeDailyRepository.findByKeywordIdAndStatDate(keywordId, date.minusDays(1));
-        HeatStage previousStage = previousDay.map(HeatCompositeDaily::getStage).orElse(null);
-        short previousStageWeeks = previousDay.map(HeatCompositeDaily::getStageWeeks).orElse((short) 0);
-
-        HeatStage stage = HeatTrendCalculator.determineStage(slope7d, previousStage);
-        short stageWeeks = HeatTrendCalculator.nextStageWeeks(previousStage, previousStageWeeks, stage);
+        HeatStage stage = HeatTrendCalculator.determineStage(slope30d);
+        int continuousDays = countContinuousStageDays(keywordId, date, stage);
+        short stageWeeks = HeatTrendCalculator.stageWeeksFromContinuousDays(continuousDays);
         int lifespanDays = HeatTrendCalculator.estimateLifespanDays(stage, stageWeeks);
         boolean divergenceFlag = HeatTrendCalculator.detectDivergence(slope7d, slope30d);
 
@@ -104,13 +102,20 @@ public class HeatCompositeCalibrationService {
         HeatCompositeDaily row = heatCompositeDailyRepository
                 .findByKeywordIdAndStatDate(keywordId, date)
                 .orElseGet(() -> HeatCompositeDaily.builder().keyword(keyword).statDate(date).build());
+        // 同日補跑仍刷新量測欄位，但不能抹除已完成的 Agent 5 判讀。
+        boolean preserveAgentOverride = row.getStageSource() == HeatValueSource.AGENT
+                && row.getLifespanSource() == HeatValueSource.AGENT;
 
         row.setCompositeValue(heatT);
         row.setSlope7d(slope7d);
         row.setSlope30d(slope30d);
-        row.setStage(stage);
-        row.setStageWeeks(stageWeeks);
-        row.setEstimatedLifespanDays(lifespanDays);
+        if (!preserveAgentOverride) {
+            row.setStage(stage);
+            row.setStageWeeks(stageWeeks);
+            row.setEstimatedLifespanDays(lifespanDays);
+            row.setStageSource(HeatValueSource.RULE);
+            row.setLifespanSource(HeatValueSource.RULE);
+        }
         row.setAppliedWeights(writeWeightsJson(appliedWeights));
         row.setDivergenceFlag(divergenceFlag);
         // TODO(volume floor)：§5.3.2 提過這個欄位，但現有規格片段沒留下門檻數字，
@@ -118,6 +123,21 @@ public class HeatCompositeCalibrationService {
         row.setVolumeBelowFloor(false);
 
         return Optional.of(heatCompositeDailyRepository.save(row));
+    }
+
+    private int countContinuousStageDays(Long keywordId, LocalDate date, HeatStage currentStage) {
+        List<HeatCompositeDaily> history =
+                heatCompositeDailyRepository.findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(keywordId, date);
+        int continuousDays = 1;
+        LocalDate expectedDate = date.minusDays(1);
+        for (HeatCompositeDaily row : history) {
+            if (!expectedDate.equals(row.getStatDate()) || row.getStage() != currentStage) {
+                break;
+            }
+            continuousDays++;
+            expectedDate = expectedDate.minusDays(1);
+        }
+        return continuousDays;
     }
 
     private static String writeWeightsJson(Map<String, BigDecimal> weights) {

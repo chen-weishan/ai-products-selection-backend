@@ -1,5 +1,4 @@
-// ssds-ingest：熱度來源 Adapter（規格書 §3.3 / FR-14）
-// 每個外部來源一個 adapter 子套件，統一實作 HeatSourceAdapter 介面。
+// ssds-ingest：外部資料 Adapter 與 FR-09 CSV／XLSX 匯入解析。
 dependencies {
 	implementation project(':ssds-core')
 
@@ -8,6 +7,8 @@ dependencies {
 	implementation libs.jackson.databind
 	implementation libs.spring.boot.starter.cache
 	implementation libs.caffeine
+	implementation libs.commons.csv
+	implementation libs.apache.poi.ooxml
 
 	testImplementation libs.test.spring.boot
 }

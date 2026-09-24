@@ -2,16 +2,13 @@ package com.example.ssds.api.product.service;
 
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
 import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
-import com.example.ssds.api.product.dto.FestivalOptionResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
 import com.example.ssds.infra.entity.Category;
-import com.example.ssds.infra.entity.FestivalCalendar;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
-import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.util.Comparator;
@@ -32,20 +29,17 @@ public class ProductReferenceQueryService {
 
     private final CategoryRepository categoryRepository;
     private final ProductMarginStatisticsDao marginStatisticsDao;
-    private final FestivalCalendarRepository festivalCalendarRepository;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
 
     public ProductReferenceQueryService(
             CategoryRepository categoryRepository,
             ProductMarginStatisticsDao marginStatisticsDao,
-            FestivalCalendarRepository festivalCalendarRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository
     ) {
         this.categoryRepository = categoryRepository;
         this.marginStatisticsDao = marginStatisticsDao;
-        this.festivalCalendarRepository = festivalCalendarRepository;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
     }
@@ -60,9 +54,9 @@ public class ProductReferenceQueryService {
     public List<SupplierResponse> getSuppliers(String keyword) {
         String normalizedKeyword = normalize(keyword);
         List<Supplier> suppliers = normalizedKeyword == null
-                ? supplierRepository.findAllByOrderByNameAsc()
+                ? supplierRepository.findAllByDeletedAtIsNullOrderByNameAsc()
                 : supplierRepository
-                        .findByNameContainingIgnoreCaseOrderByNameAsc(
+                        .findByNameContainingIgnoreCaseAndDeletedAtIsNullOrderByNameAsc(
                                 normalizedKeyword
                         );
 
@@ -101,17 +95,7 @@ public class ProductReferenceQueryService {
                 .toList();
     }
 
-    public List<FestivalOptionResponse> getFestivals() {
-        LinkedHashMap<String, String> festivals = new LinkedHashMap<>();
-        festivalCalendarRepository.findAllByOrderByFestivalNameAscYearDesc()
-                .forEach(festival -> festivals.putIfAbsent(
-                        festival.getFestivalCode(),
-                        festival.getFestivalName()
-                ));
-        return festivals.entrySet().stream()
-                .map(entry -> new FestivalOptionResponse(entry.getKey(), entry.getValue()))
-                .toList();
-    }
+    // getFestivals() 已移至 FestivalQueryService（FR-17），連同端點一起收攏。
 
     public CategoryMarginMedianResponse getCategoryMarginMedian(Long categoryId) {
         var statistics = marginStatisticsDao.findCategoryStatistics(categoryId)
@@ -129,6 +113,7 @@ public class ProductReferenceQueryService {
 
     private CategoryTreeResponse toCategoryTreeResponse(Category category) {
         List<CategoryTreeResponse> children = category.getChildren().stream()
+                .filter(child -> !child.isDeleted())
                 .sorted(CATEGORY_ORDER)
                 .map(child -> new CategoryTreeResponse(
                         child.getId(),

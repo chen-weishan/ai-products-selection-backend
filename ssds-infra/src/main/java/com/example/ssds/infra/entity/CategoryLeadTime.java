@@ -1,6 +1,7 @@
 package com.example.ssds.infra.entity;
 
 import jakarta.persistence.*;
+import java.time.OffsetDateTime;
 import lombok.*;
 
 /**
@@ -32,4 +33,16 @@ public class CategoryLeadTime {
 
     @Column(name = "lead_time_days", nullable = false)
     private int leadTimeDays;
+
+    /**
+     * 最後調整前置期的使用者（V17 新增，§FR-16-1）。
+     *
+     * <p>存 id 而非 {@code AppUser} 關聯：這張表是主檔設定，讀取時不需要使用者全物件。
+     */
+    @Column(name = "updated_by")
+    private Long updatedBy;
+
+    /** 最後調整時間。DB 有 {@code DEFAULT now()}，但 JPA 的 INSERT 會帶上本欄，故由程式填。 */
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 }

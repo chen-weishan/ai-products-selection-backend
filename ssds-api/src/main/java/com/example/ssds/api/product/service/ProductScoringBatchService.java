@@ -2,18 +2,16 @@ package com.example.ssds.api.product.service;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.product.dto.ProductBatchQueueScoreResponse;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.ProductStatus;
-import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.AiTask;
-import com.example.ssds.infra.entity.AiTaskItem;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.AiTaskItemRepository;
-import com.example.ssds.infra.repository.AiTaskRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import java.util.ArrayList;
@@ -36,19 +34,19 @@ public class ProductScoringBatchService {
 
     private final ProductRepository productRepository;
     private final AppUserRepository appUserRepository;
-    private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository taskItemRepository;
+    private final AiTaskService taskService;
 
     public ProductScoringBatchService(
             ProductRepository productRepository,
             AppUserRepository appUserRepository,
-            AiTaskRepository taskRepository,
-            AiTaskItemRepository taskItemRepository
+            AiTaskItemRepository taskItemRepository,
+            AiTaskService taskService
     ) {
         this.productRepository = productRepository;
         this.appUserRepository = appUserRepository;
-        this.taskRepository = taskRepository;
         this.taskItemRepository = taskItemRepository;
+        this.taskService = taskService;
     }
 
     public ProductScoringBatchResult enqueueWeeklyBatch() {
@@ -72,10 +70,10 @@ public class ProductScoringBatchService {
             return new ProductScoringBatchResult(null, 0, activeIds.size());
         }
 
-        AiTask task = createTask(queuedProducts, null);
+        AiTaskResponse task = createTask(queuedProducts, null);
 
         return new ProductScoringBatchResult(
-                task.getId(),
+                task.taskId(),
                 queuedProducts.size(),
                 activeIds.size()
         );
@@ -126,7 +124,7 @@ public class ProductScoringBatchService {
                 .map(productsById::get)
                 .toList();
 
-        AiTask task = null;
+        AiTaskResponse task = null;
         if (!queuedProducts.isEmpty()) {
             AppUser actor = appUserRepository.findByEmail(actorEmail)
                     .orElseThrow(() -> new BusinessException(
@@ -142,8 +140,8 @@ public class ProductScoringBatchService {
         addWarning(warnings, activeIds, "品項已在評分佇列中，已略過：");
 
         return new ProductBatchQueueScoreResponse(
-                task == null ? null : task.getId(),
-                task == null ? null : task.getStatus(),
+                task == null ? null : task.taskId(),
+                task == null ? null : task.status(),
                 requestedIds.size(),
                 queuedIds.size(),
                 queuedIds,
@@ -160,21 +158,8 @@ public class ProductScoringBatchService {
                 && product.getStatus() != ProductStatus.REJECTED;
     }
 
-    private AiTask createTask(List<Product> products, AppUser actor) {
-        AiTask task = taskRepository.saveAndFlush(AiTask.builder()
-                .taskType(AiTaskType.FULL_ANALYSIS)
-                .status(TaskStatus.PENDING)
-                .totalCount(products.size())
-                .createdBy(actor)
-                .build());
-        taskItemRepository.saveAllAndFlush(products.stream()
-                .map(product -> AiTaskItem.builder()
-                        .task(task)
-                        .product(product)
-                        .status(TaskItemStatus.PENDING)
-                        .build())
-                .toList());
-        return task;
+    private AiTaskResponse createTask(List<Product> products, AppUser actor) {
+        return taskService.enqueueFullAnalysis(products, actor, false);
     }
 
     private void addWarning(List<String> warnings, Set<Long> ids, String prefix) {

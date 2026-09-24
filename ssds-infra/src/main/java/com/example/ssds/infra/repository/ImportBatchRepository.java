@@ -7,6 +7,9 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** 匯入批次（規格書 §7.2 import_batch、FR-09）。 */
@@ -18,4 +21,8 @@ public interface ImportBatchRepository extends JpaRepository<ImportBatch, Long> 
     List<ImportBatch> findByDataTypeOrderByCreatedAtDesc(ImportDataType dataType);
 
     List<ImportBatch> findByStatus(TaskStatus status);
+
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from ImportBatch b where b.id = :id")
+    java.util.Optional<ImportBatch> findByIdForUpdate(@Param("id") Long id);
 }

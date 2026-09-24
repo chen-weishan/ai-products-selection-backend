@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -94,27 +93,9 @@ public class GoogleTrendsClient {
         return List.of();
     }
 
-    // 比照 fetchLatestInterest 的 fallback 邏輯：近期幾天 Apify 常把資料標成
-    // isPartial=true（Google 尚未跑完當天的統計，之後數值可能還會微調）。
-    // 若整批只丟掉 partial，backfill 永遠補不到最近幾天的資料。
-    // 這裡改成：優先採用非 partial 的值；同一天若只有 partial 值可用，
-    // 也先寫入——之後排程或重跑 backfill 拿到非 partial 值時，
-    // backfillKeyword() 是用 findByKeywordIdAndSourceIdAndReadingDate 找既有
-    // 記錄再更新，會自然覆蓋掉這裡先寫入的 partial 值，不需要額外處理。
-    Map<LocalDate, TrendPoint> byDate = new LinkedHashMap<>();
-    for (TrendPoint p : points) {
-        if (p.value() == null || p.date() == null || p.date().length() < 10) {
-            continue;
-        }
-        LocalDate date = LocalDate.parse(p.date().substring(0, 10));
-        TrendPoint existing = byDate.get(date);
-        boolean existingIsPartial = existing != null && Boolean.TRUE.equals(existing.isPartial());
-        if (existing == null || (existingIsPartial && !Boolean.TRUE.equals(p.isPartial()))) {
-            byDate.put(date, p);
-        }
-    }
-
-    return byDate.values().stream()
+    return points.stream()
+            .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
+            .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
             .map(p -> new DailyInterest(LocalDate.parse(p.date().substring(0, 10)), p.value()))
             .toList();
 }

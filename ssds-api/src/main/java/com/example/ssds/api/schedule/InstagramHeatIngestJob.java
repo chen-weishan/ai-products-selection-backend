@@ -17,6 +17,7 @@ import java.time.ZoneId;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>目前單一 app 實例執行，未加分散式鎖（見 {@code SchedulingConfig} 說明）。
  */
 @Component
+@ConditionalOnProperty(
+        name = "ssds.ingest.instagram.enabled",
+        havingValue = "true",
+        matchIfMissing = true)
 public class InstagramHeatIngestJob {
 
     private static final Logger log = LoggerFactory.getLogger(InstagramHeatIngestJob.class);

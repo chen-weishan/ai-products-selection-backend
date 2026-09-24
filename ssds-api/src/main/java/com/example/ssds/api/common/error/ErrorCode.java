@@ -30,6 +30,7 @@ public enum ErrorCode {
      */
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "此路徑不支援該 HTTP 方法"),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "資料已存在，不可重複建立"),
+    RESOURCE_IN_USE(HttpStatus.CONFLICT, "資料仍被其他資料使用，無法刪除"),
     INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "目前狀態不允許此操作"),
     WEIGHT_SUM_INVALID(HttpStatus.CONFLICT, "情境權重組加總必須等於 1.000"),
     AI_SCHEMA_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "AI 回應格式不正確，請稍後再試"),

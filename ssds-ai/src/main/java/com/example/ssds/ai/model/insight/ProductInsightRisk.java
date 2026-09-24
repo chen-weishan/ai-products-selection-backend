@@ -1,0 +1,11 @@
+package com.example.ssds.ai.model.insight;
+
+import com.example.ssds.core.domain.InsightRiskType;
+import com.example.ssds.core.domain.Severity;
+
+public record ProductInsightRisk(
+        String text,
+        int supportCount,
+        InsightRiskType type,
+        Severity severity,
+        boolean countedInPenalty) {}

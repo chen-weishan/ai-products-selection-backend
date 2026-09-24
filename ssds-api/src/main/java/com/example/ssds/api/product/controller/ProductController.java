@@ -139,7 +139,7 @@ public class ProductController {
     /** FR-03-2 新增品項。 */
     @PostMapping
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
-    public ApiResponse<ProductCreateResponse> create(
+    public ApiResponse<ProductCreateResponse> createProduct(
             @Valid @RequestBody ProductCreateRequest request,
             Authentication authentication
     ) {
@@ -151,12 +151,13 @@ public class ProductController {
     /** FR-03-2 修改品項基本資料；草稿送出時才轉為待評估。 */
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
-    public ApiResponse<ProductUpdateResponse> update(
+    public ApiResponse<ProductUpdateResponse> updateProduct(
             @PathVariable(name = "id") Long id,
-            @Valid @RequestBody ProductUpdateRequest request
+            @Valid @RequestBody ProductUpdateRequest request,
+            Authentication authentication
     ) {
         return ApiResponse.success(
-                productCommandService.update(id, request)
+                productCommandService.update(id, request, authentication.getName())
         );
     }
 

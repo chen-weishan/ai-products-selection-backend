@@ -49,4 +49,6 @@ out/
 ### VS Code ###
 .vscode/
 .DS_Store
+# Runtime uploaded files
+**/uploads/
 *.log

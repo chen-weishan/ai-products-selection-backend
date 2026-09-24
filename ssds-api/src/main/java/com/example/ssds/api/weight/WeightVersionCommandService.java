@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ import com.example.ssds.api.weight.dto.ApproveWeightVersionRequest;
 import com.example.ssds.api.weight.dto.CreateWeightVersionRequest;
 import com.example.ssds.api.weight.dto.SceneGroupRequest;
 import com.example.ssds.api.weight.dto.WeightVersionDetailResponse;
+import com.example.ssds.api.scoring.WeightVersionActivatedEvent;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.core.domain.WeightVersionStatus;
@@ -39,6 +41,7 @@ public class WeightVersionCommandService {
     private final WeightVersionRepository weightVersionRepository;
     private final GradeThresholdRepository gradeThresholdRepository;
     private final AppUserRepository appUserRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * FR-01 之前的暫時核准人：seed 的 lead@ssds.dev（BUYER_LEAD，AC-08-3 指定的角色）。
@@ -123,7 +126,7 @@ public class WeightVersionCommandService {
         version.setApprovedAt(Instant.now());
         // TODO FR-01 後改為 SecurityContextHolder 取得的當前登入者
         version.setApprovedBy(appUserRepository.getReferenceById(TEMP_APPROVER_ID));
-        // TODO Phase 2：觸發全量重新評分（§FR-08 版本管理表「生效切換」）
+        // 交易提交後由 WeightVersionActivatedEvent 觸發純計算全量重評。
 
         // 目前一筆 current 都沒有時，上面的鎖沒有列可鎖，兩個交易會同時通過。
         // 真正的守門員是 partial unique index uk_weight_version_current；
@@ -135,6 +138,8 @@ public class WeightVersionCommandService {
             throw new BusinessException(ErrorCode.INVALID_STATE_TRANSITION,
                     "另一個版本正在同時核准生效，請重新整理後再試");
         }
+
+        eventPublisher.publishEvent(new WeightVersionActivatedEvent(version.getId()));
 
         List<GradeThreshold> thresholds = gradeThresholdRepository.findByVersionId(id);
         return WeightVersionMapper.toDetail(version, thresholds);

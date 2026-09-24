@@ -18,16 +18,19 @@ dependencies {
 	implementation libs.springdoc.openapi
     implementation 'com.auth0:java-jwt:4.4.0'
 	implementation libs.commons.csv
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    implementation libs.jjwt.api
 
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+	runtimeOnly libs.jjwt.impl
+	runtimeOnly libs.jjwt.jackson
 
 	testImplementation libs.test.webmvc
 	testImplementation libs.test.security
 	testImplementation libs.test.validation
+	// FR09 與正式評分的資料庫整合測試沿用既有 Testcontainers，使用獨立 PostgreSQL，不連接共享 Supabase。
+	testImplementation "org.testcontainers:postgresql:1.20.4"
+	testImplementation "org.testcontainers:junit-jupiter:1.20.4"
 }
 
 // 產出的 jar 名稱固定為 ssds.jar，部署腳本不必跟著版本號改
