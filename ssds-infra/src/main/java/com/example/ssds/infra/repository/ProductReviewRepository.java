@@ -20,6 +20,10 @@ public interface ProductReviewRepository extends JpaRepository<ProductReview, Lo
     /** 匯入前的重複檢查；正常路徑靠唯一鍵擋，這支供預覽階段提示使用者。 */
     boolean existsByProductIdAndContentHash(Long productId, String contentHash);
 
+    /** FR-09 預覽只取去重鍵投影，一次查詢取代每列 exists 的 N+1。 */
+    @Query("select r.product.id, r.contentHash from ProductReview r")
+    List<Object[]> findAllImportDedupKeys();
+
     /** 尚未分析的評論，供 ReviewRiskAgent 批次處理。 */
     @Query("select r from ProductReview r where r.analysis is null and r.product.id = :productId")
     List<ProductReview> findUnanalyzedByProduct(@Param("productId") Long productId);

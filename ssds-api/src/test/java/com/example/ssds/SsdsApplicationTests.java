@@ -1,6 +1,6 @@
 package com.example.ssds;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,10 +26,7 @@ import org.springframework.web.context.WebApplicationContext;
  * <p>在這裡寫死 false 而不是靠環境變數：測試不該因為「誰在跑」而有不同的副作用。
  * 要套用 migration 就明確地跑 migration，不要順便。
  */
-@SpringBootTest(properties = {
-        "ssds.security.dev.username=test-user",
-        "ssds.security.dev.password=test-password"
-})
+@SpringBootTest
 @TestPropertySource(properties = "spring.flyway.enabled=false")
 class SsdsApplicationTests {
     @Autowired
@@ -48,16 +45,16 @@ class SsdsApplicationTests {
     void contextLoads() {}
 
     @Test
-    void apiRejectsMissingBasicAuth() throws Exception {
+    void protectedApiRejectsAnonymousUser() throws Exception {
         mockMvc.perform(get("/api/v1/ai/tasks/999999").contextPath("/api/v1"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
     }
 
     @Test
-    void validBasicAuthPassesSecurityFilter() throws Exception {
+    void authenticatedUserPassesMethodSecurity() throws Exception {
         mockMvc.perform(get("/api/v1/ai/tasks/999999")
                         .contextPath("/api/v1")
-                        .with(httpBasic("test-user", "test-password")))
+                        .with(user("test-user").roles("BUYER")))
                 .andExpect(status().isNotFound());
     }
 

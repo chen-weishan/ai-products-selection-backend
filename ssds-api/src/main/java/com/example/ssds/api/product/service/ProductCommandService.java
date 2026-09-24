@@ -445,11 +445,15 @@ public class ProductCommandService {
     }
 
     private Category findCategory(Long categoryId) {
-        return categoryRepository.findById(categoryId)
+        Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的類別：" + categoryId
                 ));
+        if (category.isDeleted()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的類別：" + categoryId);
+        }
+        return category;
     }
 
     private Supplier findSupplier(Long supplierId) {
@@ -457,11 +461,15 @@ public class ProductCommandService {
             return null;
         }
 
-        return supplierRepository.findById(supplierId)
+        Supplier supplier = supplierRepository.findById(supplierId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的供應商：" + supplierId
                 ));
+        if (supplier.isDeleted()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的供應商：" + supplierId);
+        }
+        return supplier;
     }
 
     private Set<TrendKeyword> findKeywords(Set<Long> keywordIds) {

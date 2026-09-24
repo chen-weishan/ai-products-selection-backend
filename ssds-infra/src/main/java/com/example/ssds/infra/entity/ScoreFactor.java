@@ -52,6 +52,24 @@ public class ScoreFactor {
     @Column(name = "penalty_value", precision = 4, scale = 1)
     private BigDecimal penaltyValue;
 
+    /**
+     * FESTIVAL 多節慶取最大值時，本次生效的節慶（AC-17-6，V30 新增欄位）。
+     *
+     * <p>存 id 而非 {@code FestivalCalendar} 關聯：{@code score_factor} 是分數快照，
+     * 寫入量大且讀取時不需要節慶全物件；UI 要顯示名稱時由 Service 另行查表。
+     * DB 端有 {@code ck_score_factor_driving_festival} 擋住非 FESTIVAL 列寫入此欄。
+     */
+    @Column(name = "driving_festival_id")
+    private Long drivingFestivalId;
+
+    /**
+     * TREND 多關鍵字取最大值時，本次生效的關鍵字（§5.3.3，V30 新增欄位）。
+     *
+     * <p>不屬於 FR-17，一併映射以免下一個人再動同一個檔案。
+     */
+    @Column(name = "driving_keyword_id")
+    private Long drivingKeywordId;
+
     /** 是否為缺值填補（如退回全品類百分位）。 */
     @Column(name = "is_imputed", nullable = false)
     @Builder.Default
@@ -72,14 +90,6 @@ public class ScoreFactor {
     /** 扣分命中原因摘要；不得拿來代替原始量值。 */
     @Column(length = 120)
     private String note;
-
-    /** TREND 多關鍵字取最大值後的生效關鍵字；其他因子必須為 null。 */
-    @Column(name = "driving_keyword_id")
-    private Long drivingKeywordId;
-
-    /** FESTIVAL 多節慶取最大值後的生效節慶日；其他因子必須為 null。 */
-    @Column(name = "driving_festival_id")
-    private Long drivingFestivalId;
 
     /** 本因子對加分小計的貢獻（正規化值 × 權重）；扣分列回傳 0。 */
     public BigDecimal contribution() {

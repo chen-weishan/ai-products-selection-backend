@@ -32,6 +32,11 @@ import org.springframework.stereotype.Repository;
 public interface ProductRepository
                 extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
+    /** FR-09 預覽品項匹配，一次帶出類別以避免逐列 lazy query。 */
+    @EntityGraph(attributePaths = {"category"})
+    @Query("select p from Product p")
+    List<Product> findAllWithCategory();
+
     /** 上傳圖片前鎖定品項列，避免並行請求突破最多五張限制。 */
     @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")
@@ -130,6 +135,10 @@ public interface ProductRepository
         List<Long> findProductIdsByImportBatch(@Param("batchId") Long batchId);
 
         long countByTrackType(TrackType trackType);
+
+        long countByCategoryId(Long categoryId);
+
+        long countBySupplierId(Long supplierId);
 
         /**
          * FR-02 KPI 候選品項總數（軌別），不含軟刪除品項。

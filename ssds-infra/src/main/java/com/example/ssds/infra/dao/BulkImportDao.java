@@ -134,6 +134,139 @@ public class BulkImportDao {
         return inserted;
     }
 
+    /** 去識別化客群主檔；重複代碼由驗證層列為失敗，DB 衝突時安全略過。 */
+    public record AudienceRow(
+            String audienceCode,
+            String name,
+            java.math.BigDecimal priceMin,
+            java.math.BigDecimal priceMax,
+            String note, boolean updateExisting) {
+        public AudienceRow(String code,String name,java.math.BigDecimal min,java.math.BigDecimal max,String note) {
+            this(code,name,min,max,note,false);
+        }
+    }
+
+    @Transactional
+    public int batchInsertAudiences(List<AudienceRow> rows) {
+        String sql = """
+                INSERT INTO audience_segment
+                    (audience_code, name, price_min, price_max, note)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (audience_code) DO UPDATE SET
+                    name=EXCLUDED.name, price_min=EXCLUDED.price_min, price_max=EXCLUDED.price_max, note=EXCLUDED.note
+                WHERE ? OR (audience_segment.name=EXCLUDED.name AND audience_segment.price_min=EXCLUDED.price_min
+                    AND audience_segment.price_max=EXCLUDED.price_max AND audience_segment.note IS NOT DISTINCT FROM EXCLUDED.note)
+                """;
+        return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
+            ps.setString(1, row.audienceCode());
+            ps.setString(2, row.name());
+            ps.setBigDecimal(3, row.priceMin());
+            ps.setBigDecimal(4, row.priceMax());
+            ps.setString(5, row.note());
+            ps.setBoolean(6, row.updateExisting());
+        }));
+    }
+
+    public record AudienceMixRow(
+            Long categoryId,
+            Long audienceId,
+            java.math.BigDecimal share) {}
+
+    @Transactional
+    public int batchUpsertAudienceMix(List<AudienceMixRow> rows) {
+        String sql = """
+                INSERT INTO category_audience_mix (category_id, audience_id, share)
+                VALUES (?, ?, ?)
+                ON CONFLICT (category_id, audience_id)
+                DO UPDATE SET share = EXCLUDED.share
+                """;
+        return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
+            ps.setObject(1, row.categoryId());
+            ps.setObject(2, row.audienceId());
+            ps.setBigDecimal(3, row.share());
+        }));
+    }
+
+    /** PRODUCT 匯入一律建立草稿；後續採購狀態轉換仍由 FR-03 負責。 */
+    public record ProductRow(
+            String name,
+            Long categoryId,
+            Long supplierId,
+            java.math.BigDecimal cost,
+            java.math.BigDecimal suggestedPrice,
+            java.math.BigDecimal marginRate,
+            Integer moq,
+            String season,
+            String trackType,
+            String logisticsCondition,
+            java.math.BigDecimal idealTempMin,
+            java.math.BigDecimal idealTempMax,
+            Integer shelfLifeDays,
+            Long createdBy) {}
+
+    @Transactional
+    public int batchInsertProducts(List<ProductRow> rows, Long batchId) {
+        String sql = """
+                WITH inserted AS (INSERT INTO product
+                    (name, category_id, supplier_id, cost, suggested_price, margin_rate,
+                     moq, season, status, track_type, logistics_condition,
+                     ideal_temp_min, ideal_temp_max, shelf_life_days, created_by,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, now(), now()) RETURNING id)
+                INSERT INTO import_recalculation_task(batch_id,product_id) SELECT ?,id FROM inserted
+                """;
+        return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
+            ps.setString(1, row.name());
+            ps.setObject(2, row.categoryId());
+            ps.setObject(3, row.supplierId());
+            ps.setBigDecimal(4, row.cost());
+            ps.setBigDecimal(5, row.suggestedPrice());
+            ps.setBigDecimal(6, row.marginRate());
+            ps.setObject(7, row.moq());
+            ps.setString(8, row.season());
+            ps.setString(9, row.trackType());
+            ps.setString(10, row.logisticsCondition());
+            ps.setBigDecimal(11, row.idealTempMin());
+            ps.setBigDecimal(12, row.idealTempMax());
+            ps.setObject(13, row.shelfLifeDays());
+            ps.setObject(14, row.createdBy());
+            ps.setObject(15, batchId);
+        }));
+    }
+
+    public record ErrorRow(
+            Long batchId,
+            int rowNumber,
+            String columnName,
+            String message,
+            String rawRow) {}
+
+    @Transactional
+    public int batchInsertImportErrors(List<ErrorRow> rows) {
+        String sql = """
+                INSERT INTO import_error
+                    (batch_id, row_number, column_name, error_message, raw_row)
+                VALUES (?, ?, ?, ?, ?)
+                """;
+        return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
+            ps.setObject(1, row.batchId());
+            ps.setInt(2, row.rowNumber());
+            ps.setString(3, row.columnName());
+            ps.setString(4, row.message());
+            ps.setString(5, row.rawRow());
+        }));
+    }
+
+    private int count(int[][] counts) {
+        int affected = 0;
+        for (int[] batch : counts) {
+            for (int result : batch) {
+                affected += result >= 0 ? result : 1;
+            }
+        }
+        return affected;
+    }
+
     /**
      * 批次寫入每日合成熱度（{@code heat_composite_daily}，v3.0 §7.2.3）。
      * 同日重跑合成時以新值覆蓋（upsert），避免任務重試就撞主鍵而整批失敗。

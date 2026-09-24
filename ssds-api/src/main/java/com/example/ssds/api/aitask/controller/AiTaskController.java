@@ -1,6 +1,8 @@
 package com.example.ssds.api.aitask.controller;
 
-import com.example.ssds.api.aitask.dto.*;
+import com.example.ssds.api.aitask.dto.AiTaskItemResponse;
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,10 +11,17 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/ai/tasks")
+@PreAuthorize("isAuthenticated()")
 @Tag(name = "AI Tasks", description = "非同步 AI 任務；SELLING_POINT 是 Product Insight（賣點與風險）的相容碼")
 public class AiTaskController {
     private final AiTaskService service;
