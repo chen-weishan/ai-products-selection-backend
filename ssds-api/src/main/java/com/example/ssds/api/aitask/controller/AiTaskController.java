@@ -2,26 +2,34 @@ package com.example.ssds.api.aitask.controller;
 
 import com.example.ssds.api.aitask.dto.AiTaskItemResponse;
 import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.dto.AiTaskSummaryResponse;
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.response.ApiResponse;
+import com.example.ssds.api.common.response.PageResponse;
+import com.example.ssds.core.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/ai/tasks")
 @PreAuthorize("isAuthenticated()")
+@Validated
 @Tag(name = "AI Tasks", description = "非同步 AI 任務；SELLING_POINT 是 Product Insight（賣點與風險）的相容碼")
 public class AiTaskController {
     private final AiTaskService service;
@@ -40,6 +48,21 @@ public class AiTaskController {
                 .body(ApiResponse.success(service.create(request)));
     }
 
+    @GetMapping
+    @Operation(summary = "分頁查詢 AI 任務", description = "依任務編號由新到舊排序，可選擇狀態篩選。")
+    public ApiResponse<PageResponse<AiTaskResponse>> list(
+            @RequestParam(required = false) TaskStatus status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ApiResponse.success(service.list(status, page, size));
+    }
+
+    @GetMapping("/summary")
+    @Operation(summary = "查詢 AI 任務摘要")
+    public ApiResponse<AiTaskSummaryResponse> summary() {
+        return ApiResponse.success(service.summary());
+    }
+
     @GetMapping("/{taskId}")
     @Operation(summary = "查詢 AI 任務進度與實際外部請求統計")
     public ApiResponse<AiTaskResponse> get(@PathVariable("taskId") Long taskId) {
@@ -50,6 +73,12 @@ public class AiTaskController {
     @Operation(summary = "查詢 AI 任務品項結果")
     public ApiResponse<List<AiTaskItemResponse>> items(@PathVariable("taskId") Long taskId) {
         return ApiResponse.success(service.items(taskId));
+    }
+
+    @PostMapping("/{taskId}/cancel")
+    @Operation(summary = "取消排隊中或執行中的 AI 任務")
+    public ApiResponse<AiTaskResponse> cancel(@PathVariable("taskId") Long taskId) {
+        return ApiResponse.success(service.cancel(taskId));
     }
 
     @PostMapping("/{taskId}/retry-failed")

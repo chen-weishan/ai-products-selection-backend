@@ -4,12 +4,16 @@ import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
 import com.example.ssds.api.aitask.dto.*;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.*;
 import com.example.ssds.infra.repository.*;
 import java.util.*;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -18,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AiTaskService {
+    private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
     private final ProductRepository productRepository;
@@ -336,6 +341,41 @@ public class AiTaskService {
     public AiTaskResponse get(Long taskId) {
         return AiTaskResponse.from(taskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的 AI 任務")));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<AiTaskResponse> list(TaskStatus status, int page, int size) {
+        PageRequest pageable = PageRequest.of(page, size);
+        return PageResponse.from((status == null
+                ? taskRepository.findAllByOrderByIdDesc(pageable)
+                : taskRepository.findByStatusOrderByIdDesc(status, pageable))
+                .map(AiTaskResponse::from));
+    }
+
+    @Transactional(readOnly = true)
+    public AiTaskSummaryResponse summary() {
+        Instant monthStart = LocalDate.now(API_ZONE)
+                .withDayOfMonth(1)
+                .atStartOfDay(API_ZONE)
+                .toInstant();
+        return new AiTaskSummaryResponse(
+                taskRepository.countByStatus(TaskStatus.RUNNING),
+                taskRepository.countByStatusAndFinishedAtGreaterThanEqual(TaskStatus.SUCCEEDED, monthStart),
+                taskRepository.countByStatusIn(List.of(TaskStatus.FAILED, TaskStatus.PARTIAL)));
+    }
+
+    @Transactional
+    public AiTaskResponse cancel(Long taskId) {
+        AiTask task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的 AI 任務"));
+        if (task.getStatus() != TaskStatus.PENDING && task.getStatus() != TaskStatus.RUNNING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION, "只有排隊中或執行中的 AI 任務可以取消");
+        }
+        task.setStatus(TaskStatus.CANCELLED);
+        task.setFinishedAt(Instant.now());
+        return AiTaskResponse.from(taskRepository.save(task));
     }
 
     @Transactional(readOnly = true)

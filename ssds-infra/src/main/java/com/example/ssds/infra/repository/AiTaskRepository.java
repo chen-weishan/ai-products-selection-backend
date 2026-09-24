@@ -21,7 +21,21 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
 
     Page<AiTask> findAllByOrderByStartedAtDesc(Pageable pageable);
 
+    Page<AiTask> findAllByOrderByIdDesc(Pageable pageable);
+
+    Page<AiTask> findByStatusOrderByIdDesc(TaskStatus status, Pageable pageable);
+
     List<AiTask> findByStatus(TaskStatus status);
+
+    long countByStatus(TaskStatus status);
+
+    long countByStatusIn(List<TaskStatus> statuses);
+
+    long countByStatusAndFinishedAtGreaterThanEqual(TaskStatus status, Instant finishedAt);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from AiTask t where t.id = :id")
+    java.util.Optional<AiTask> findByIdForUpdate(@Param("id") Long id);
 
     List<AiTask> findByTaskTypeOrderByStartedAtDesc(AiTaskType taskType);
 

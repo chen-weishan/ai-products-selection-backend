@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -210,6 +211,20 @@ public class ProductCommandService {
         boolean submittedForScoring = product.getStatus() == ProductStatus.DRAFT
                 && !saveAsDraft
                 && trackType == TrackType.A;
+        boolean scoringInputsChanged = hasScoringInputChanges(
+                product,
+                category,
+                request.cost(),
+                request.suggestedPrice(),
+                request.moq(),
+                request.season() == null ? Season.ALL : request.season(),
+                trackType,
+                ProductLogisticsConditionMapper.encode(request.logisticsConditions()),
+                request.idealTempMin(),
+                request.idealTempMax(),
+                request.shelfLifeDays(),
+                keywords
+        );
         validateDraftOperation(product, saveAsDraft);
         validateSubmission(
                 trackType,
@@ -254,14 +269,16 @@ public class ProductCommandService {
         }
 
         Product savedProduct = productRepository.saveAndFlush(product);
-        if (previousTrackType != trackType) {
+        if (scoringInputsChanged || previousTrackType != trackType) {
             productScoreRepository.deactivateAllCurrent(savedProduct.getId());
         }
         sourcingCandidateService.synchronize(savedProduct);
-        AppUser taskActor = submittedForScoring && actorEmail != null
+        boolean enqueueAnalysis = submittedForScoring
+                || (scoringInputsChanged && eligibleForFullAnalysis(savedProduct));
+        AppUser taskActor = enqueueAnalysis && actorEmail != null
                 ? findActor(actorEmail)
                 : null;
-        AiTaskResponse task = submittedForScoring
+        AiTaskResponse task = enqueueAnalysis
                 ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), taskActor, false)
                 : null;
         return new ProductUpdateResponse(
@@ -300,6 +317,12 @@ public class ProductCommandService {
         products.stream()
                 .filter(product -> product.getTrackType() == TrackType.A)
                 .forEach(product -> productScoreRepository.deactivateAllCurrent(product.getId()));
+        List<Product> analysisTargets = products.stream()
+                .filter(this::eligibleForFullAnalysis)
+                .toList();
+        if (!analysisTargets.isEmpty()) {
+            aiTaskService.enqueueFullAnalysis(analysisTargets, null, false);
+        }
         products.stream()
                 .filter(product -> product.getTrackType() == TrackType.B)
                 .forEach(sourcingCandidateService::synchronize);
@@ -419,6 +442,11 @@ public class ProductCommandService {
                 .ip(sourceIp)
                 .build());
 
+        if (targetStatus == ProductStatus.EVALUATING
+                && product.getTrackType() == TrackType.A) {
+            aiTaskService.enqueueFullAnalysis(List.of(product), actor, false);
+        }
+
         return new ProductStatusUpdateResponse(
                 productId,
                 previousStatus,
@@ -520,6 +548,53 @@ public class ProductCommandService {
             return product.getSourcingStatus();
         }
         return SourcingStatus.PENDING;
+    }
+
+    private boolean hasScoringInputChanges(
+            Product product,
+            Category category,
+            BigDecimal cost,
+            BigDecimal suggestedPrice,
+            Integer moq,
+            Season season,
+            TrackType trackType,
+            String logisticsCondition,
+            BigDecimal idealTempMin,
+            BigDecimal idealTempMax,
+            Integer shelfLifeDays,
+            Set<TrendKeyword> keywords
+    ) {
+        Set<Long> currentKeywordIds = product.getKeywords().stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toSet());
+        Set<Long> requestedKeywordIds = keywords.stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toSet());
+        return !Objects.equals(product.getCategory().getId(), category.getId())
+                || !sameDecimal(product.getCost(), cost)
+                || !sameDecimal(product.getSuggestedPrice(), suggestedPrice)
+                || !Objects.equals(product.getMoq(), moq)
+                || product.getSeason() != season
+                || product.getTrackType() != trackType
+                || !Objects.equals(product.getLogisticsCondition(), logisticsCondition)
+                || !sameDecimal(product.getIdealTempMin(), idealTempMin)
+                || !sameDecimal(product.getIdealTempMax(), idealTempMax)
+                || !Objects.equals(product.getShelfLifeDays(), shelfLifeDays)
+                || !currentKeywordIds.equals(requestedKeywordIds);
+    }
+
+    private boolean sameDecimal(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean eligibleForFullAnalysis(Product product) {
+        return product.getTrackType() == TrackType.A
+                && product.getDeletedAt() == null
+                && product.getStatus() != ProductStatus.DRAFT
+                && product.getStatus() != ProductStatus.REJECTED;
     }
 
     /**

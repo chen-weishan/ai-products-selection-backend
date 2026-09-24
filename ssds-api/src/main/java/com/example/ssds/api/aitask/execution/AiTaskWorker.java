@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -48,6 +50,7 @@ public class AiTaskWorker {
     private final FullAnalysisOrchestrator fullAnalysisOrchestrator;
     private final DailyAiBudget dailyAiBudget;
     private final int batchItemCap;
+    private final Set<Long> activeTaskIds = ConcurrentHashMap.newKeySet();
     private PureScoringBatchService pureScoringBatchService;
 
     @Autowired
@@ -155,16 +158,31 @@ public class AiTaskWorker {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void run(AiTaskCreatedEvent event) {
+        if (!activeTaskIds.add(event.taskId())) {
+            log.debug("AI task is already active; duplicate dispatch skipped: taskId={}", event.taskId());
+            return;
+        }
         try {
             execute(event);
         } catch (RuntimeException exception) {
             log.error("AI task worker interrupted unexpectedly: taskId={}", event.taskId(), exception);
             settleInterruptedTask(event.taskId(), exception);
+        } finally {
+            activeTaskIds.remove(event.taskId());
         }
+    }
+
+    public boolean isTaskActive(Long taskId) {
+        return activeTaskIds.contains(taskId);
     }
 
     private void execute(AiTaskCreatedEvent event) {
         AiTask task = taskRepository.findById(event.taskId()).orElseThrow();
+        if (task.getStatus() != TaskStatus.PENDING && task.getStatus() != TaskStatus.RUNNING) {
+            log.debug("AI task already finished; stale dispatch skipped: taskId={}, status={}",
+                    task.getId(), task.getStatus());
+            return;
+        }
         task.setStatus(TaskStatus.RUNNING);
         if (task.getStartedAt() == null) task.setStartedAt(Instant.now());
         task.setFinishedAt(null);
@@ -181,6 +199,7 @@ public class AiTaskWorker {
         int analyzedItems = successes + failures;
         boolean quotaExhausted = false;
         for (AiTaskItem item : items) {
+            if (wasCancelled(task)) return;
             Instant started = Instant.now();
             AiExecutionWarningContext.clear();
             AiBudgetExecutionContext.begin(task.getBudgetPool());
@@ -302,11 +321,13 @@ public class AiTaskWorker {
             item.setDurationMs((int) Math.min(
                     Integer.MAX_VALUE, Duration.between(started, Instant.now()).toMillis()));
             itemRepository.save(item);
+            if (wasCancelled(task)) return;
             task.setSuccessCount(successes);
             task.setFailCount(failures);
             taskRepository.save(task);
         }
 
+        if (wasCancelled(task)) return;
         task.setSuccessCount(successes);
         task.setFailCount(failures);
         task.setStatus(failures == 0 ? TaskStatus.SUCCEEDED
@@ -318,7 +339,7 @@ public class AiTaskWorker {
     private void settleInterruptedTask(Long taskId, RuntimeException cause) {
         try {
             AiTask task = taskRepository.findById(taskId).orElse(null);
-            if (task == null) return;
+            if (task == null || task.getStatus() == TaskStatus.CANCELLED) return;
             List<AiTaskItem> items = itemRepository.findByTaskId(taskId);
             String message = safeText("任務執行中斷：" + safeMessage(cause));
             for (AiTaskItem item : items) {
@@ -341,6 +362,17 @@ public class AiTaskWorker {
             AiBudgetExecutionContext.clear();
             AiExecutionWarningContext.clear();
         }
+    }
+
+    private boolean wasCancelled(AiTask task) {
+        return taskRepository.findById(task.getId())
+                .filter(current -> current.getStatus() == TaskStatus.CANCELLED)
+                .map(current -> {
+                    task.setStatus(TaskStatus.CANCELLED);
+                    task.setFinishedAt(current.getFinishedAt());
+                    return true;
+                })
+                .orElse(false);
     }
 
     private static int successCount(List<AiTaskItem> items) {

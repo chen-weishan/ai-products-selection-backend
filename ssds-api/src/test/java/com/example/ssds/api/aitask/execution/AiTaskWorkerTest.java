@@ -41,6 +41,101 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class AiTaskWorkerTest {
     @Test
+    void cancelledTaskIsNotOverwrittenByWorkerCompletion() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        RecommendationService recommendationService = mock(RecommendationService.class);
+        AiTask running = AiTask.builder()
+                .id(802L)
+                .taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.PENDING)
+                .totalCount(1)
+                .build();
+        AiTask cancelled = AiTask.builder()
+                .id(802L)
+                .taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.CANCELLED)
+                .finishedAt(java.time.Instant.parse("2026-09-24T01:00:00Z"))
+                .totalCount(1)
+                .build();
+        AiTaskItem item = AiTaskItem.builder()
+                .id(803L)
+                .task(running)
+                .product(Product.builder().id(101L).build())
+                .build();
+        when(taskRepository.findById(802L))
+                .thenReturn(Optional.of(running), Optional.of(running), Optional.of(cancelled));
+        when(itemRepository.findByTaskId(802L)).thenReturn(List.of(item));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                recommendationService);
+
+        worker.run(new AiTaskCreatedEvent(802L, false));
+
+        assertAll(
+                () -> assertEquals(TaskStatus.CANCELLED, running.getStatus()),
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()));
+        verify(taskRepository, times(1)).save(running);
+        verify(itemRepository).save(item);
+    }
+
+    @Test
+    void duplicateDispatchIsSkippedWhileTaskIsStillActive() throws Exception {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        AiTask task = AiTask.builder().id(800L).taskType(AiTaskType.RECOMMENDATION).build();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        when(taskRepository.findById(800L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(800L)).thenAnswer(ignored -> {
+            entered.countDown();
+            if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                throw new IllegalStateException("test worker timed out");
+            }
+            return List.of();
+        });
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class));
+
+        try (var pool = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var running = pool.submit(() -> worker.run(new AiTaskCreatedEvent(800L, false)));
+            try {
+                org.junit.jupiter.api.Assertions.assertTrue(
+                        entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                org.junit.jupiter.api.Assertions.assertTrue(worker.isTaskActive(800L));
+                worker.run(new AiTaskCreatedEvent(800L, false));
+                verify(taskRepository).findById(800L);
+            } finally {
+                release.countDown();
+            }
+            running.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        org.junit.jupiter.api.Assertions.assertFalse(worker.isTaskActive(800L));
+    }
+
+    @Test
+    void staleDispatchDoesNotRestartCompletedTask() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        AiTask task = AiTask.builder().id(801L).taskType(AiTaskType.RECOMMENDATION)
+                .status(TaskStatus.SUCCEEDED).build();
+        when(taskRepository.findById(801L)).thenReturn(Optional.of(task));
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository, mock(SceneClassificationService.class),
+                mock(ReviewRiskService.class), mock(ProductInsightService.class),
+                mock(RecommendationService.class));
+
+        worker.run(new AiTaskCreatedEvent(801L, false));
+
+        verifyNoInteractions(itemRepository);
+        verify(taskRepository, never()).save(any());
+        assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
     void fullAnalysisSharesOnePreparedFactorPopulationAcrossAllItems() {
         AiTaskRepository taskRepository = mock(AiTaskRepository.class);
         AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);

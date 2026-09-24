@@ -18,6 +18,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,81 @@ class AiTaskServiceTest {
     @Mock AiTaskItemRepository itemRepository;
     @Mock ProductRepository productRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+
+    @Test
+    void listsNewestTasksWithOptionalStatusFilter() {
+        AiTask task = AiTask.builder()
+                .id(12L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .status(TaskStatus.RUNNING)
+                .build();
+        PageRequest pageable = PageRequest.of(1, 20);
+        when(taskRepository.findByStatusOrderByIdDesc(TaskStatus.RUNNING, pageable))
+                .thenReturn(new PageImpl<>(List.of(task), pageable, 21));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.list(TaskStatus.RUNNING, 1, 20);
+
+        assertAll(
+                () -> assertEquals(1, response.content().size()),
+                () -> assertEquals(21, response.totalElements()),
+                () -> assertEquals(TaskStatus.RUNNING, response.content().getFirst().status()));
+        verify(taskRepository, never()).findAllByOrderByIdDesc(any());
+    }
+
+    @Test
+    void summarizesRunningMonthlyCompletedAndFailedTasks() {
+        when(taskRepository.countByStatus(TaskStatus.RUNNING)).thenReturn(2L);
+        when(taskRepository.countByStatusAndFinishedAtGreaterThanEqual(
+                eq(TaskStatus.SUCCEEDED), any(Instant.class))).thenReturn(18L);
+        when(taskRepository.countByStatusIn(List.of(TaskStatus.FAILED, TaskStatus.PARTIAL)))
+                .thenReturn(3L);
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.summary();
+
+        assertAll(
+                () -> assertEquals(2, response.runningCount()),
+                () -> assertEquals(18, response.monthlyCompletedCount()),
+                () -> assertEquals(3, response.failedCount()));
+    }
+
+    @Test
+    void cancelsRunningTaskAndRecordsFinishTime() {
+        AiTask task = AiTask.builder()
+                .id(12L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .status(TaskStatus.RUNNING)
+                .build();
+        when(taskRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(task));
+        when(taskRepository.save(task)).thenReturn(task);
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.cancel(12L);
+
+        assertAll(
+                () -> assertEquals(TaskStatus.CANCELLED, response.status()),
+                () -> assertNotNull(response.finishedAt()));
+    }
+
+    @Test
+    void rejectsCancellationForFinishedTask() {
+        AiTask task = AiTask.builder()
+                .id(12L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .status(TaskStatus.SUCCEEDED)
+                .build();
+        when(taskRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(task));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertThrows(BusinessException.class, () -> service.cancel(12L));
+
+        verify(taskRepository, never()).save(any());
+    }
 
     @Test
     void getsCompleteTaskProgressAndUsageStatistics() {

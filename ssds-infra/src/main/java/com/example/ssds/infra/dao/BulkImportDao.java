@@ -1,10 +1,7 @@
 package com.example.ssds.infra.dao;
 
-import com.example.ssds.infra.event.SalesImportCompletedEvent;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +21,9 @@ public class BulkImportDao {
     public static final int BATCH_SIZE = 500;
 
     private final JdbcTemplate jdbcTemplate;
-    private final ApplicationEventPublisher eventPublisher;
 
-    public BulkImportDao(
-            JdbcTemplate jdbcTemplate,
-            ApplicationEventPublisher eventPublisher) {
+    public BulkImportDao(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.eventPublisher = eventPublisher;
     }
 
     /** 單列銷售紀錄的匯入輸入。product/category 比對不到時傳 null。 */
@@ -81,12 +74,6 @@ public class BulkImportDao {
                 }
             }
         }
-        rows.stream()
-                .map(SalesRow::importBatchId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .forEach(batchId -> eventPublisher.publishEvent(
-                        new SalesImportCompletedEvent(batchId)));
         return inserted;
     }
 

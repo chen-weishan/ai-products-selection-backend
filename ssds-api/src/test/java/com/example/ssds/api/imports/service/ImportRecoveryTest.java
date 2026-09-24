@@ -7,6 +7,7 @@ import com.example.ssds.infra.entity.ImportBatch;
 import com.example.ssds.infra.repository.ImportBatchRepository;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,61 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 class ImportRecoveryTest {
+    @Test void completedSalesBatchPublishesScoringEventOnlyAtBatchBoundary() {
+        var events = mock(ApplicationEventPublisher.class);
+        var service = new ImportExecutionService(
+                mock(ImportBatchRepository.class),
+                mock(com.example.ssds.ingest.importer.ImportStagingStorage.class),
+                mock(com.example.ssds.ingest.importer.ImportFileScanner.class),
+                mock(ImportPreviewService.class),
+                mock(ImportChunkWriter.class),
+                mock(ImportBatchLifecycleService.class),
+                mock(com.example.ssds.infra.repository.ProductRepository.class),
+                events,
+                mock(ImportWorkerLock.class),
+                Duration.ofMinutes(10),
+                Duration.ofMinutes(30));
+        var batch = ImportBatch.builder()
+                .id(91L)
+                .dataType(com.example.ssds.core.domain.ImportDataType.SALES)
+                .status(TaskStatus.SUCCEEDED)
+                .successRows(600)
+                .build();
+
+        service.publish(batch, Set.of(1L, 2L));
+
+        verify(events).publishEvent(isA(com.example.ssds.api.imports.event.ImportCompletedEvent.class));
+        verify(events).publishEvent(new com.example.ssds.infra.event.SalesImportCompletedEvent(91L));
+        verifyNoMoreInteractions(events);
+    }
+
+    @Test void salesBatchWithoutCommittedRowsDoesNotPublishScoringEvent() {
+        var events = mock(ApplicationEventPublisher.class);
+        var service = new ImportExecutionService(
+                mock(ImportBatchRepository.class),
+                mock(com.example.ssds.ingest.importer.ImportStagingStorage.class),
+                mock(com.example.ssds.ingest.importer.ImportFileScanner.class),
+                mock(ImportPreviewService.class),
+                mock(ImportChunkWriter.class),
+                mock(ImportBatchLifecycleService.class),
+                mock(com.example.ssds.infra.repository.ProductRepository.class),
+                events,
+                mock(ImportWorkerLock.class),
+                Duration.ofMinutes(10),
+                Duration.ofMinutes(30));
+        var batch = ImportBatch.builder()
+                .id(92L)
+                .dataType(com.example.ssds.core.domain.ImportDataType.SALES)
+                .status(TaskStatus.FAILED)
+                .successRows(0)
+                .build();
+
+        service.publish(batch, Set.of());
+
+        verify(events).publishEvent(isA(com.example.ssds.api.imports.event.ImportCompletedEvent.class));
+        verifyNoMoreInteractions(events);
+    }
+
     @Test void expiredQueueUsesPersistedMappingTimeAndFailsOnlyUnderLock() throws Exception {
         var batches = mock(ImportBatchRepository.class);
         var storage = mock(com.example.ssds.ingest.importer.ImportStagingStorage.class);
@@ -67,12 +123,25 @@ class ImportRecoveryTest {
                 .thenAnswer(i -> new CompletableFuture<Void>());
         var coordinator = new ImportAsyncCoordinator(executor, execution,
                 mock(ImportBatchLifecycleService.class), repository,
-                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30));
+                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30), true);
         assertThatCode(coordinator::recoverRunningImports).doesNotThrowAnyException();
-        coordinator.recoverRunningImports();
+        coordinator.pollRunningImports();
         verify(executor, times(3)).submit(any(Runnable.class));
         verify(execution, times(2)).expireQueued(eq(1L), any(java.time.Instant.class));
         verify(execution).expireQueued(eq(2L), any(java.time.Instant.class));
+    }
+
+    @Test void disabledPeriodicRecoveryDoesNotQueryRunningImports() {
+        var transactions = mock(ImportTransactionExecutor.class);
+        var repository = mock(ImportBatchRepository.class);
+        var coordinator = new ImportAsyncCoordinator(
+                mock(ThreadPoolTaskExecutor.class), mock(ImportExecutionService.class),
+                mock(ImportBatchLifecycleService.class), repository,
+                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30), false);
+
+        coordinator.pollRunningImports();
+
+        verifyNoInteractions(transactions, repository);
     }
 
     @Test void advisoryLockIsReleasedBeforeConnectionReturnsToPool() throws Exception {

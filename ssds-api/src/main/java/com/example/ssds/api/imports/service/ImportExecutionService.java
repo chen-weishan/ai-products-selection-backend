@@ -10,6 +10,7 @@ import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.ImportBatch;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.event.SalesImportCompletedEvent;
 import com.example.ssds.infra.repository.ImportBatchRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.ingest.importer.ImportFileScanner;
@@ -169,10 +170,14 @@ public class ImportExecutionService {
         }
     }
 
-    private void publish(ImportBatch batch, Set<Long> affectedProductIds) {
+    void publish(ImportBatch batch, Set<Long> affectedProductIds) {
         eventPublisher.publishEvent(new ImportCompletedEvent(
                 batch.getId(), batch.getDataType(), batch.getStatus(),
                 batch.getSuccessRows(), batch.getFailRows(), Set.copyOf(affectedProductIds)));
+        if (batch.getDataType() == ImportDataType.SALES
+                && batch.getSuccessRows() > 0) {
+            eventPublisher.publishEvent(new SalesImportCompletedEvent(batch.getId()));
+        }
     }
 
     private final class ImportHandler implements ImportSheetHandler {

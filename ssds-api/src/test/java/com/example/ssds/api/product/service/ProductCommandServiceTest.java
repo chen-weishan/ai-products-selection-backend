@@ -526,6 +526,30 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void updateScoringInputInvalidatesCurrentScoreAndQueuesFullAnalysis() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = mockActor(product);
+
+        service.update(
+                product.getId(),
+                updateRequest(
+                        TrackType.A,
+                        null,
+                        new BigDecimal("90.00"),
+                        new BigDecimal("150.00")
+                ),
+                actor.getEmail()
+        );
+
+        verify(productScoreRepository).deactivateAllCurrent(product.getId());
+        verify(aiTaskService).enqueueFullAnalysis(
+                argThat(products -> products.equals(List.of(product))),
+                argThat(taskActor -> taskActor == actor),
+                org.mockito.ArgumentMatchers.eq(false)
+        );
+    }
+
+    @Test
     void assignCategoryUpdatesAllProductsWithoutChangingTheirStatus() {
         Category targetCategory = Category.builder()
                 .id(2L)
@@ -557,6 +581,11 @@ class ProductCommandServiceTest {
         verify(sourcingCandidateService).synchronize(second);
         verify(productScoreRepository).deactivateAllCurrent(first.getId());
         verify(productScoreRepository, never()).deactivateAllCurrent(second.getId());
+        verify(aiTaskService).enqueueFullAnalysis(
+                argThat(products -> products.equals(List.of(first))),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false)
+        );
         assertEquals(targetCategory, second.getCategory());
         assertEquals(ProductStatus.LISTED, first.getStatus());
         assertEquals(ProductStatus.WATCHING, second.getStatus());
@@ -721,6 +750,28 @@ class ProductCommandServiceTest {
         );
 
         assertEquals(ErrorCode.FORBIDDEN, exception.getErrorCode());
+    }
+
+    @Test
+    void leadReevaluatingRejectedTrackAProductQueuesFullAnalysis() {
+        Product product = existingProduct(TrackType.A, null);
+        product.setStatus(ProductStatus.REJECTED);
+        AppUser actor = mockActor(product);
+
+        ProductStatusUpdateResponse response = service.changeStatus(
+                product.getId(),
+                new ProductStatusUpdateRequest(ProductStatus.EVALUATING, null),
+                actor.getEmail(),
+                Set.of("ROLE_BUYER_LEAD"),
+                "127.0.0.1"
+        );
+
+        assertEquals(ProductStatus.EVALUATING, response.currentStatus());
+        verify(aiTaskService).enqueueFullAnalysis(
+                argThat(products -> products.equals(List.of(product))),
+                argThat(taskActor -> taskActor == actor),
+                org.mockito.ArgumentMatchers.eq(false)
+        );
     }
 
     @Test

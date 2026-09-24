@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import org.junit.jupiter.api.*;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -58,7 +57,7 @@ class ImportDurabilityDatabaseTest {
         jdbc.update("insert into product(id,name,category_id) values(1,'奶茶',1)");
         jdbc.update("insert into import_batch(id,status) values(1,'FAILED'),(2,'SUCCEEDED')");
         integrity=new ImportIntegrityDao(jdbc);
-        bulkImportDao=new BulkImportDao(jdbc,mock(ApplicationEventPublisher.class));
+        bulkImportDao=new BulkImportDao(jdbc);
         tx=new TransactionTemplate(manager);
     }
     @Test void salesIdentityAndQueueRollBackWithBusinessData() {
@@ -118,6 +117,14 @@ class ImportDurabilityDatabaseTest {
         var row=new BulkImportDao.ProductRow("新商品",1L,null,BigDecimal.ONE,BigDecimal.TEN,new BigDecimal("0.9"),1,"ALL","A",null,null,null,null,null);
         tx.executeWithoutResult(status->assertThat(bulkImportDao.batchInsertProducts(List.of(row),1L)).isEqualTo(1));
         assertThat(count("import_recalculation_task")).isEqualTo(1);
+    }
+    @Test void scheduledRecoveryProcessesPersistedWork() {
+        integrity.enqueue(1L,List.of(1L));
+        var item=mock(ImportScoreRecalculationItemService.class);
+        when(item.recalculate(1L)).thenReturn(ImportScoreRecalculationItemService.Result.SCORED);
+        new ImportScoreRecalculationService(jdbc,item,manager).recover();
+        assertThat(integrity.recalculationSummary(1L)).containsEntry("SCORED",1);
+        verify(item).recalculate(1L);
     }
     @Test void audienceReferencesCanBeReusedAndReplacementRollsBackAsAUnit() {
         var dao=bulkImportDao;

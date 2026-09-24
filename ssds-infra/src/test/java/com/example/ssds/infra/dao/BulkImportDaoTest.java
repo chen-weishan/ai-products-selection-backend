@@ -6,26 +6,20 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.ssds.infra.event.SalesImportCompletedEvent;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class BulkImportDaoTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final BulkImportDao dao = new BulkImportDao(jdbc, events);
+    private final BulkImportDao dao = new BulkImportDao(jdbc);
 
     @Test
-    void publishesEachCompletedSalesImportBatchOnce() {
+    void writesSalesWithoutOwningImportCompletionEvents() {
         when(jdbc.batchUpdate(anyString(), anyList(), anyInt(), any()))
                 .thenReturn(new int[][] {{1, 1, 1}});
         List<BulkImportDao.SalesRow> rows = List.of(
@@ -36,19 +30,11 @@ class BulkImportDaoTest {
         int inserted = dao.batchInsertSalesRecords(rows);
 
         assertEquals(3, inserted);
-        ArgumentCaptor<SalesImportCompletedEvent> event =
-                ArgumentCaptor.forClass(SalesImportCompletedEvent.class);
-        verify(events, org.mockito.Mockito.times(2)).publishEvent(event.capture());
-        assertEquals(List.of(91L, 92L), event.getAllValues().stream()
-                .map(SalesImportCompletedEvent::importBatchId)
-                .toList());
     }
 
     @Test
-    void emptySalesImportDoesNotPublishACompletionEvent() {
+    void emptySalesImportWritesNothing() {
         assertEquals(0, dao.batchInsertSalesRecords(List.of()));
-
-        verify(events, never()).publishEvent(any());
     }
 
     private static BulkImportDao.SalesRow row(Long productId, Long batchId) {
