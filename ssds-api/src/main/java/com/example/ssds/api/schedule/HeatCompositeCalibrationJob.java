@@ -9,7 +9,9 @@ import com.example.ssds.api.trend.TrendInterpretationJob;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,18 +65,32 @@ public class HeatCompositeCalibrationJob {
     }
 
     void run(LocalDate businessDate) {
-        run(businessDate, null);
+        run(businessDate, null, null);
     }
 
-    void runCatchUp(LocalDate businessDate, Collection<Long> agentKeywordIds) {
-        run(businessDate, List.copyOf(agentKeywordIds));
+    void runCatchUp(LocalDate businessDate, Collection<Long> keywordIds) {
+        List<Long> catchUpKeywordIds = List.copyOf(keywordIds);
+        run(businessDate, catchUpKeywordIds, catchUpKeywordIds);
     }
 
-    private void run(LocalDate businessDate, List<Long> agentKeywordIds) {
+    void runCatchUpAll(LocalDate businessDate) {
+        run(businessDate, null, null);
+    }
+
+    private void run(
+            LocalDate businessDate,
+            List<Long> compositionKeywordIds,
+            List<Long> agentKeywordIds) {
         int updated = percentileDao.applyPercentiles(businessDate);
         log.info("百分位重算完成：{} 筆讀值（{}）。", updated, businessDate);
 
         List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
+        if (compositionKeywordIds != null) {
+            Set<Long> requestedKeywordIds = new HashSet<>(compositionKeywordIds);
+            keywords = keywords.stream()
+                    .filter(keyword -> requestedKeywordIds.contains(keyword.getId()))
+                    .toList();
+        }
         int computed = 0;
         int skipped = 0;
         for (TrendKeyword keyword : keywords) {

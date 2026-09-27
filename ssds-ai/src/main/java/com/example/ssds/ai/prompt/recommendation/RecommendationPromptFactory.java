@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class RecommendationPromptFactory {
-    public static final String PROMPT_VERSION = "recommendation-v3";
+    public static final String PROMPT_VERSION = "recommendation-v4";
     private final ObjectMapper objectMapper;
 
     public RecommendationPromptFactory(ObjectMapper objectMapper) {
@@ -26,8 +26,18 @@ public class RecommendationPromptFactory {
                 - qtyMin 與 qtyMax 必須是 allowedQuantities 中的整數，且 qtyMin 不得大於 qtyMax。
                 - action 為 REJECT 時 qtyMin 與 qtyMax 必須都是 0。
                 - quantityText 若包含數量，只能原樣使用 qtyMin、qtyMax；不得自行換算或加入其他數字。
+                - quantityText 與 reasoning 是直接顯示給採購人員的文字，必須使用自然、流暢的繁體中文。
                 - reasoning 可引用輸入百分位、加扣分小計及剩餘天數，但數字必須與 INPUT_JSON 完全相同。
+                - reasoning 應依序串連最重要的加分依據、需要留意的風險及進貨建議，寫成一段連貫理由；不得逐欄翻譯或堆砌「名稱：數值」。
+                - reasoning 不得出現英文內部欄位、列舉或代碼；這些值只可保留在既定的結構化欄位。
                 - 資料不足時 action 使用 WATCH、數量使用 0、quantityText 填「暫不建議進貨」，reasoning 明確標示資料不足。
+
+                reasoning 撰寫用語：
+                - TREND、MARGIN、CVR、PRICE_FIT、FESTIVAL、CLIMATE 應依語境融入句子，分別表達為社群熱度、毛利表現、歷史轉換表現、價格帶適配度、節慶適配度、季節氣候適配度。
+                - REVIEW_RISK、LOGISTICS_RISK、INVENTORY_RISK 應自然表達為評論風險、物流風險、庫存風險。
+                - VIRAL、FESTIVAL、REPLENISHMENT、SEASONAL 應表達為話題爆款型、節慶檔期型、常態補貨型、季節導向型。
+                - ADOPT、WATCH、REJECT 的建議語氣應分別表達為建議採納、建議持續觀察、暫不建議採納，不得直接顯示代碼。
+                - 上述用語是語意指引，不是逐字替換表；應選擇真正影響結論的訊號組成流暢理由。例如：「社群熱度與歷史轉換表現突出，但仍有物流風險，建議先小量試單並觀察後續銷售。」
 
                 限制條款：
                 - 只能根據 INPUT_JSON 作答，不得使用外部知識，不得搜尋網路或呼叫工具。
@@ -43,8 +53,9 @@ public class RecommendationPromptFactory {
                 1. 根物件只能包含 action、qtyMin、qtyMax、quantityText、reasoning，五個欄位都不可省略。
                 2. action 只能是 ADOPT、WATCH、REJECT；qtyMin、qtyMax 必須是 allowedQuantities 中的整數且 qtyMin 不得大於 qtyMax。
                 3. REJECT 時 qtyMin、qtyMax 都必須是 0；非零數量時 quantityText 必須同時包含 qtyMin 與 qtyMax。
-                4. quantityText、reasoning 中的數字只能原樣引用 INPUT_JSON，不得換算或產生新數字。
-                5. 只輸出 JSON，不得加上 Markdown、說明文字或額外欄位。
+                4. quantityText 與 reasoning 必須使用自然、流暢的繁體中文；reasoning 不得出現英文內部欄位、列舉或代碼，也不得逐欄翻譯或堆砌標籤。
+                5. quantityText、reasoning 中的數字只能原樣引用 INPUT_JSON，不得換算或產生新數字。
+                6. 只輸出 JSON，不得加上 Markdown、說明文字或額外欄位。
                 """.formatted(validationCode);
     }
 

@@ -1,6 +1,7 @@
 package com.example.ssds.ai.schema.recommendation;
 
 import com.example.ssds.ai.schema.AiSchemaValidationException;
+import com.example.ssds.ai.schema.ChineseNarrativeValidator;
 
 import com.example.ssds.ai.model.recommendation.RecommendationInput;
 import com.example.ssds.ai.model.recommendation.RecommendationOutput;
@@ -21,6 +22,14 @@ public class RecommendationResponseParser {
     private static final Set<String> ROOT_FIELDS =
             Set.of("action", "qtyMin", "qtyMax", "quantityText", "reasoning");
     private static final Pattern NUMBER = Pattern.compile("[-+]?\\d+(?:\\.\\d+)?");
+    private static final Set<String> REASONING_INTERNAL_TERMS = Set.of(
+            "ADOPT", "WATCH", "REJECT",
+            "VIRAL", "FESTIVAL", "REPLENISHMENT", "SEASONAL",
+            "TREND", "MARGIN", "CVR", "PRICE_FIT", "CLIMATE",
+            "REVIEW_RISK", "LOGISTICS_RISK", "INVENTORY_RISK",
+            "factors", "percentile", "bonusSubtotal", "penaltySubtotal", "grade",
+            "sceneType", "matchedPenaltyRules", "festival", "allowedQuantities",
+            "qtyMin", "qtyMax", "quantityText");
     private final ObjectMapper objectMapper;
 
     public RecommendationResponseParser(ObjectMapper objectMapper) {
@@ -45,6 +54,13 @@ public class RecommendationResponseParser {
             }
             String quantityText = text(root, "quantityText", 100);
             String reasoning = text(root, "reasoning", 500);
+            Set<String> reasoningInternalTerms = new HashSet<>(REASONING_INTERNAL_TERMS);
+            if (input.festival() != null
+                    && input.festival().festivalCode() != null
+                    && !input.festival().festivalCode().isBlank()) {
+                reasoningInternalTerms.add(input.festival().festivalCode());
+            }
+            ChineseNarrativeValidator.requireReadableChinese(reasoning, "reasoning", reasoningInternalTerms);
             validateQuantityText(quantityText, qtyMin, qtyMax);
             validateNumericWhitelist(quantityText, reasoning, input);
             return new RecommendationOutput(action, qtyMin, qtyMax, quantityText, reasoning);

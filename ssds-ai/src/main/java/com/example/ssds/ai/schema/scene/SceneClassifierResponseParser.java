@@ -1,6 +1,7 @@
 package com.example.ssds.ai.schema.scene;
 
 import com.example.ssds.ai.schema.AiSchemaValidationException;
+import com.example.ssds.ai.schema.ChineseNarrativeValidator;
 import com.example.ssds.ai.schema.NumericTokenValidator;
 
 import com.example.ssds.ai.model.scene.SceneClassifierOutput;
@@ -11,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Component;
@@ -20,6 +22,11 @@ public class SceneClassifierResponseParser {
     private static final Set<String> ALLOWED_FIELDS = Set.of(
             "sceneType", "confidence", "reasoning", "alternativeScene", "signals");
     private static final Set<String> ALLOWED_ENVELOPES = Set.of("classification", "data", "result");
+    private static final Set<String> REASONING_INTERNAL_TERMS = Set.of(
+            "VIRAL", "FESTIVAL", "REPLENISHMENT", "SEASONAL",
+            "RISING", "PLATEAU", "DECLINING",
+            "productName", "categoryName", "heatSlopePercentile", "heatStage",
+            "historicalCampaignCount", "festivalMatches");
     private final ObjectMapper objectMapper;
 
     public SceneClassifierResponseParser(ObjectMapper objectMapper) {
@@ -43,6 +50,12 @@ public class SceneClassifierResponseParser {
                 fail("confidence 必須介於 0 與 1");
             }
             String reasoning = text(root.get("reasoning"), "reasoning");
+            Set<String> reasoningInternalTerms = new HashSet<>(REASONING_INTERNAL_TERMS);
+            input.festivalMatches().stream()
+                    .map(match -> match.festivalCode())
+                    .filter(code -> code != null && !code.isBlank())
+                    .forEach(reasoningInternalTerms::add);
+            ChineseNarrativeValidator.requireReadableChinese(reasoning, "reasoning", reasoningInternalTerms);
             SceneCode alternative = parseScene(root.get("alternativeScene"), true);
             JsonNode signalNodes = root.get("signals");
             if (!signalNodes.isArray() || signalNodes.isEmpty() || signalNodes.size() > 10) {

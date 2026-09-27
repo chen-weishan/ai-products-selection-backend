@@ -533,6 +533,80 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     }
 
     @Test
+    void weeklyInstagramReadingFeedsEveryDailyCompositeOnlyWithinItsWeek() throws Exception {
+        LocalDate monday = LocalDate.of(2026, 9, 21);
+        LocalDate thursday = monday.plusDays(3);
+        LocalDate nextMonday = monday.plusWeeks(1);
+        Category category = categories.saveAndFlush(Category.builder().name("週頻 IG 品類").build());
+        TrendKeyword keyword = saveKeywordProduct("週頻 IG 關鍵字", category);
+        HeatSource google = saveSource(
+                HeatSourceCode.GOOGLE_TRENDS,
+                HeatGranularity.KEYWORD,
+                "0.400",
+                SourceAvailability.AVAILABLE);
+        HeatSource instagram = saveSource(
+                HeatSourceCode.INSTAGRAM,
+                HeatGranularity.CATEGORY,
+                "0.200",
+                SourceAvailability.AVAILABLE);
+
+        saveReading(instagram, null, category, monday, "20.00");
+        // 未來讀值不得倒灌到週四；同週應選截至合成日最新的一筆。
+        saveReading(instagram, null, category, thursday.plusDays(1), "90.00");
+        saveReading(google, keyword, null, thursday, "100.00");
+
+        HeatCompositeDaily daily = calibrationService
+                .computeAndPersist(keyword.getId(), thursday)
+                .orElseThrow();
+        assertAll(
+                () -> assertEquals(new BigDecimal("84.00"), daily.getCompositeValue()),
+                () -> assertEquals(
+                        new BigDecimal("0.8000"),
+                        trendQueryDao.findAppliedWeights(keyword.getId(), thursday).get("GOOGLE_TRENDS")),
+                () -> assertEquals(
+                        new BigDecimal("0.2000"),
+                        trendQueryDao.findAppliedWeights(keyword.getId(), thursday).get("INSTAGRAM")),
+                () -> assertTrue(daily.getAppliedWeights().contains("INSTAGRAM")));
+
+        when(trendInterpreterAgent.interpret(any(), eq(true))).thenReturn(
+                new TrendInterpreterResult(
+                        new TrendInterpreterOutput(HeatStage.PLATEAU, 1, 42),
+                        false,
+                        null,
+                        false,
+                        "test-model",
+                        TrendInterpreterPromptFactory.PROMPT_VERSION,
+                        null,
+                        null,
+                        1));
+        interpretationService.interpret(keyword.getId(), true);
+        entityManager.flush();
+        entityManager.clear();
+        HeatCompositeDaily agentUpdated = composites
+                .findByKeywordIdAndStatDate(keyword.getId(), thursday)
+                .orElseThrow();
+        assertAll(
+                () -> assertEquals(HeatValueSource.AGENT, agentUpdated.getStageSource()),
+                () -> assertEquals(HeatValueSource.AGENT, agentUpdated.getLifespanSource()),
+                () -> assertEquals(
+                        objectMapper.readTree(daily.getAppliedWeights()),
+                        objectMapper.readTree(agentUpdated.getAppliedWeights())),
+                () -> assertTrue(agentUpdated.getAppliedWeights().contains("INSTAGRAM")));
+
+        saveReading(google, keyword, null, nextMonday, "70.00");
+        HeatCompositeDaily followingWeek = calibrationService
+                .computeAndPersist(keyword.getId(), nextMonday)
+                .orElseThrow();
+        assertAll(
+                () -> assertEquals(new BigDecimal("70.00"), followingWeek.getCompositeValue()),
+                () -> assertEquals(
+                        new BigDecimal("1.0000"),
+                        trendQueryDao.findAppliedWeights(keyword.getId(), nextMonday).get("GOOGLE_TRENDS")),
+                () -> assertFalse(
+                        trendQueryDao.findAppliedWeights(keyword.getId(), nextMonday).containsKey("INSTAGRAM")));
+    }
+
+    @Test
     void ruleBaselineCoversAllStagesTransitionAndMissingDayRestart() {
         LocalDate businessDate = LocalDate.of(2026, 9, 22);
         Category category = categories.saveAndFlush(Category.builder().name("Phase6 階段品類").build());

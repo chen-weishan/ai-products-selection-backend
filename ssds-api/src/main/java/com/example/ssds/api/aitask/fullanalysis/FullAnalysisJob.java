@@ -27,10 +27,10 @@ public class FullAnalysisJob {
     }
 
     @Scheduled(cron = "${ai.full-analysis.resume-cron:0 0 7 * * TUE-SUN}", zone = "Asia/Taipei")
-    public void resumeQuotaSkippedItems() {
-        tasks.resumeQuotaSkippedFullAnalysis().ifPresentOrElse(
-                task -> log.info("FULL_ANALYSIS quota continuation created: taskId={}, items={}",
+    public void catchUpWeeklyItems() {
+        tasks.createFullAnalysisCatchUp().ifPresentOrElse(
+                task -> log.info("FULL_ANALYSIS weekly catch-up created: taskId={}, items={}",
                         task.taskId(), task.totalCount()),
-                () -> log.debug("FULL_ANALYSIS quota continuation skipped"));
+                () -> log.debug("FULL_ANALYSIS weekly catch-up skipped"));
     }
 }

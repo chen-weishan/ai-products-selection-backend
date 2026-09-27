@@ -133,7 +133,7 @@ class HeatCompositeCalibrationJobTest {
     }
 
     @Test
-    void catchUpLimitsAgentEnqueueToPreviouslyMissingKeywords() {
+    void generalCatchUpLimitsCompositionAndAgentEnqueueToMissingKeywords() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeCalibrationService calibrationService = mock(HeatCompositeCalibrationService.class);
@@ -156,9 +156,39 @@ class HeatCompositeCalibrationJobTest {
 
         job.runCatchUp(businessDate, List.of(8L));
 
-        verify(calibrationService).computeAndPersist(7L, businessDate);
+        verify(calibrationService, never()).computeAndPersist(7L, businessDate);
         verify(calibrationService).computeAndPersist(8L, businessDate);
         verify(trendJob).enqueueSignificantKeywords(businessDate, List.of(8L));
         verify(trendJob, never()).enqueueSignificantKeywords(businessDate);
+    }
+
+    @Test
+    void instagramCatchUpRecomposesAndEvaluatesAllEnabledKeywords() {
+        HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeCalibrationService calibrationService = mock(HeatCompositeCalibrationService.class);
+        TrendInterpretationJob trendJob = mock(TrendInterpretationJob.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<SourcingTimeGapRecalculationJob> timeGapProvider = mock(ObjectProvider.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<TrendInterpretationJob> trendProvider = mock(ObjectProvider.class);
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        TrendKeyword first = TrendKeyword.builder().id(7L).keyword("第一個關鍵字").build();
+        TrendKeyword second = TrendKeyword.builder().id(8L).keyword("第二個關鍵字").build();
+        when(keywordRepository.findByEnabledTrue()).thenReturn(List.of(first, second));
+        when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
+                percentileDao,
+                keywordRepository,
+                calibrationService,
+                timeGapProvider,
+                trendProvider);
+
+        job.runCatchUpAll(businessDate);
+
+        verify(calibrationService).computeAndPersist(7L, businessDate);
+        verify(calibrationService).computeAndPersist(8L, businessDate);
+        verify(trendJob).enqueueSignificantKeywords(businessDate);
+        verify(trendJob, never()).enqueueSignificantKeywords(businessDate, List.of(7L, 8L));
     }
 }

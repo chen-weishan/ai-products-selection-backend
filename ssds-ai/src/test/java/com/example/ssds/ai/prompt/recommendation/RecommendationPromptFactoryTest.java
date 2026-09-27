@@ -23,9 +23,13 @@ class RecommendationPromptFactoryTest {
         assertFalse(input.contains("supplier"));
         assertTrue(system.contains("不得搜尋網路或呼叫工具"));
         assertTrue(system.contains("數字必須與 INPUT_JSON 完全相同"));
-        assertEquals("recommendation-v3", RecommendationPromptFactory.PROMPT_VERSION);
+        assertEquals("recommendation-v4", RecommendationPromptFactory.PROMPT_VERSION);
+        assertTrue(system.contains("自然、流暢的繁體中文"));
+        assertTrue(system.contains("不是逐字替換表"));
+        assertTrue(system.contains("社群熱度與歷史轉換表現突出"));
         assertTrue(factory.retryInstruction("QUANTITY_INVALID").contains("QUANTITY_INVALID"));
         assertTrue(factory.retryInstruction("QUANTITY_INVALID").contains("allowedQuantities"));
         assertTrue(factory.retryInstruction("SCHEMA_INVALID").contains("只輸出 JSON"));
+        assertTrue(factory.retryInstruction("LANGUAGE_INVALID").contains("不得出現英文內部欄位"));
     }
 }

@@ -4,6 +4,7 @@ import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Product;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -84,6 +85,33 @@ public interface ProductRepository
                           p.id asc
                         """)
         List<Product> findFullAnalysisCandidates(@Param("statuses") List<ProductStatus> statuses);
+
+        /**
+         * 週間補跑候選：目前仍符合 FULL_ANALYSIS 資格，且本週尚未成功產生資料的品項。
+         *
+         * <p>不限定任務建立方式，因此人工建立的 FULL_ANALYSIS 若已於本週成功或命中快取，
+         * 後續排程也會確實跳過同一品項。
+         */
+        @Query("""
+                        select p from Product p
+                        where p.trackType = com.example.ssds.core.domain.TrackType.A
+                          and p.deletedAt is null
+                          and p.status in :statuses
+                          and not exists (
+                              select i.id from AiTaskItem i
+                              where i.product.id = p.id
+                                and i.task.taskType = com.example.ssds.core.domain.AiTaskType.FULL_ANALYSIS
+                                and i.status in (
+                                    com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED,
+                                    com.example.ssds.core.domain.TaskItemStatus.SKIPPED_CACHE
+                                )
+                                and i.task.finishedAt >= :weekStart
+                          )
+                        order by p.id
+                        """)
+        List<Product> findFullAnalysisCatchUpCandidates(
+                        @Param("statuses") List<ProductStatus> statuses,
+                        @Param("weekStart") Instant weekStart);
 
         /** B 軌尋源清單（FR-16-2）。 */
         @EntityGraph(attributePaths = { "category" })

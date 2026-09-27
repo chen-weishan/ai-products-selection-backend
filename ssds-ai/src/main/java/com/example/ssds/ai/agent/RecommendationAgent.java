@@ -274,6 +274,7 @@ public class RecommendationAgent {
         String message = exception.getMessage();
         if (message == null) return "SCHEMA_INVALID";
         if (isShapeError(message)) return "SHAPE_INVALID";
+        if (message.contains("繁體中文") || message.contains("內部名稱")) return "LANGUAGE_INVALID";
         if (message.contains("qty") || message.contains("allowedQuantities")
                 || message.contains("quantityText") || message.contains("REJECT")) {
             return "QUANTITY_INVALID";

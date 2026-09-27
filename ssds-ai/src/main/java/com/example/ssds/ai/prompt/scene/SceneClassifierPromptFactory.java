@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SceneClassifierPromptFactory {
-    public static final String PROMPT_VERSION = "scene-v9";
+    public static final String PROMPT_VERSION = "scene-v10";
     private final ObjectMapper objectMapper;
 
     public SceneClassifierPromptFactory(ObjectMapper objectMapper) {
@@ -36,9 +36,17 @@ public class SceneClassifierPromptFactory {
                 - 根物件必須且只能包含 sceneType、confidence、reasoning、alternativeScene、signals 五個欄位。
                 - sceneType 必須是上述四個列舉值之一。
                 - confidence 必須是 0 到 1 的 JSON number，不得使用字串。
-                - reasoning 必須使用繁體中文，並引用 INPUT_JSON 中的實際資料。
+                - reasoning 是直接顯示給採購人員的文字，必須使用自然、流暢的繁體中文，並引用 INPUT_JSON 中的實際資料。
+                - reasoning 應先說明主要判斷依據，再串連次要訊號與情境結論；請寫成完整語句，不得逐欄翻譯或堆砌「名稱：數值」。
+                - reasoning 不得出現英文內部欄位、列舉或代碼；這些值只可出現在既定的結構化欄位與 signals。
                 - alternativeScene 沒有合理備選時仍須輸出 null，不得省略。
                 - signals 必須包含 1 至 10 個非空字串，每一項都要使用「輸入欄位: 輸入值」格式。
+
+                reasoning 撰寫用語：
+                - VIRAL 應依語境寫成「話題爆款型」或「近期話題快速升溫」；FESTIVAL 寫成「節慶檔期型」；REPLENISHMENT 寫成「常態補貨型」；SEASONAL 寫成「季節導向型」。
+                - heatStage 應融入句意寫成「熱度正上升」、「熱度持平」或「熱度下降」，不可直接輸出 RISING、PLATEAU、DECLINING。
+                - heatSlopePercentile 應寫成「熱度成長位於同類品項前段」等符合數值的自然敘述；festivalMatches 應寫成「與節慶的關聯訊號」；historicalCampaignCount 應寫成「歷史開團次數」。
+                - 上述用語是語意指引，不是逐字替換表；必須依實際訊號組成連貫理由。例如：「近期熱度正上升，且熱度成長位於同類品項前段，又沒有明確節慶訊號，因此判定為話題爆款型。」
 
                 限制條款：
                 - 只能根據 INPUT_JSON 作答，不得使用外部知識，不得搜尋網路或呼叫工具。
@@ -56,8 +64,9 @@ public class SceneClassifierPromptFactory {
                 1. 根物件只能包含 sceneType、confidence、reasoning、alternativeScene、signals，五個欄位都不可省略。
                 2. sceneType 與 alternativeScene 只能使用 VIRAL、FESTIVAL、REPLENISHMENT、SEASONAL；無備選時 alternativeScene 使用 null。
                 3. confidence 必須是 0 到 1 的 JSON number；signals 必須是 1 至 10 筆非空字串。
-                4. reasoning 與 signals 中的數字只能原樣引用 INPUT_JSON；不得輸出權重或其他欄位。
-                5. 只輸出 JSON，不得加上 Markdown 或任何說明文字。
+                4. reasoning 必須是自然、流暢的繁體中文完整語句，不得出現英文內部欄位、列舉或代碼，也不得逐欄翻譯或堆砌標籤。
+                5. reasoning 與 signals 中的數字只能原樣引用 INPUT_JSON；不得輸出權重或其他欄位。
+                6. 只輸出 JSON，不得加上 Markdown 或任何說明文字。
                 """.formatted(validationCode);
     }
 

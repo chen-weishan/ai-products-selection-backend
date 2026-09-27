@@ -14,6 +14,7 @@ import java.util.*;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -247,15 +248,24 @@ public class AiTaskService {
                 : Optional.of(createFullAnalysis(products, null, false));
     }
 
-    /** 隔日續跑前一輪因配額或單輪上限略過的品項。 */
+    /**
+     * 星期二至星期日補跑本週尚未完成的合格品項。
+     *
+     * <p>範圍包含前一輪 SKIPPED_QUOTA 及本週新增的合格品項；任何排程或人工
+     * FULL_ANALYSIS 已於本週成功完成的品項都會由 repository 排除。
+     */
     @Transactional
-    public Optional<AiTaskResponse> resumeQuotaSkippedFullAnalysis() {
+    public Optional<AiTaskResponse> createFullAnalysisCatchUp() {
         if (taskRepository.existsByTaskTypeAndStatusIn(
                 AiTaskType.FULL_ANALYSIS, List.of(TaskStatus.PENDING, TaskStatus.RUNNING))) {
             return Optional.empty();
         }
-        List<Product> products = itemRepository.findProductsPendingQuotaRetry(
-                AiTaskType.FULL_ANALYSIS, com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA);
+        Instant weekStart = LocalDate.now(API_ZONE)
+                .with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                .atStartOfDay(API_ZONE)
+                .toInstant();
+        List<Product> products = productRepository.findFullAnalysisCatchUpCandidates(
+                eligibleStatuses(), weekStart);
         return products.isEmpty()
                 ? Optional.empty()
                 : Optional.of(createFullAnalysis(products, null, false));

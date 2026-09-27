@@ -56,6 +56,9 @@ class HeatCompositeCatchUpTest {
         when(keywords.countByEnabledTrue()).thenReturn(3L);
         when(composites.findEnabledKeywordIdsMissingStatDate(BUSINESS_DATE))
                 .thenReturn(java.util.List.of(7L));
+        when(readings.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM, BUSINESS_DATE, BUSINESS_DATE.plusDays(6)))
+                .thenReturn(false, true);
         HeatCompositeCatchUp catchUp = catchUpAt(
                 "2026-09-20T23:01:00Z",
                 job,
@@ -72,7 +75,7 @@ class HeatCompositeCatchUpTest {
         order.verify(instagramJob).run();
         order.verify(threadsJob).runForKeywordIds(java.util.List.of(7L), BUSINESS_DATE);
         order.verify(trendsJob).runForKeywordIds(java.util.List.of(7L), BUSINESS_DATE);
-        order.verify(job).runCatchUp(BUSINESS_DATE, java.util.List.of(7L));
+        order.verify(job).runCatchUpAll(BUSINESS_DATE);
     }
 
     @Test
@@ -143,6 +146,9 @@ class HeatCompositeCatchUpTest {
         when(keywords.countByEnabledTrue()).thenReturn(3L);
         when(composites.findEnabledKeywordIdsMissingStatDate(tuesday))
                 .thenReturn(java.util.List.of());
+        when(readings.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM, BUSINESS_DATE, BUSINESS_DATE.plusDays(6)))
+                .thenReturn(false, true);
         HeatCompositeCatchUp catchUp = catchUpAt(
                 "2026-09-21T23:01:00Z",
                 job,
@@ -157,9 +163,43 @@ class HeatCompositeCatchUpTest {
 
         InOrder order = inOrder(instagramJob, job);
         order.verify(instagramJob).run();
-        order.verify(job).runCatchUp(tuesday, java.util.List.of());
+        order.verify(job).runCatchUpAll(tuesday);
         verify(threadsJob, never()).run();
         verify(trendsJob, never()).run();
+    }
+
+    @Test
+    void failedInstagramCatchUpKeepsGeneralCatchUpLimitedToMissingKeywords() {
+        HeatCompositeCalibrationJob job = mock(HeatCompositeCalibrationJob.class);
+        ThreadsHeatIngestJob threadsJob = mock(ThreadsHeatIngestJob.class);
+        GoogleTrendsHeatIngestJob trendsJob = mock(GoogleTrendsHeatIngestJob.class);
+        InstagramHeatIngestJob instagramJob = mock(InstagramHeatIngestJob.class);
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository composites = mock(HeatCompositeDailyRepository.class);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        when(keywords.countByEnabledTrue()).thenReturn(3L);
+        when(composites.findEnabledKeywordIdsMissingStatDate(BUSINESS_DATE))
+                .thenReturn(java.util.List.of(7L));
+        when(readings.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM, BUSINESS_DATE, BUSINESS_DATE.plusDays(6)))
+                .thenReturn(false);
+        HeatCompositeCatchUp catchUp = catchUpAt(
+                "2026-09-20T23:01:00Z",
+                job,
+                threadsJob,
+                trendsJob,
+                instagramJob,
+                keywords,
+                composites,
+                readings);
+
+        catchUp.catchUp(ZonedDateTime.now(fixedClock("2026-09-20T23:01:00Z")));
+
+        verify(instagramJob).run();
+        verify(threadsJob).runForKeywordIds(java.util.List.of(7L), BUSINESS_DATE);
+        verify(trendsJob).runForKeywordIds(java.util.List.of(7L), BUSINESS_DATE);
+        verify(job).runCatchUp(BUSINESS_DATE, java.util.List.of(7L));
+        verify(job, never()).runCatchUpAll(BUSINESS_DATE);
     }
 
     @Test

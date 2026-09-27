@@ -297,6 +297,7 @@ public class SceneClassifierAgent {
         String message = exception.getMessage();
         if (message == null) return "SCHEMA_INVALID";
         if (isShapeError(message)) return "SHAPE_INVALID";
+        if (message.contains("繁體中文") || message.contains("內部名稱")) return "LANGUAGE_INVALID";
         if (message.contains("confidence")) return "CONFIDENCE_INVALID";
         if (message.contains("signals")) return "SIGNALS_INVALID";
         if (message.contains("數字")) return "NUMBER_NOT_IN_INPUT";

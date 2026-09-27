@@ -108,9 +108,15 @@ public class HeatCompositeCatchUp {
                 && !now.isBefore(instagramScheduledAt)
                 && !heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
                         HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
+        boolean instagramDataAdded = false;
         if (instagramCatchUpDue) {
             log.info("本週尚無 Instagram 熱度資料，開始補跑：weekStart={}", weekStart);
             instagramIngestJob.run();
+            instagramDataAdded = heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+                    HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
+            if (!instagramDataAdded) {
+                log.warn("Instagram 補跑完成但本週仍無可用資料，不擴大重合範圍：weekStart={}", weekStart);
+            }
         } else if (instagramIngestJob != null
                 && instagramScheduledAt != null
                 && !now.isBefore(instagramScheduledAt)) {
@@ -132,7 +138,7 @@ public class HeatCompositeCatchUp {
                 compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate);
         long completedKeywords = enabledKeywords - missingKeywordIds.size();
         boolean dailyCatchUpDue = !missingKeywordIds.isEmpty();
-        if (!dailyCatchUpDue && !instagramCatchUpDue) {
+        if (!dailyCatchUpDue && !instagramDataAdded) {
             log.info(
                     "每日熱度主流程今日已完成，不需補跑：date={}, completed={}/{}",
                     businessDate,
@@ -157,6 +163,10 @@ public class HeatCompositeCatchUp {
                 googleTrendsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
             }
         }
-        calibrationJob.runCatchUp(businessDate, missingKeywordIds);
+        if (instagramDataAdded) {
+            calibrationJob.runCatchUpAll(businessDate);
+        } else {
+            calibrationJob.runCatchUp(businessDate, missingKeywordIds);
+        }
     }
 }

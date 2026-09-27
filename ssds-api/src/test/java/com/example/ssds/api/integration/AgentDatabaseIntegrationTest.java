@@ -96,6 +96,8 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -298,45 +300,51 @@ class AgentDatabaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("FULL_ANALYSIS continuation excludes deleted and already-succeeded products")
-    void quotaContinuationOnlyReturnsStillPendingActiveProducts() {
+    @DisplayName("FULL_ANALYSIS catch-up includes missing weekly data and excludes manual completion")
+    void fullAnalysisCatchUpUsesCurrentWeekCompletionAsDeduplicationBoundary() {
         Category category = categories.saveAndFlush(
-                Category.builder().name("quota-continuation").build());
-        Product completed = products.saveAndFlush(candidateProduct(category, "completed", null));
-        Product pending = products.saveAndFlush(candidateProduct(category, "pending", null));
-        Product deleted = products.saveAndFlush(candidateProduct(
-                category, "deleted-pending", Instant.parse("2026-09-01T00:00:00Z")));
-        AiTask oldTask = aiTasks.saveAndFlush(AiTask.builder()
-                .taskType(AiTaskType.FULL_ANALYSIS)
-                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
-                .status(TaskStatus.PARTIAL)
-                .totalCount(3)
-                .build());
-        aiTaskItems.saveAllAndFlush(List.of(
-                AiTaskItem.builder().task(oldTask).product(completed)
-                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build(),
-                AiTaskItem.builder().task(oldTask).product(pending)
-                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build(),
-                AiTaskItem.builder().task(oldTask).product(deleted)
-                        .status(com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA).build()));
-        AiTask newerTask = aiTasks.saveAndFlush(AiTask.builder()
+                Category.builder().name("full-analysis-catch-up").build());
+        Product newlyEligible = products.saveAndFlush(
+                candidateProduct(category, "newly-eligible", null));
+        Product manuallyCompleted = products.saveAndFlush(
+                candidateProduct(category, "manually-completed", null));
+        Product completedLastWeek = products.saveAndFlush(
+                candidateProduct(category, "completed-last-week", null));
+        Instant weekStart = LocalDate.now(ZoneId.of("Asia/Taipei"))
+                .with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                .atStartOfDay(ZoneId.of("Asia/Taipei"))
+                .toInstant();
+
+        AiTask manualTask = aiTasks.saveAndFlush(AiTask.builder()
                 .taskType(AiTaskType.FULL_ANALYSIS)
                 .budgetPool(AiTaskType.BudgetPool.TRACK_A)
                 .status(TaskStatus.SUCCEEDED)
                 .totalCount(1)
+                .successCount(1)
+                .finishedAt(weekStart.plusSeconds(60))
                 .build());
-        aiTaskItems.saveAndFlush(AiTaskItem.builder()
-                .task(newerTask).product(completed)
-                .status(com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED)
+        AiTask oldTask = aiTasks.saveAndFlush(AiTask.builder()
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.SUCCEEDED)
+                .totalCount(1)
+                .successCount(1)
+                .finishedAt(weekStart.minusSeconds(60))
                 .build());
+        aiTaskItems.saveAllAndFlush(List.of(
+                AiTaskItem.builder().task(manualTask).product(manuallyCompleted)
+                        .status(com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED).build(),
+                AiTaskItem.builder().task(oldTask).product(completedLastWeek)
+                        .status(com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED).build()));
         entityManager.flush();
         entityManager.clear();
 
-        List<Product> result = aiTaskItems.findProductsPendingQuotaRetry(
-                AiTaskType.FULL_ANALYSIS,
-                com.example.ssds.core.domain.TaskItemStatus.SKIPPED_QUOTA);
+        List<Long> ids = products.findFullAnalysisCatchUpCandidates(
+                        List.of(ProductStatus.EVALUATING), weekStart)
+                .stream().map(Product::getId).toList();
 
-        assertEquals(List.of(pending.getId()), result.stream().map(Product::getId).toList());
+        assertEquals(List.of(newlyEligible.getId(), completedLastWeek.getId()), ids);
+        assertFalse(ids.contains(manuallyCompleted.getId()));
     }
 
     @Test

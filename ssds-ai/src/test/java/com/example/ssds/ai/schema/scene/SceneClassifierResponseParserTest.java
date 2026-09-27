@@ -99,6 +99,37 @@ class SceneClassifierResponseParserTest {
                 """, input()));
     }
 
+    @Test
+    void rejectsInternalNamesAndEnglishOnlyReasoning() {
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse("""
+                {
+                  "sceneType":"VIRAL",
+                  "confidence":0.82,
+                  "reasoning":"heatStage 為 RISING，因此符合 VIRAL。",
+                  "alternativeScene":null,
+                  "signals":["heatSlopePercentile: 88.00"]
+                }
+                """, input()));
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse("""
+                {
+                  "sceneType":"VIRAL",
+                  "confidence":0.82,
+                  "reasoning":"Strong recent demand",
+                  "alternativeScene":null,
+                  "signals":["heatSlopePercentile: 88.00"]
+                }
+                """, input()));
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse("""
+                {
+                  "sceneType":"FESTIVAL",
+                  "confidence":0.82,
+                  "reasoning":"與 MID_AUTUMN 的關聯訊號明確，因此適合節慶檔期。",
+                  "alternativeScene":null,
+                  "signals":["festivalMatches: MID_AUTUMN=0.45"]
+                }
+                """, input()));
+    }
+
     private static SceneClassifierInput input() {
         return new SceneClassifierInput(
                 101L, "日式抹茶餅乾", 10L, "進口零食", Season.SUMMER,
