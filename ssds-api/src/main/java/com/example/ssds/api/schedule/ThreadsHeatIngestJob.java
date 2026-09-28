@@ -54,14 +54,14 @@ public class ThreadsHeatIngestJob {
         this.threadsAdapter = threadsAdapter;
     }
 
-    /** 每日台北時間 03:00 執行，早於 HeatCompositeCalibrationJob 的 04:00。 */
+    /** 每日台北時間 03:00 執行，早於 HeatCompositeCalibrationJob 的 06:00。 */
     @Scheduled(cron = "${ssds.ingest.threads.cron:0 0 3 * * *}", zone = "Asia/Taipei")
     @Transactional
     public void run() {
         ingest(trendKeywordRepository.findByEnabledTrue(), LocalDate.now(TAIPEI));
     }
 
-    /** 啟動補跑只查指定且今日尚無 Threads 讀值的啟用關鍵字。 */
+    /** 定向補跑只查指定且今日尚無 Threads 讀值的啟用關鍵字。 */
     @Transactional
     public void runForKeywordIds(Collection<Long> keywordIds, LocalDate today) {
         List<TrendKeyword> keywords = trendKeywordRepository.findAllById(keywordIds).stream()

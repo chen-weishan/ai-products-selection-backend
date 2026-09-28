@@ -54,7 +54,7 @@ public class GoogleTrendsHeatIngestJob {
         ingest(trendKeywordRepository.findByEnabledTrue(), LocalDate.now(TAIPEI));
     }
 
-    /** 啟動補跑只查指定且今日尚無 Google Trends 讀值的啟用關鍵字。 */
+    /** 定向補跑只查指定且今日尚無 Google Trends 讀值的啟用關鍵字。 */
     @Transactional
     public void runForKeywordIds(Collection<Long> keywordIds, LocalDate today) {
         List<TrendKeyword> keywords = trendKeywordRepository.findAllById(keywordIds).stream()
