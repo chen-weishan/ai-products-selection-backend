@@ -73,8 +73,10 @@ class OutboundPromptContractTest {
         JsonNode trend = json(new TrendInterpreterPromptFactory(mapper).userPrompt(
                 sanitizer.sanitizeTrendInterpreter(trendInput())));
         assertKeys(trend, "compositeSeries", "sourceTrends", "allowedOutputs");
-        assertKeys(trend.path("compositeSeries").get(0),
-                "date", "compositeValue", "slope7d", "slope30d");
+        assertKeys(trend.path("compositeSeries"), "columns", "rows");
+        assertEquals(List.of("date", "compositeValue", "slope7d", "slope30d"),
+                mapper.convertValue(trend.path("compositeSeries").path("columns"), List.class));
+        assertEquals(4, trend.path("compositeSeries").path("rows").get(0).size());
         assertKeys(trend.path("sourceTrends").get(0),
                 "source", "granularity", "slope7d", "slope30d", "availability");
         assertKeys(trend.path("allowedOutputs").get(0),

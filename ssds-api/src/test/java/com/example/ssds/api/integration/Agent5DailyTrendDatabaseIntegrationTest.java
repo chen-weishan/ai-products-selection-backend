@@ -279,7 +279,7 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                         keyword.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.model").value("agent5-api-model"))
-                .andExpect(jsonPath("$.data.promptVersion").value("trend-v4"))
+                .andExpect(jsonPath("$.data.promptVersion").value("trend-v5"))
                 .andExpect(jsonPath("$.data.fallbackApplied").value(false));
 
         mockMvc.perform(post(
