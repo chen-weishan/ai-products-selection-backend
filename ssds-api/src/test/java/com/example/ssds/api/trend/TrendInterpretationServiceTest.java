@@ -118,7 +118,7 @@ class TrendInterpretationServiceTest {
         ArgumentCaptor<TrendInterpretation> historyCaptor =
                 ArgumentCaptor.forClass(TrendInterpretation.class);
         verify(interpretationRepository).save(historyCaptor.capture());
-        assertEquals("trend-v4", historyCaptor.getValue().getPromptVersion());
+        assertEquals("trend-v5", historyCaptor.getValue().getPromptVersion());
         assertTrue(historyCaptor.getValue().getInputSnapshot().contains("compositeSeries"));
         assertEquals("MODEL_NUMERIC", response.modelAlias());
         verify(timeGapService).recalculateAffectedByKeyword(31L);

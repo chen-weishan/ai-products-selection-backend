@@ -15,6 +15,7 @@ import java.util.List;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -27,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/ai/tasks")
+@RequestMapping(value = "/ai/tasks", produces = MediaType.APPLICATION_JSON_VALUE)
 @PreAuthorize("isAuthenticated()")
 @Validated
 @Tag(name = "AI Tasks", description = "非同步 AI 任務；SELLING_POINT 是 Product Insight（賣點與風險）的相容碼")

@@ -29,7 +29,7 @@ class AiAccessRouterTest {
         router.route(request);
 
         InOrder order = inOrder(limiter, client);
-        order.verify(limiter).acquire();
+        order.verify(limiter).acquire(AiTaskType.SCENE_CLASSIFY);
         order.verify(client).complete(request);
     }
 
@@ -38,7 +38,7 @@ class AiAccessRouterTest {
         TrackAAiClient client = mock(TrackAAiClient.class);
         GlobalAiRateLimiter limiter = mock(GlobalAiRateLimiter.class);
         org.mockito.Mockito.doThrow(new AiRateLimitException("limited", null))
-                .when(limiter).acquire();
+                .when(limiter).acquire(AiTaskType.SCENE_CLASSIFY);
         AiAccessRouter router = new AiAccessRouter(client, limiter);
 
         assertThrows(AiRateLimitException.class, () -> router.route(request(AiTaskType.SCENE_CLASSIFY)));

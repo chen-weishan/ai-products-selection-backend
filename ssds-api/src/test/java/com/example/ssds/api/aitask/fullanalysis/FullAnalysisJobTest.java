@@ -20,13 +20,13 @@ class FullAnalysisJobTest {
     }
 
     @Test
-    void dailyContinuationOnlyDelegatesQuotaSkippedSelection() {
+    void dailyContinuationDelegatesWeeklyCatchUpSelection() {
         AiTaskService tasks = mock(AiTaskService.class);
-        when(tasks.resumeQuotaSkippedFullAnalysis()).thenReturn(Optional.empty());
+        when(tasks.createFullAnalysisCatchUp()).thenReturn(Optional.empty());
 
-        new FullAnalysisJob(tasks).resumeQuotaSkippedItems();
+        new FullAnalysisJob(tasks).catchUpWeeklyItems();
 
-        verify(tasks).resumeQuotaSkippedFullAnalysis();
+        verify(tasks).createFullAnalysisCatchUp();
         verifyNoMoreInteractions(tasks);
     }
 }

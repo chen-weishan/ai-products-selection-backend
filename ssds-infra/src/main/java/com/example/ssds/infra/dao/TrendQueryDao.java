@@ -263,6 +263,11 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
      * 權重的重新正規化（分母只算可用來源）也一併在 SQL 內完成，
      * 因此任一來源不可用時其餘來源會自動按比例補上（§5.7 優雅降級）。
      *
+     * <p>關鍵字級來源仍只採用指定日期的讀值；Instagram 是週頻品類級來源，
+     * 因此採用「指定日期所在週、截至指定日期的最新一筆」。這讓週一採集的
+     * Instagram 資料可供同週每日規則合成與後續 Agent 5 共用，同時不跨週沿用、
+     * 也不會讀到指定日期之後的資料。
+     *
      * <p>回傳 null 表示該關鍵字當日沒有任何可用來源的讀值 ——
      * 呼叫端要當成「無資料」而非 0（§5.7 資料不足不懲罰）。
      *
@@ -281,6 +286,20 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                         JOIN product p ON p.id = pk.product_id
                         WHERE pk.keyword_id = :keywordId
                     ),
+                    instagram_latest AS (
+                        SELECT DISTINCT ON (hr.source_id, hr.category_id)
+                               hr.source_id, hr.category_id, hr.percentile_within_source
+                        FROM heat_reading hr
+                        JOIN heat_source hs ON hs.id = hr.source_id
+                        JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                        WHERE hs.source_code = 'INSTAGRAM'
+                          AND hs.granularity = 'CATEGORY'
+                          AND hr.reading_date BETWEEN
+                              date_trunc('week', CAST(:readingDate AS date))::date
+                              AND :readingDate
+                          AND hr.percentile_within_source IS NOT NULL
+                        ORDER BY hr.source_id, hr.category_id, hr.reading_date DESC, hr.id DESC
+                    ),
                     matched_readings AS (
                         SELECT hr.source_id, hr.percentile_within_source
                         FROM heat_reading hr
@@ -292,14 +311,9 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
 
                         UNION ALL
 
-                        SELECT hr.source_id, AVG(hr.percentile_within_source)
-                        FROM heat_reading hr
-                        JOIN heat_source hs ON hs.id = hr.source_id
-                        JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                        WHERE hs.granularity = 'CATEGORY'
-                          AND hr.reading_date = :readingDate
-                          AND hr.percentile_within_source IS NOT NULL
-                        GROUP BY hr.source_id
+                        SELECT source_id, AVG(percentile_within_source)
+                        FROM instagram_latest
+                        GROUP BY source_id
                     )
                     SELECT CASE WHEN SUM(hs.composite_weight
                                     * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END) = 0 THEN NULL
@@ -323,13 +337,27 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     public Map<String, BigDecimal> findAppliedWeights(Long keywordId, LocalDate readingDate) {
         List<Map<String, Object>> rows = jdbcClient
                 .sql("""
-                     WITH keyword_categories AS (
-                         SELECT DISTINCT p.category_id
-                         FROM product_keyword pk
-                         JOIN product p ON p.id = pk.product_id
-                         WHERE pk.keyword_id = :keywordId
-                     ),
-                     matched_readings AS (
+                      WITH keyword_categories AS (
+                          SELECT DISTINCT p.category_id
+                          FROM product_keyword pk
+                          JOIN product p ON p.id = pk.product_id
+                          WHERE pk.keyword_id = :keywordId
+                      ),
+                      instagram_latest AS (
+                          SELECT DISTINCT ON (hr.source_id, hr.category_id)
+                                 hr.source_id, hr.category_id
+                          FROM heat_reading hr
+                          JOIN heat_source hs ON hs.id = hr.source_id
+                          JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                          WHERE hs.source_code = 'INSTAGRAM'
+                            AND hs.granularity = 'CATEGORY'
+                            AND hr.reading_date BETWEEN
+                                date_trunc('week', CAST(:readingDate AS date))::date
+                                AND :readingDate
+                            AND hr.percentile_within_source IS NOT NULL
+                          ORDER BY hr.source_id, hr.category_id, hr.reading_date DESC, hr.id DESC
+                      ),
+                      matched_readings AS (
                          SELECT hr.source_id
                          FROM heat_reading hr
                          JOIN heat_source hs ON hs.id = hr.source_id
@@ -340,13 +368,8 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
 
                          UNION
 
-                         SELECT hr.source_id
-                         FROM heat_reading hr
-                         JOIN heat_source hs ON hs.id = hr.source_id
-                         JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                         WHERE hs.granularity = 'CATEGORY'
-                           AND hr.reading_date = :readingDate
-                           AND hr.percentile_within_source IS NOT NULL
+                          SELECT source_id
+                          FROM instagram_latest
                      )
                      SELECT hs.source_code AS sourceCode,
                             hs.composite_weight

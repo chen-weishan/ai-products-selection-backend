@@ -1,15 +1,22 @@
 package com.example.ssds.api.schedule;
 
-import com.example.ssds.infra.dao.HeatReadingPercentileDao;
-import com.example.ssds.infra.entity.TrendKeyword;
-import com.example.ssds.infra.repository.TrendKeywordRepository;
-import com.example.ssds.infra.service.HeatCompositeCalibrationService;
 import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationJob;
 import com.example.ssds.api.trend.TrendInterpretationJob;
+import com.example.ssds.core.domain.HeatSourceCode;
+import com.example.ssds.infra.dao.HeatReadingPercentileDao;
+import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
+import com.example.ssds.infra.repository.HeatReadingRepository;
+import com.example.ssds.infra.repository.TrendKeywordRepository;
+import com.example.ssds.infra.service.HeatCompositeCalibrationService;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +36,9 @@ import org.springframework.stereotype.Component;
  * ②再逐一關鍵字合成——順序反了的話，合成會讀到「今天」的百分位是舊值或 NULL。
  *
  * <p>Threads、Google Trends 與 Instagram 各自先完成採集；本任務於台北 06:00
- * 執行合成，接著依序呼叫已啟用的 B 軌時效重算與 Agent 5 enqueue。下游不再
- * 各自依賴固定分鐘差的 cron，因此只會處理本次主流程已完成的營業日資料。
+ * 先補查仍缺漏的來源讀值，再執行合成，接著依序呼叫已啟用的 B 軌時效重算與
+ * Agent 5 enqueue。下游不再各自依賴固定分鐘差的 cron，因此只會處理本次主流程
+ * 已完成的營業日資料。
  */
 @Component
 public class HeatCompositeCalibrationJob {
@@ -40,41 +48,99 @@ public class HeatCompositeCalibrationJob {
 
     private final HeatReadingPercentileDao percentileDao;
     private final TrendKeywordRepository trendKeywordRepository;
+    private final HeatCompositeDailyRepository compositeRepository;
+    private final HeatReadingRepository heatReadingRepository;
     private final HeatCompositeCalibrationService calibrationService;
+    private final ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider;
+    private final ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider;
+    private final ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider;
     private final ObjectProvider<SourcingTimeGapRecalculationJob> timeGapJobProvider;
     private final ObjectProvider<TrendInterpretationJob> trendInterpretationJobProvider;
 
     public HeatCompositeCalibrationJob(
             HeatReadingPercentileDao percentileDao,
             TrendKeywordRepository trendKeywordRepository,
+            HeatCompositeDailyRepository compositeRepository,
+            HeatReadingRepository heatReadingRepository,
             HeatCompositeCalibrationService calibrationService,
+            ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider,
+            ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider,
+            ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider,
             ObjectProvider<SourcingTimeGapRecalculationJob> timeGapJobProvider,
             ObjectProvider<TrendInterpretationJob> trendInterpretationJobProvider) {
         this.percentileDao = percentileDao;
         this.trendKeywordRepository = trendKeywordRepository;
+        this.compositeRepository = compositeRepository;
+        this.heatReadingRepository = heatReadingRepository;
         this.calibrationService = calibrationService;
+        this.threadsIngestJobProvider = threadsIngestJobProvider;
+        this.googleTrendsIngestJobProvider = googleTrendsIngestJobProvider;
+        this.instagramIngestJobProvider = instagramIngestJobProvider;
         this.timeGapJobProvider = timeGapJobProvider;
         this.trendInterpretationJobProvider = trendInterpretationJobProvider;
     }
 
     @Scheduled(cron = "${ssds.calibration.heat-composite.cron:0 0 6 * * *}", zone = "Asia/Taipei")
     public void run() {
-        run(LocalDate.now(TAIPEI));
+        runScheduled(LocalDate.now(TAIPEI));
+    }
+
+    void runScheduled(LocalDate businessDate) {
+        List<Long> missingKeywordIds =
+                compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate);
+        if (!missingKeywordIds.isEmpty()) {
+            ThreadsHeatIngestJob threadsIngestJob = threadsIngestJobProvider.getIfAvailable();
+            if (threadsIngestJob != null) {
+                threadsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
+            }
+            GoogleTrendsHeatIngestJob googleTrendsIngestJob =
+                    googleTrendsIngestJobProvider.getIfAvailable();
+            if (googleTrendsIngestJob != null) {
+                googleTrendsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
+            }
+        }
+
+        LocalDate weekStart = businessDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        boolean instagramReadingExists = heatReadingRepository
+                .existsBySourceSourceCodeAndReadingDateBetween(
+                        HeatSourceCode.INSTAGRAM, weekStart, weekStart.plusDays(6));
+        if (!instagramReadingExists) {
+            InstagramHeatIngestJob instagramIngestJob = instagramIngestJobProvider.getIfAvailable();
+            if (instagramIngestJob != null) {
+                instagramIngestJob.run();
+            }
+        }
+
+        run(businessDate);
     }
 
     void run(LocalDate businessDate) {
-        run(businessDate, null);
+        run(businessDate, null, null);
     }
 
-    void runCatchUp(LocalDate businessDate, Collection<Long> agentKeywordIds) {
-        run(businessDate, List.copyOf(agentKeywordIds));
+    void runCatchUp(LocalDate businessDate, Collection<Long> keywordIds) {
+        List<Long> catchUpKeywordIds = List.copyOf(keywordIds);
+        run(businessDate, catchUpKeywordIds, catchUpKeywordIds);
     }
 
-    private void run(LocalDate businessDate, List<Long> agentKeywordIds) {
+    void runCatchUpAll(LocalDate businessDate) {
+        run(businessDate, null, null);
+    }
+
+    private void run(
+            LocalDate businessDate,
+            List<Long> compositionKeywordIds,
+            List<Long> agentKeywordIds) {
         int updated = percentileDao.applyPercentiles(businessDate);
         log.info("百分位重算完成：{} 筆讀值（{}）。", updated, businessDate);
 
         List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
+        if (compositionKeywordIds != null) {
+            Set<Long> requestedKeywordIds = new HashSet<>(compositionKeywordIds);
+            keywords = keywords.stream()
+                    .filter(keyword -> requestedKeywordIds.contains(keyword.getId()))
+                    .toList();
+        }
         int computed = 0;
         int skipped = 0;
         for (TrendKeyword keyword : keywords) {

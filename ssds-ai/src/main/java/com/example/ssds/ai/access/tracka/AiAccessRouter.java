@@ -37,7 +37,7 @@ public class AiAccessRouter {
             throw new IllegalArgumentException("B 軌工具任務不得使用無工具的 TrackAAiClient: " + request.taskType());
         }
         externalLlmPolicy.validateUserJson(request.userPrompt());
-        rateLimiter.acquire();
+        rateLimiter.acquire(request.taskType());
         return trackAClient.complete(request);
     }
 }

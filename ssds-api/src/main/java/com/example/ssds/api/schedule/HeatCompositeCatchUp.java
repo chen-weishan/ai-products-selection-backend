@@ -22,7 +22,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
 
-/** 應用在每日主排程時間後才啟動時，依當日合成完整度決定是否補跑。 */
+/** 應用啟動時，依各來源與每日合成的排程時間及資料完整度決定是否補跑。 */
 @Component
 @ConditionalOnProperty(
         name = "ssds.calibration.heat-catch-up-enabled",
@@ -39,6 +39,8 @@ public class HeatCompositeCatchUp {
     private final TrendKeywordRepository keywordRepository;
     private final HeatCompositeDailyRepository compositeRepository;
     private final HeatReadingRepository heatReadingRepository;
+    private final CronExpression threadsSchedule;
+    private final CronExpression googleTrendsSchedule;
     private final CronExpression dailySchedule;
     private final CronExpression instagramSchedule;
     private final Clock clock;
@@ -52,6 +54,8 @@ public class HeatCompositeCatchUp {
             TrendKeywordRepository keywordRepository,
             HeatCompositeDailyRepository compositeRepository,
             HeatReadingRepository heatReadingRepository,
+            @Value("${ssds.ingest.threads.cron:0 0 3 * * *}") String threadsCron,
+            @Value("${ssds.ingest.google-trends.cron:0 15 3 * * *}") String googleTrendsCron,
             @Value("${ssds.calibration.heat-composite.cron:0 0 6 * * *}") String dailyCron,
             @Value("${ssds.ingest.instagram.cron:0 30 3 * * MON}") String instagramCron) {
         this(
@@ -62,6 +66,8 @@ public class HeatCompositeCatchUp {
                 keywordRepository,
                 compositeRepository,
                 heatReadingRepository,
+                CronExpression.parse(threadsCron),
+                CronExpression.parse(googleTrendsCron),
                 CronExpression.parse(dailyCron),
                 CronExpression.parse(instagramCron),
                 Clock.system(BUSINESS_ZONE));
@@ -75,6 +81,8 @@ public class HeatCompositeCatchUp {
             TrendKeywordRepository keywordRepository,
             HeatCompositeDailyRepository compositeRepository,
             HeatReadingRepository heatReadingRepository,
+            CronExpression threadsSchedule,
+            CronExpression googleTrendsSchedule,
             CronExpression dailySchedule,
             CronExpression instagramSchedule,
             Clock clock) {
@@ -85,6 +93,8 @@ public class HeatCompositeCatchUp {
         this.keywordRepository = keywordRepository;
         this.compositeRepository = compositeRepository;
         this.heatReadingRepository = heatReadingRepository;
+        this.threadsSchedule = threadsSchedule;
+        this.googleTrendsSchedule = googleTrendsSchedule;
         this.dailySchedule = dailySchedule;
         this.instagramSchedule = instagramSchedule;
         this.clock = clock;
@@ -100,6 +110,13 @@ public class HeatCompositeCatchUp {
         ZonedDateTime startOfDay = businessDate.atStartOfDay(BUSINESS_ZONE);
         LocalDate weekStart = businessDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate weekEnd = weekStart.plusDays(6);
+        ZonedDateTime threadsScheduledAt = threadsSchedule.next(startOfDay.minusNanos(1));
+        ZonedDateTime googleTrendsScheduledAt = googleTrendsSchedule.next(startOfDay.minusNanos(1));
+        ZonedDateTime dailyScheduledAt = dailySchedule.next(startOfDay.minusNanos(1));
+        boolean threadsSchedulePassed = schedulePassed(now, businessDate, threadsScheduledAt);
+        boolean googleTrendsSchedulePassed = schedulePassed(now, businessDate, googleTrendsScheduledAt);
+        boolean dailySchedulePassed = schedulePassed(now, businessDate, dailyScheduledAt);
+
         InstagramHeatIngestJob instagramIngestJob = instagramIngestJobProvider.getIfAvailable();
         ZonedDateTime instagramScheduledAt = instagramSchedule.next(
                 weekStart.atStartOfDay(BUSINESS_ZONE).minusNanos(1));
@@ -108,31 +125,53 @@ public class HeatCompositeCatchUp {
                 && !now.isBefore(instagramScheduledAt)
                 && !heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
                         HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
+        boolean instagramDataAdded = false;
         if (instagramCatchUpDue) {
             log.info("本週尚無 Instagram 熱度資料，開始補跑：weekStart={}", weekStart);
             instagramIngestJob.run();
+            instagramDataAdded = heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+                    HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
+            if (!instagramDataAdded) {
+                log.warn("Instagram 補跑完成但本週仍無可用資料，不擴大重合範圍：weekStart={}", weekStart);
+            }
         } else if (instagramIngestJob != null
                 && instagramScheduledAt != null
                 && !now.isBefore(instagramScheduledAt)) {
             log.info("本週 Instagram 熱度資料已存在，不需補跑：weekStart={}", weekStart);
         }
 
-        ZonedDateTime dailyScheduledAt = dailySchedule.next(startOfDay.minusNanos(1));
-        if (dailyScheduledAt == null
-                || !businessDate.equals(dailyScheduledAt.toLocalDate())
-                || now.isBefore(dailyScheduledAt)) {
+        if (!threadsSchedulePassed && !googleTrendsSchedulePassed && !dailySchedulePassed) {
             return;
         }
-
         long enabledKeywords = keywordRepository.countByEnabledTrue();
         if (enabledKeywords == 0) {
             return;
         }
         List<Long> missingKeywordIds =
                 compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate);
+        if (!missingKeywordIds.isEmpty()) {
+            if (threadsSchedulePassed) {
+                ThreadsHeatIngestJob threadsIngestJob = threadsIngestJobProvider.getIfAvailable();
+                if (threadsIngestJob != null) {
+                    threadsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
+                }
+            }
+            if (googleTrendsSchedulePassed) {
+                GoogleTrendsHeatIngestJob googleTrendsIngestJob =
+                        googleTrendsIngestJobProvider.getIfAvailable();
+                if (googleTrendsIngestJob != null) {
+                    googleTrendsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
+                }
+            }
+        }
+
+        if (!dailySchedulePassed) {
+            return;
+        }
+
         long completedKeywords = enabledKeywords - missingKeywordIds.size();
         boolean dailyCatchUpDue = !missingKeywordIds.isEmpty();
-        if (!dailyCatchUpDue && !instagramCatchUpDue) {
+        if (!dailyCatchUpDue && !instagramDataAdded) {
             log.info(
                     "每日熱度主流程今日已完成，不需補跑：date={}, completed={}/{}",
                     businessDate,
@@ -147,16 +186,18 @@ public class HeatCompositeCatchUp {
                     businessDate,
                     completedKeywords,
                     enabledKeywords);
-            ThreadsHeatIngestJob threadsIngestJob = threadsIngestJobProvider.getIfAvailable();
-            if (threadsIngestJob != null) {
-                threadsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
-            }
-            GoogleTrendsHeatIngestJob googleTrendsIngestJob =
-                    googleTrendsIngestJobProvider.getIfAvailable();
-            if (googleTrendsIngestJob != null) {
-                googleTrendsIngestJob.runForKeywordIds(missingKeywordIds, businessDate);
-            }
         }
-        calibrationJob.runCatchUp(businessDate, missingKeywordIds);
+        if (instagramDataAdded) {
+            calibrationJob.runCatchUpAll(businessDate);
+        } else {
+            calibrationJob.runCatchUp(businessDate, missingKeywordIds);
+        }
+    }
+
+    private static boolean schedulePassed(
+            ZonedDateTime now, LocalDate businessDate, ZonedDateTime scheduledAt) {
+        return scheduledAt != null
+                && businessDate.equals(scheduledAt.toLocalDate())
+                && !now.isBefore(scheduledAt);
     }
 }

@@ -330,16 +330,45 @@ class AiTaskServiceTest {
     }
 
     @Test
-    void quotaContinuationSkipsWhenFullAnalysisIsAlreadyActive() {
+    void weeklyCatchUpSkipsWhenFullAnalysisIsAlreadyActive() {
         when(taskRepository.existsByTaskTypeAndStatusIn(
                 eq(AiTaskType.FULL_ANALYSIS), anyList())).thenReturn(true);
         AiTaskService service = new AiTaskService(
                 taskRepository, itemRepository, productRepository, eventPublisher);
 
-        assertTrue(service.resumeQuotaSkippedFullAnalysis().isEmpty());
+        assertTrue(service.createFullAnalysisCatchUp().isEmpty());
 
-        verify(itemRepository, never()).findProductsPendingQuotaRetry(any(), any());
+        verify(productRepository, never()).findFullAnalysisCatchUpCandidates(anyList(), any());
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void weeklyCatchUpQueuesEligibleProductsWithoutCurrentWeekData() {
+        Product product = Product.builder()
+                .id(130L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findFullAnalysisCatchUpCandidates(anyList(), any(Instant.class)))
+                .thenReturn(List.of(product));
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(704L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createFullAnalysisCatchUp().orElseThrow();
+
+        assertAll(
+                () -> assertEquals(704L, response.taskId()),
+                () -> assertEquals(1, response.totalCount()));
+        verify(productRepository).findFullAnalysisCatchUpCandidates(
+                eq(List.of(ProductStatus.EVALUATING, ProductStatus.WATCHING, ProductStatus.ADOPTED)),
+                any(Instant.class));
+        verify(itemRepository).saveAll(argThat(items ->
+                items.iterator().next().getProduct() == product));
     }
 
     @Test

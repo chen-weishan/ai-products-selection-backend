@@ -48,6 +48,25 @@ public class RecommendationResponseParserTest {
                 input()));
     }
 
+    @Test
+    void rejectsInternalNamesAndEnglishOnlyReasoning() {
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace(
+                        "加分小計為 86.89，扣分小計為 4，建議小量試單。",
+                        "TREND 表現突出，但有 LOGISTICS_RISK，建議 ADOPT。"),
+                input()));
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace(
+                        "加分小計為 86.89，扣分小計為 4，建議小量試單。",
+                        "Strong demand supports a trial order."),
+                input()));
+        assertThrows(AiSchemaValidationException.class, () -> parser.parse(
+                validJson().replace(
+                        "加分小計為 86.89，扣分小計為 4，建議小量試單。",
+                        "適合 MID_AUTUMN 檔期，建議小量試單。"),
+                input()));
+    }
+
     public static RecommendationInput input() {
         return new RecommendationInput(
                 101L,
