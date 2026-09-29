@@ -84,7 +84,7 @@ public class ManualHeatTagController {
         return ApiResponse.success(queryService.resolvePlatform(request.sourceUrl()));
     }
 
-    @PreAuthorize(CAN_WRITE)
+    @PreAuthorize(CAN_WRITE)    
     @PostMapping
     public ResponseEntity<ApiResponse<ManualHeatTagResponse>> create(
             @Valid @RequestBody ManualHeatTagCreateRequest request) {

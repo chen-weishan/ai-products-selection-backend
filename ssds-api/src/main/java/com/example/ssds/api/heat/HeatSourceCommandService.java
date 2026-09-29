@@ -5,6 +5,7 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.heat.dto.HeatSourceDetailResponse;
 import com.example.ssds.api.heat.dto.HeatSourceTestResponse;
 import com.example.ssds.api.heat.dto.HeatSourceUpdateRequest;
+import com.example.ssds.api.security.CurrentUserId;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.AuditLog;
@@ -23,17 +24,19 @@ import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * S-16 熱度來源管理的異動操作（規格書 FR-14-2）：啟用／停用、調整合成權重、測試連線。
  *
- * <p>合成權重的異動時機刻意只更新 {@code heat_source.composite_weight} 本身，
- * <b>不</b>在這裡觸發重新評分——規格書明講「於下一次每日熱度合成（次日 06:00）生效，
- * 並觸發該次合成後的全量重新評分」，也就是由每日排程讀到新權重後才算數，
- * 不是 API 呼叫當下立即生效。這裡只負責「寫入新權重＋留下 audit_log」。
+ * <p>AC-14-5：合成權重或啟用狀態<b>實際變動</b>時，本服務在交易內寫入新值與 audit_log 後發布
+ * {@link HeatSourceCompositionChangedEvent}；交易提交後由
+ * {@link HeatCompositionRecalculationListener} 非同步重算當日 {@code heat_composite_daily}
+ * 並執行全量重新評分，不等次日 06:00 排程。事件在 AFTER_COMMIT 才處理，
+ * 因為合成 SQL 直接讀 {@code heat_source.composite_weight}，必須讀到已提交的新值。
+ * 值沒有變的 PUT（例如 0.3 送成 0.300）不會發布事件，避免無意義的全量重評。
  */
 @Service
 @RequiredArgsConstructor
@@ -49,6 +52,7 @@ public class HeatSourceCommandService {
     private final AppUserRepository appUserRepository;
     private final ManualHeatTagRepository manualHeatTagRepository;
     private final List<HeatSourceAdapter> adapters;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 與 {@code HeatSourceHealthCheckJob} 共用同一個開關（2026-09-23 暫停 FR-14 探測，
@@ -61,6 +65,7 @@ public class HeatSourceCommandService {
     /**
      * AC-14-5：僅 SYS_ADMIN 可調整合成權重（由 controller 的 {@code @PreAuthorize} 把關，
      * 這裡是資料異動本身）。{@link HeatSourceUpdateRequest} 兩欄皆為選填，null 表不異動。
+     * 權重或啟用狀態有實際變動時，於交易提交後觸發合成重算與全量重評分。
      */
     @Transactional
     public HeatSourceDetailResponse update(Long id, HeatSourceUpdateRequest request) {
@@ -69,6 +74,10 @@ public class HeatSourceCommandService {
 
         String beforeJson = String.format(
                 "{\"enabled\":%s,\"compositeWeight\":%s}", source.isEnabled(), source.getCompositeWeight());
+
+        boolean enabledChanged = request.enabled() != null && request.enabled() != source.isEnabled();
+        boolean weightChanged = request.compositeWeight() != null
+                && source.getCompositeWeight().compareTo(request.compositeWeight()) != 0;
 
         if (request.enabled() != null) {
             source.setEnabled(request.enabled());
@@ -89,6 +98,11 @@ public class HeatSourceCommandService {
                 .beforeJson(beforeJson)
                 .afterJson(afterJson)
                 .build());
+
+        if (enabledChanged || weightChanged) {
+            eventPublisher.publishEvent(
+                    new HeatSourceCompositionChangedEvent(source.getId(), source.getSourceCode()));
+        }
 
         return HeatSourceMapper.toDetail(source);
     }
@@ -140,9 +154,8 @@ public class HeatSourceCommandService {
         return adapter.probe();
     }
 
-    /** 比照 {@code ManualHeatTagCommandService}：取用 JwtAuthenticationFilter 設定的登入者 id。 */
+    /** 比照 {@code ManualHeatTagCommandService}：取用目前登入者 id（見 {@link CurrentUserId}）。 */
     private AppUser currentUser() {
-        Long userId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return appUserRepository.getReferenceById(userId);
+        return appUserRepository.getReferenceById(CurrentUserId.require());
     }
 }

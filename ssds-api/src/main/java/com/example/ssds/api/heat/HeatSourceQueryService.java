@@ -24,11 +24,11 @@ public class HeatSourceQueryService {
      */
     private static final List<ExcludedHeatSourceResponse> EXCLUDED_SOURCES = List.of(
             new ExcludedHeatSourceResponse("FACEBOOK",
-                    "無合法的程式化資料管道，服務條款禁止自動化擷取，改由人工熱度標記涵蓋（附錄 C）"),
+                    "CrowdTangle 已關閉，替代品僅開放學術／非營利"),
             new ExcludedHeatSourceResponse("TIKTOK",
-                    "無合法的程式化資料管道，服務條款禁止自動化擷取，改由人工熱度標記涵蓋（附錄 C）"),
+                    "Research API 排除商業使用者，台灣不在資格地區"),
             new ExcludedHeatSourceResponse("XIAOHONGSHU",
-                    "無合法的程式化資料管道，服務條款禁止自動化擷取，改由人工熱度標記涵蓋（附錄 C）"));
+                    "無公開 API，第三方平台條款禁止轉供第三方"));
 
     private final HeatSourceRepository heatSourceRepository;
 

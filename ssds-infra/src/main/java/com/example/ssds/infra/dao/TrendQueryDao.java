@@ -384,6 +384,19 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                 .query()
                 .listOfRows();
 
+        return normalizeWeights(rows);
+    }
+
+    /**
+     * AC-14-4：把「有讀值且可用來源」的有效權重（品類級已在 SQL 乘上 0.5 粒度折扣）
+     * 重新正規化為總和 1，四位小數。這就是 {@code heat_composite_daily.applied_weights}
+     * 與畫面「本次合成比例」記錄的實際比例。
+     *
+     * <p>抽成獨立靜態方法只為了能不連資料庫就驗證除法與邊界；SQL 端的來源篩選
+     * （enabled 且非 UNAVAILABLE）仍在 {@link #findAppliedWeights}。
+     * 空清單或權重總和為 0 時回傳空 Map。
+     */
+    static Map<String, BigDecimal> normalizeWeights(List<Map<String, Object>> rows) {
         BigDecimal total = rows.stream()
                 .map(r -> (BigDecimal) r.get("effectiveWeight"))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

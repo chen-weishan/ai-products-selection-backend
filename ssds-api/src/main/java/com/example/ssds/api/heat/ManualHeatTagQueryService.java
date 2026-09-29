@@ -4,6 +4,7 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.heat.dto.ManualHeatTagResponse;
 import com.example.ssds.api.heat.dto.ResolvePlatformResponse;
+import com.example.ssds.api.security.CurrentUserId;
 import com.example.ssds.core.domain.SocialPlatformResolver;
 import com.example.ssds.infra.entity.ManualHeatTag;
 import com.example.ssds.infra.repository.ManualHeatTagRepository;
@@ -11,7 +12,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -97,9 +97,9 @@ public class ManualHeatTagQueryService {
         return tags.stream().map(ManualHeatTagMapper::toResponse).toList();
     }
 
-    /** 比照 {@code ManualHeatTagCommandService}：取用 JwtAuthenticationFilter 設定的登入者 id。 */
+    /** 比照 {@code ManualHeatTagCommandService}：取用目前登入者 id（見 {@link CurrentUserId}）。 */
     private Long currentUserId() {
-        return (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return CurrentUserId.require();
     }
 
     /** AC-14-1：貼上連結即時判定平台別，供前端在送出前顯示。 */

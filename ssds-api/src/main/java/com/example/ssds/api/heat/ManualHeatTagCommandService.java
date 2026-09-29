@@ -5,6 +5,7 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.heat.dto.ManualHeatTagCreateRequest;
 import com.example.ssds.api.heat.dto.ManualHeatTagResponse;
 import com.example.ssds.api.heat.dto.ManualHeatTagUpdateRequest;
+import com.example.ssds.api.security.CurrentUserId;
 import com.example.ssds.core.domain.RoleCode;
 import com.example.ssds.core.domain.SocialPlatformResolver;
 import com.example.ssds.infra.entity.AppUser;
@@ -17,7 +18,6 @@ import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,13 +112,12 @@ public class ManualHeatTagCommandService {
     }
 
     /**
-     * {@link com.example.ssds.api.security.JwtAuthenticationFilter} 把 principal 設為
-     * {@code JwtTokenProvider.userId(claims)}（{@link Long}），此處直接取用。
+     * {@link CurrentUserId} 由目前登入者的 principal 取出使用者 id。
      * {@code @PreAuthorize("isAuthenticated()")} 已在 controller 層擋掉未登入請求，
      * 走到這裡 principal 必為非 null 的 Long。
      */
     private AppUser currentUser() {
-        Long userId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long userId = CurrentUserId.require();
         return appUserRepository.getReferenceById(userId);
     }
 
@@ -127,7 +126,7 @@ public class ManualHeatTagCommandService {
      * 其餘角色（即便有權限 7、能建立標記）都只能動自己建立的那些。
      */
     private void requireOwnerOrAdmin(ManualHeatTag tag) {
-        Long currentUserId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long currentUserId = CurrentUserId.require();
         boolean isOwner = tag.getTaggedBy() != null && tag.getTaggedBy().getId().equals(currentUserId);
         if (isOwner) {
             return;
