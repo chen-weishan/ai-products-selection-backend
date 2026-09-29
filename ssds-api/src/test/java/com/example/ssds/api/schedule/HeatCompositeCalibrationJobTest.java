@@ -259,7 +259,7 @@ class HeatCompositeCalibrationJobTest {
     }
 
     @Test
-    void scheduledRerunDoesNotRepeatCompletedSourceCollection() {
+    void scheduledRerunOnlyReconcilesExistingInstagramWithoutRepeatingCollection() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
@@ -289,7 +289,9 @@ class HeatCompositeCalibrationJobTest {
 
         job.runScheduled(businessDate);
 
-        verifyNoInteractions(threadsJob, googleTrendsJob, instagramJob);
+        verifyNoInteractions(threadsJob, googleTrendsJob);
+        verify(instagramJob).restoreAvailabilityFromCurrentWeek(businessDate);
+        verify(instagramJob, never()).run();
         verify(percentileDao).applyPercentiles(businessDate);
     }
 

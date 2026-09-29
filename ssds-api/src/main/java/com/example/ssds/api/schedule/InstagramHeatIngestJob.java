@@ -11,9 +11,11 @@ import com.example.ssds.infra.repository.HeatSourceRepository;
 import com.example.ssds.infra.repository.InstagramHashtagMappingRepository;
 import com.example.ssds.ingest.HeatDataPoint;
 import com.example.ssds.ingest.Instagram.InstagramHeatSourceAdapter;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,10 +88,15 @@ public class InstagramHeatIngestJob {
         try {
             points = instagramAdapter.fetch(hashtags, today);
         } catch (Exception e) {
-            // 對應錯誤處理：token 過期／速率限制等不予重試，見 §5.3.2 裁決，
-            // 把這次資料來源狀態改成 UNAVAILABLE 後直接結束，不阻塞後續排程。
-            log.error("Instagram 熱度採集發生錯誤，資料來源狀態改為 UNAVAILABLE", e);
-            source.setAvailability(SourceAvailability.UNAVAILABLE);
+            boolean currentWeekReadingExists = hasCurrentWeekReading(today);
+            SourceAvailability failureAvailability = currentWeekReadingExists
+                    ? SourceAvailability.DEGRADED
+                    : SourceAvailability.UNAVAILABLE;
+            log.error(
+                    "Instagram 熱度採集發生錯誤，資料來源狀態改為 {}",
+                    failureAvailability,
+                    e);
+            source.setAvailability(failureAvailability);
             heatSourceRepository.save(source);
             return;
         }
@@ -107,6 +114,30 @@ public class InstagramHeatIngestJob {
         heatSourceRepository.save(source);
 
         log.info("Instagram 熱度採集完成，採集 {} 個 hashtag，取得 {} 筆讀值。", hashtags.size(), points.size());
+    }
+
+    /** 本週已有有效快照時，修復舊版失敗流程留下的 UNAVAILABLE，保留為可降級使用。 */
+    @Transactional
+    public boolean restoreAvailabilityFromCurrentWeek(LocalDate businessDate) {
+        if (!hasCurrentWeekReading(businessDate)) {
+            return false;
+        }
+        HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.INSTAGRAM).orElse(null);
+        if (source == null
+                || !source.isEnabled()
+                || source.getAvailability() != SourceAvailability.UNAVAILABLE) {
+            return false;
+        }
+        source.setAvailability(SourceAvailability.DEGRADED);
+        heatSourceRepository.save(source);
+        log.info("Instagram 本週 reading 仍有效，來源狀態由 UNAVAILABLE 修復為 DEGRADED。");
+        return true;
+    }
+
+    private boolean hasCurrentWeekReading(LocalDate businessDate) {
+        LocalDate weekStart = businessDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        return heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM, weekStart, weekStart.plusDays(6));
     }
 
     private void upsert(HeatSource source, Category category, LocalDate date, HeatDataPoint point) {

@@ -120,12 +120,16 @@ public class HeatCompositeCatchUp {
         InstagramHeatIngestJob instagramIngestJob = instagramIngestJobProvider.getIfAvailable();
         ZonedDateTime instagramScheduledAt = instagramSchedule.next(
                 weekStart.atStartOfDay(BUSINESS_ZONE).minusNanos(1));
-        boolean instagramCatchUpDue = instagramIngestJob != null
-                && instagramScheduledAt != null
-                && !now.isBefore(instagramScheduledAt)
-                && !heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+        boolean instagramSchedulePassed = instagramScheduledAt != null
+                && !now.isBefore(instagramScheduledAt);
+        boolean instagramReadingExists = instagramIngestJob != null
+                && heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
                         HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
+        boolean instagramCatchUpDue = instagramIngestJob != null
+                && instagramSchedulePassed
+                && !instagramReadingExists;
         boolean instagramDataAdded = false;
+        boolean instagramAvailabilityRestored = false;
         if (instagramCatchUpDue) {
             log.info("本週尚無 Instagram 熱度資料，開始補跑：weekStart={}", weekStart);
             instagramIngestJob.run();
@@ -134,9 +138,9 @@ public class HeatCompositeCatchUp {
             if (!instagramDataAdded) {
                 log.warn("Instagram 補跑完成但本週仍無可用資料，不擴大重合範圍：weekStart={}", weekStart);
             }
-        } else if (instagramIngestJob != null
-                && instagramScheduledAt != null
-                && !now.isBefore(instagramScheduledAt)) {
+        } else if (instagramIngestJob != null && instagramSchedulePassed) {
+            instagramAvailabilityRestored =
+                    instagramIngestJob.restoreAvailabilityFromCurrentWeek(businessDate);
             log.info("本週 Instagram 熱度資料已存在，不需補跑：weekStart={}", weekStart);
         }
 
@@ -171,7 +175,7 @@ public class HeatCompositeCatchUp {
 
         long completedKeywords = enabledKeywords - missingKeywordIds.size();
         boolean dailyCatchUpDue = !missingKeywordIds.isEmpty();
-        if (!dailyCatchUpDue && !instagramDataAdded) {
+        if (!dailyCatchUpDue && !instagramDataAdded && !instagramAvailabilityRestored) {
             log.info(
                     "每日熱度主流程今日已完成，不需補跑：date={}, completed={}/{}",
                     businessDate,
@@ -187,7 +191,7 @@ public class HeatCompositeCatchUp {
                     completedKeywords,
                     enabledKeywords);
         }
-        if (instagramDataAdded) {
+        if (instagramDataAdded || instagramAvailabilityRestored) {
             calibrationJob.runCatchUpAll(businessDate);
         } else {
             calibrationJob.runCatchUp(businessDate, missingKeywordIds);

@@ -102,6 +102,55 @@ class HeatSourceIngestJobTest {
     }
 
     @Test
+    void instagramFailureKeepsExistingWeeklyReadingUsableAsDegraded() {
+        HeatSource source = enabledSource(HeatSourceCode.INSTAGRAM);
+        HeatSourceRepository sources = sourceRepository(source);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        InstagramHashtagMappingRepository mappings = mock(InstagramHashtagMappingRepository.class);
+        InstagramHeatSourceAdapter adapter = mock(InstagramHeatSourceAdapter.class);
+        when(mappings.findAllEnabledWithCategory()).thenReturn(List.of(
+                InstagramHashtagMapping.builder()
+                        .hashtag("agent5")
+                        .category(Category.builder().name("測試品類").build())
+                        .enabled(true)
+                        .build()));
+        when(readings.existsBySourceSourceCodeAndReadingDateBetween(
+                eq(HeatSourceCode.INSTAGRAM), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(true);
+        when(adapter.fetch(anyList(), any(LocalDate.class)))
+                .thenThrow(new IllegalStateException("later retry failed"));
+        InstagramHeatIngestJob job = new InstagramHeatIngestJob(
+                sources, readings, mappings, adapter);
+
+        job.run();
+
+        assertEquals(SourceAvailability.DEGRADED, source.getAvailability());
+        verify(sources).save(source);
+    }
+
+    @Test
+    void restoresUnavailableInstagramWhenCurrentWeekReadingExists() {
+        HeatSource source = enabledSource(HeatSourceCode.INSTAGRAM);
+        source.setAvailability(SourceAvailability.UNAVAILABLE);
+        HeatSourceRepository sources = sourceRepository(source);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        when(readings.existsBySourceSourceCodeAndReadingDateBetween(
+                eq(HeatSourceCode.INSTAGRAM), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(true);
+        InstagramHeatIngestJob job = new InstagramHeatIngestJob(
+                sources,
+                readings,
+                mock(InstagramHashtagMappingRepository.class),
+                mock(InstagramHeatSourceAdapter.class));
+
+        boolean restored = job.restoreAvailabilityFromCurrentWeek(LocalDate.of(2026, 9, 29));
+
+        assertTrue(restored);
+        assertEquals(SourceAvailability.DEGRADED, source.getAvailability());
+        verify(sources).save(source);
+    }
+
+    @Test
     void targetedCatchUpFetchesOnlyMissingThreadsKeyword() {
         HeatSource source = enabledSource(HeatSourceCode.THREADS);
         TrendKeyword missing = enabledKeyword(1L, "新增關鍵字");
