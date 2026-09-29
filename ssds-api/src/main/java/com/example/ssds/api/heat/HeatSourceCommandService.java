@@ -55,7 +55,7 @@ public class HeatSourceCommandService {
      * 見該類別註解）。手動「測試連線」也會真的打一次 Apify，暫停期間一併擋掉，
      * 避免變成繞過排程停用的漏洞。
      */
-    @Value("${ssds.heat-source-probe.enabled:false}")
+    @Value("${ssds.heat-source-probe.enabled:true}")
     private boolean probeEnabled;
 
     /**
