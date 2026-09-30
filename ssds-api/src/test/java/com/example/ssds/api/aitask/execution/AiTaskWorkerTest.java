@@ -55,7 +55,6 @@ class AiTaskWorkerTest {
                 .id(802L)
                 .taskType(AiTaskType.RECOMMENDATION)
                 .status(TaskStatus.CANCELLED)
-                .finishedAt(java.time.Instant.parse("2026-09-24T01:00:00Z"))
                 .totalCount(1)
                 .build();
         AiTaskItem item = AiTaskItem.builder()
@@ -75,8 +74,9 @@ class AiTaskWorkerTest {
 
         assertAll(
                 () -> assertEquals(TaskStatus.CANCELLED, running.getStatus()),
-                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()));
-        verify(taskRepository, times(1)).save(running);
+                () -> assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus()),
+                () -> org.junit.jupiter.api.Assertions.assertNotNull(cancelled.getFinishedAt()));
+        verify(taskRepository).save(cancelled);
         verify(itemRepository).save(item);
     }
 

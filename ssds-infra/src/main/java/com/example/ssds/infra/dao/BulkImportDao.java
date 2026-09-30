@@ -192,15 +192,14 @@ public class BulkImportDao {
             Long createdBy) {}
 
     @Transactional
-    public int batchInsertProducts(List<ProductRow> rows, Long batchId) {
+    public int batchInsertProducts(List<ProductRow> rows) {
         String sql = """
-                WITH inserted AS (INSERT INTO product
+                INSERT INTO product
                     (name, category_id, supplier_id, cost, suggested_price, margin_rate,
                      moq, season, status, track_type, logistics_condition,
                      ideal_temp_min, ideal_temp_max, shelf_life_days, created_by,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, now(), now()) RETURNING id)
-                INSERT INTO import_recalculation_task(batch_id,product_id) SELECT ?,id FROM inserted
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, now(), now())
                 """;
         return count(jdbcTemplate.batchUpdate(sql, rows, BATCH_SIZE, (ps, row) -> {
             ps.setString(1, row.name());
@@ -217,7 +216,6 @@ public class BulkImportDao {
             ps.setBigDecimal(12, row.idealTempMax());
             ps.setObject(13, row.shelfLifeDays());
             ps.setObject(14, row.createdBy());
-            ps.setObject(15, batchId);
         }));
     }
 

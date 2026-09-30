@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.ProductFestivalAffinityItemRequest;
@@ -31,6 +33,7 @@ class ProductFestivalAffinityServiceTest {
     private ProductRepository productRepository;
     private ItemFestivalAffinityRepository affinityRepository;
     private FestivalCalendarRepository festivalRepository;
+    private AiTaskService aiTaskService;
     private ProductFestivalAffinityService service;
     private Product product;
 
@@ -39,13 +42,16 @@ class ProductFestivalAffinityServiceTest {
         productRepository = mock(ProductRepository.class);
         affinityRepository = mock(ItemFestivalAffinityRepository.class);
         festivalRepository = mock(FestivalCalendarRepository.class);
+        aiTaskService = mock(AiTaskService.class);
         service = new ProductFestivalAffinityService(
                 productRepository,
                 affinityRepository,
-                festivalRepository
+                festivalRepository,
+                aiTaskService
         );
         product = Product.builder().id(50L).build();
         when(productRepository.findById(50L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(product));
         when(affinityRepository.saveAllAndFlush(anyList()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -113,6 +119,31 @@ class ProductFestivalAffinityServiceTest {
 
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
         verify(affinityRepository, never()).deleteByProductId(50L);
+    }
+
+    @Test
+    void replaceChangedAffinitiesIsRejectedWhileAnalysisIsRunning() {
+        when(festivalRepository.findByFestivalCodeIn(Set.of("MID_AUTUMN")))
+                .thenReturn(List.of(festival("MID_AUTUMN", "中秋節")));
+        when(affinityRepository.findByProductIdOrderByFestivalCodeAsc(50L))
+                .thenReturn(List.of());
+        doThrow(new BusinessException(
+                ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS,
+                "品項正在評分"))
+                .when(aiTaskService)
+                .assertFullAnalysisInputsEditable(50L);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.replace(
+                        50L,
+                        new ProductFestivalAffinityUpdateRequest(List.of(
+                                new ProductFestivalAffinityItemRequest(
+                                        "MID_AUTUMN", new BigDecimal("0.80"))))));
+
+        assertEquals(ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS, exception.getErrorCode());
+        verify(affinityRepository, never()).deleteByProductId(50L);
+        verify(affinityRepository, never()).saveAllAndFlush(anyList());
     }
 
     private FestivalCalendar festival(String code, String name) {

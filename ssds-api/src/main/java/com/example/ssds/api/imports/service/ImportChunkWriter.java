@@ -111,7 +111,9 @@ public class ImportChunkWriter {
             if (inserted != chunk.audiences.size()) throw new DuplicateImportRowException();
             writeAudienceMixes(chunk.audienceMixes);
         }
-        if (!chunk.products.isEmpty()) inserted += bulkImportDao.batchInsertProducts(chunk.products, batchId);
+        // PRODUCT 匯入只建立 DRAFT；待使用者透過 FR-03 正式送出時，
+        // 再由品項流程建立唯一的 FULL_ANALYSIS 任務。
+        if (!chunk.products.isEmpty()) inserted += bulkImportDao.batchInsertProducts(chunk.products);
         if (!chunk.errors.isEmpty()) bulkImportDao.batchInsertImportErrors(chunk.errors);
 
         int conflicts = Math.max(0, chunk.validRows() - inserted);

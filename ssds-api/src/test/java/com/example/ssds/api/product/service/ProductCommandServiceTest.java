@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -550,6 +551,31 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void updateScoringInputIsRejectedWhileFullAnalysisIsRunning() {
+        Product product = existingProduct(TrackType.A, null);
+        doThrow(new BusinessException(
+                ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS,
+                "品項正在評分"))
+                .when(aiTaskService)
+                .assertFullAnalysisInputsEditable(product.getId());
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.update(
+                        product.getId(),
+                        updateRequest(
+                                TrackType.A,
+                                null,
+                                new BigDecimal("90.00"),
+                                new BigDecimal("150.00"))));
+
+        assertEquals(ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS, exception.getErrorCode());
+        verify(productRepository, never()).saveAndFlush(product);
+        verify(productScoreRepository, never()).deactivateAllCurrent(product.getId());
+        verify(aiTaskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
+    }
+
+    @Test
     void assignCategoryUpdatesAllProductsWithoutChangingTheirStatus() {
         Category targetCategory = Category.builder()
                 .id(2L)
@@ -563,7 +589,7 @@ class ProductCommandServiceTest {
         second.setStatus(ProductStatus.WATCHING);
 
         when(categoryRepository.findById(2L)).thenReturn(Optional.of(targetCategory));
-        when(productRepository.findAllById(Set.of(50L, 51L)))
+        when(productRepository.findAllByIdForUpdate(Set.of(50L, 51L)))
                 .thenReturn(List.of(first, second));
         when(productRepository.saveAllAndFlush(anyList()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -603,7 +629,7 @@ class ProductCommandServiceTest {
         Category originalCategory = found.getCategory();
 
         when(categoryRepository.findById(2L)).thenReturn(Optional.of(targetCategory));
-        when(productRepository.findAllById(Set.of(50L, 999L)))
+        when(productRepository.findAllByIdForUpdate(Set.of(50L, 999L)))
                 .thenReturn(List.of(found));
 
         BusinessException exception = assertThrows(BusinessException.class, () ->
@@ -628,7 +654,7 @@ class ProductCommandServiceTest {
 
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
         assertEquals("找不到指定的類別：999", exception.getMessage());
-        verify(productRepository, never()).findAllById(any());
+        verify(productRepository, never()).findAllByIdForUpdate(any());
         verify(productRepository, never()).saveAllAndFlush(anyList());
     }
 
@@ -870,7 +896,7 @@ class ProductCommandServiceTest {
             TrackType trackType,
             SourcingStatus sourcingStatus
     ) {
-        return Product.builder()
+        Product product = Product.builder()
                 .id(50L)
                 .name("既有商品")
                 .category(category)
@@ -878,6 +904,8 @@ class ProductCommandServiceTest {
                 .trackType(trackType)
                 .sourcingStatus(sourcingStatus)
                 .build();
+        when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
+        return product;
     }
 
     private AppUser mockActor(Product product) {

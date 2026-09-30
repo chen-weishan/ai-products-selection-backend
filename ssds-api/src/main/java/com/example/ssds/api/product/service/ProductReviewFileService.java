@@ -1,5 +1,6 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -46,20 +47,24 @@ public class ProductReviewFileService {
     private final ProductRepository productRepository;
     private final ProductReviewRepository reviewRepository;
     private final BulkImportDao bulkImportDao;
+    private final AiTaskService aiTaskService;
 
     public ProductReviewFileService(
             ProductRepository productRepository,
             ProductReviewRepository reviewRepository,
-            BulkImportDao bulkImportDao
+            BulkImportDao bulkImportDao,
+            AiTaskService aiTaskService
     ) {
         this.productRepository = productRepository;
         this.reviewRepository = reviewRepository;
         this.bulkImportDao = bulkImportDao;
+        this.aiTaskService = aiTaskService;
     }
 
     @Transactional
     public ProductReviewFileUploadResponse upload(Long productId, MultipartFile file) {
-        requireProduct(productId);
+        requireProductForUpdate(productId);
+        aiTaskService.assertFullAnalysisInputsEditable(productId);
         validateFile(file);
 
         List<BulkImportDao.ReviewRow> rows = parse(productId, file);
@@ -87,6 +92,12 @@ public class ProductReviewFileService {
 
     private void requireProduct(Long productId) {
         productRepository.findById(productId).orElseThrow(() ->
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
+        );
+    }
+
+    private void requireProductForUpdate(Long productId) {
+        productRepository.findByIdForUpdate(productId).orElseThrow(() ->
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
         );
     }

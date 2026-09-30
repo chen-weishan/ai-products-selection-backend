@@ -4,10 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.infra.dao.BulkImportDao;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.ProductRepository;
@@ -24,6 +28,7 @@ class ProductReviewFileServiceTest {
     private ProductRepository productRepository;
     private ProductReviewRepository reviewRepository;
     private BulkImportDao bulkImportDao;
+    private AiTaskService aiTaskService;
     private ProductReviewFileService service;
 
     @BeforeEach
@@ -31,13 +36,16 @@ class ProductReviewFileServiceTest {
         productRepository = mock(ProductRepository.class);
         reviewRepository = mock(ProductReviewRepository.class);
         bulkImportDao = mock(BulkImportDao.class);
+        aiTaskService = mock(AiTaskService.class);
         service = new ProductReviewFileService(
                 productRepository,
                 reviewRepository,
-                bulkImportDao
+                bulkImportDao,
+                aiTaskService
         );
-        when(productRepository.findById(101L))
-                .thenReturn(Optional.of(Product.builder().id(101L).build()));
+        Product product = Product.builder().id(101L).build();
+        when(productRepository.findById(101L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(product));
     }
 
     @Test
@@ -100,6 +108,22 @@ class ProductReviewFileServiceTest {
         );
 
         assertEquals("評分必須是 0–5，最多一位小數", exception.getMessage());
+    }
+
+    @Test
+    void uploadIsRejectedBeforeParsingWhileAnalysisIsRunning() {
+        doThrow(new BusinessException(
+                ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS,
+                "品項正在評分"))
+                .when(aiTaskService)
+                .assertFullAnalysisInputsEditable(101L);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.upload(101L, csv("content,rating\n好吃,5\n")));
+
+        assertEquals(ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS, exception.getErrorCode());
+        verify(bulkImportDao, never()).batchInsertReviews(anyList());
     }
 
     private MockMultipartFile csv(String content) {

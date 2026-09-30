@@ -368,6 +368,10 @@ public class AiTaskWorker {
         return taskRepository.findById(task.getId())
                 .filter(current -> current.getStatus() == TaskStatus.CANCELLED)
                 .map(current -> {
+                    if (current.getFinishedAt() == null) {
+                        current.setFinishedAt(Instant.now());
+                        taskRepository.save(current);
+                    }
                     task.setStatus(TaskStatus.CANCELLED);
                     task.setFinishedAt(current.getFinishedAt());
                     return true;

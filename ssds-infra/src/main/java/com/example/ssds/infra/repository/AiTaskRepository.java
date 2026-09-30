@@ -56,6 +56,25 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
             @Param("statuses") List<TaskStatus> statuses,
             Pageable pageable);
 
+    /**
+     * 編輯鎖除了排隊中／執行中的任務，也包含已收到取消要求、但工作執行緒尚未停止的任務。
+     */
+    @Query("""
+            select t
+            from AiTaskItem i join i.task t
+            where i.product.id = :productId
+              and t.taskType = :taskType
+              and (t.status in :activeStatuses
+                   or (t.status = :cancelledStatus and t.finishedAt is null))
+            order by t.id desc
+            """)
+    List<AiTask> findBlockingProductTasks(
+            @Param("productId") Long productId,
+            @Param("taskType") AiTaskType taskType,
+            @Param("activeStatuses") List<TaskStatus> activeStatuses,
+            @Param("cancelledStatus") TaskStatus cancelledStatus,
+            Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select t from AiTask t

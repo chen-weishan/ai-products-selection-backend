@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AiTaskService {
     private static final ZoneId API_ZONE = ZoneId.of("Asia/Taipei");
+    private static final Set<TaskStatus> ACTIVE_TASK_STATUSES =
+            Set.of(TaskStatus.PENDING, TaskStatus.RUNNING);
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
     private final ProductRepository productRepository;
@@ -84,7 +86,7 @@ public class AiTaskService {
             return createCalibrationTask(request);
         }
         if (request.taskType() == AiTaskType.FULL_ANALYSIS && request.productIds().isEmpty()) {
-            return createFullAnalysis(
+            return enqueueFullAnalysis(
                     productRepository.findFullAnalysisCandidates(eligibleStatuses()),
                     null,
                     request.forceRefresh());
@@ -114,6 +116,10 @@ public class AiTaskService {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
                     "FULL_ANALYSIS 只接受 EVALUATING、WATCHING、ADOPTED 品項");
+        }
+
+        if (request.taskType() == AiTaskType.FULL_ANALYSIS) {
+            return enqueueFullAnalysis(products, null, request.forceRefresh());
         }
 
         AiTask task = taskRepository.save(AiTask.builder()
@@ -307,8 +313,9 @@ public class AiTaskService {
     /**
      * FR-03 與 FR-07 共用的 FULL_ANALYSIS 建立入口。
      *
-     * <p>呼叫端保留各自的資格驗證與部分成功規則；本方法只負責以一致的
-     * task/item 資料與事件契約交給正式 Worker。
+     * <p>同品項已有 PENDING/RUNNING 任務時不建立平行任務，而是回傳既有任務。
+     * 評分輸入的修改由 FR-03 寫入服務在進入本方法前阻擋；任務完成或取消後，
+     * 使用者再次儲存才會建立使用最新資料的新任務。
      */
     @Transactional
     public AiTaskResponse enqueueFullAnalysis(
@@ -319,7 +326,95 @@ public class AiTaskService {
             throw new BusinessException(
                     ErrorCode.VALIDATION_FAILED, "FULL_ANALYSIS 至少需要一個品項");
         }
-        return createFullAnalysis(products, createdBy, forceRefresh);
+        List<Long> productIds = products.stream()
+                .map(Product::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        if (productIds.size() != products.stream().map(Product::getId).distinct().count()) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_FAILED, "FULL_ANALYSIS 品項必須已完成儲存");
+        }
+
+        List<Product> lockedProducts = productIds.stream()
+                .map(productId -> productRepository.findByIdForUpdate(productId)
+                        .orElseThrow(() -> new BusinessException(
+                                ErrorCode.RESOURCE_NOT_FOUND,
+                                "找不到指定的品項：" + productId)))
+                .toList();
+        Set<Long> activeProductIds = itemRepository.findProductIdsInActiveTasks(
+                new LinkedHashSet<>(productIds),
+                AiTaskType.FULL_ANALYSIS,
+                ACTIVE_TASK_STATUSES);
+
+        List<Product> queuedProducts = new ArrayList<>();
+        for (Product product : lockedProducts) {
+            if (!activeProductIds.contains(product.getId())) {
+                Optional<AiTask> cancellationInProgress = taskRepository.findBlockingProductTasks(
+                                product.getId(),
+                                AiTaskType.FULL_ANALYSIS,
+                                new ArrayList<>(ACTIVE_TASK_STATUSES),
+                                TaskStatus.CANCELLED,
+                                PageRequest.of(0, 1))
+                        .stream()
+                        .filter(task -> task.getStatus() == TaskStatus.CANCELLED
+                                && task.getFinishedAt() == null)
+                        .findFirst();
+                if (cancellationInProgress.isPresent()) {
+                    throw new BusinessException(
+                            ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS,
+                            "品項評分任務 #" + cancellationInProgress.get().getId()
+                                    + " 正在取消，請等待取消完成後再重新執行");
+                }
+                queuedProducts.add(product);
+            }
+        }
+
+        if (!queuedProducts.isEmpty()) {
+            return createFullAnalysis(queuedProducts, createdBy, forceRefresh);
+        }
+
+        for (Long productId : productIds) {
+            Optional<AiTask> activeTask = taskRepository.findActiveProductTasks(
+                            productId,
+                            AiTaskType.FULL_ANALYSIS,
+                            new ArrayList<>(ACTIVE_TASK_STATUSES),
+                            PageRequest.of(0, 1))
+                    .stream()
+                    .findFirst();
+            if (activeTask.isPresent()) {
+                return AiTaskResponse.from(activeTask.get());
+            }
+        }
+
+        // Worker 可能恰好在「查出活動品項」後完成任務。此時直接建立替代任務，
+        // 避免把正常的完成競態回成 500；品項鎖可防止另一個請求同時建立。
+        return createFullAnalysis(lockedProducts, createdBy, forceRefresh);
+    }
+
+    /**
+     * FR-03 評分輸入寫入防線：活動任務期間禁止改變本次分析的輸入快照。
+     * 成功、失敗、部分完成會解除限制；取消中的 RUNNING 任務則要等 worker
+     * 確認停止並寫入 finishedAt 後才解除，避免背景結果覆蓋使用者的新資料。
+     */
+    @Transactional(readOnly = true)
+    public void assertFullAnalysisInputsEditable(Long productId) {
+        taskRepository.findBlockingProductTasks(
+                        productId,
+                        AiTaskType.FULL_ANALYSIS,
+                        new ArrayList<>(ACTIVE_TASK_STATUSES),
+                        TaskStatus.CANCELLED,
+                        PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .ifPresent(task -> {
+                    throw new BusinessException(
+                            ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS,
+                            "品項正在評分（任務 #" + task.getId()
+                                    + "，狀態 " + task.getStatus()
+                                    + "），請等待任務完成，或等待取消作業完成後再修改評分資料");
+                });
     }
 
     private AiTaskResponse createFullAnalysis(
@@ -383,8 +478,11 @@ public class AiTaskService {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION, "只有排隊中或執行中的 AI 任務可以取消");
         }
+        boolean running = task.getStatus() == TaskStatus.RUNNING;
         task.setStatus(TaskStatus.CANCELLED);
-        task.setFinishedAt(Instant.now());
+        // RUNNING 代表取消要求已送出，但背景工作可能仍在當前分析步驟中。
+        // finishedAt 保持 null，直到 worker 確認停止；在此之前品項仍維持編輯鎖。
+        task.setFinishedAt(running ? null : Instant.now());
         return AiTaskResponse.from(taskRepository.save(task));
     }
 

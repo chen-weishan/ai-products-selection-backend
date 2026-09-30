@@ -192,7 +192,7 @@ public class ProductCommandService {
             ProductUpdateRequest request,
             String actorEmail
     ) {
-        Product product = findProduct(productId);
+        Product product = findProductForUpdate(productId);
         String name = request.name().trim();
         Category category = findCategory(request.categoryId());
         Supplier supplier = findSupplier(request.supplierId());
@@ -213,7 +213,9 @@ public class ProductCommandService {
                 && trackType == TrackType.A;
         boolean scoringInputsChanged = hasScoringInputChanges(
                 product,
+                name,
                 category,
+                supplier,
                 request.cost(),
                 request.suggestedPrice(),
                 request.moq(),
@@ -225,6 +227,9 @@ public class ProductCommandService {
                 request.shelfLifeDays(),
                 keywords
         );
+        if (scoringInputsChanged) {
+            aiTaskService.assertFullAnalysisInputsEditable(productId);
+        }
         validateDraftOperation(product, saveAsDraft);
         validateSubmission(
                 trackType,
@@ -300,7 +305,7 @@ public class ProductCommandService {
     ) {
         Category category = findCategory(request.categoryId());
         Set<Long> requestedIds = new LinkedHashSet<>(request.productIds());
-        List<Product> products = productRepository.findAllById(requestedIds);
+        List<Product> products = productRepository.findAllByIdForUpdate(requestedIds);
 
         Set<Long> missingIds = new LinkedHashSet<>(requestedIds);
         products.forEach(product -> missingIds.remove(product.getId()));
@@ -312,18 +317,23 @@ public class ProductCommandService {
             );
         }
 
-        products.forEach(product -> product.setCategory(category));
-        productRepository.saveAllAndFlush(products);
-        products.stream()
+        List<Product> changedProducts = products.stream()
+                .filter(product -> !Objects.equals(product.getCategory().getId(), category.getId()))
+                .toList();
+        changedProducts.forEach(product ->
+                aiTaskService.assertFullAnalysisInputsEditable(product.getId()));
+        changedProducts.forEach(product -> product.setCategory(category));
+        productRepository.saveAllAndFlush(changedProducts);
+        changedProducts.stream()
                 .filter(product -> product.getTrackType() == TrackType.A)
                 .forEach(product -> productScoreRepository.deactivateAllCurrent(product.getId()));
-        List<Product> analysisTargets = products.stream()
+        List<Product> analysisTargets = changedProducts.stream()
                 .filter(this::eligibleForFullAnalysis)
                 .toList();
         if (!analysisTargets.isEmpty()) {
             aiTaskService.enqueueFullAnalysis(analysisTargets, null, false);
         }
-        products.stream()
+        changedProducts.stream()
                 .filter(product -> product.getTrackType() == TrackType.B)
                 .forEach(sourcingCandidateService::synchronize);
 
@@ -444,6 +454,9 @@ public class ProductCommandService {
 
         if (targetStatus == ProductStatus.EVALUATING
                 && product.getTrackType() == TrackType.A) {
+            // 重新進入評估代表既有分數不再可視為目前結果；建立任務也統一走
+            // AiTaskService，避免不同入口各自建立重複任務。
+            productScoreRepository.deactivateAllCurrent(product.getId());
             aiTaskService.enqueueFullAnalysis(List.of(product), actor, false);
         }
 
@@ -458,6 +471,14 @@ public class ProductCommandService {
 
     private Product findProduct(Long productId) {
         return productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+    }
+
+    private Product findProductForUpdate(Long productId) {
+        return productRepository.findByIdForUpdate(productId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
@@ -552,7 +573,9 @@ public class ProductCommandService {
 
     private boolean hasScoringInputChanges(
             Product product,
+            String name,
             Category category,
+            Supplier supplier,
             BigDecimal cost,
             BigDecimal suggestedPrice,
             Integer moq,
@@ -570,7 +593,11 @@ public class ProductCommandService {
         Set<Long> requestedKeywordIds = keywords.stream()
                 .map(TrendKeyword::getId)
                 .collect(Collectors.toSet());
-        return !Objects.equals(product.getCategory().getId(), category.getId())
+        return !Objects.equals(product.getName(), name)
+                || !Objects.equals(product.getCategory().getId(), category.getId())
+                || !Objects.equals(
+                        product.getSupplier() == null ? null : product.getSupplier().getId(),
+                        supplier == null ? null : supplier.getId())
                 || !sameDecimal(product.getCost(), cost)
                 || !sameDecimal(product.getSuggestedPrice(), suggestedPrice)
                 || !Objects.equals(product.getMoq(), moq)

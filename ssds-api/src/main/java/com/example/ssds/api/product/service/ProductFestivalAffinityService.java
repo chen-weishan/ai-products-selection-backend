@@ -1,5 +1,6 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -12,6 +13,7 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.ItemFestivalAffinityRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,15 +31,18 @@ public class ProductFestivalAffinityService {
     private final ProductRepository productRepository;
     private final ItemFestivalAffinityRepository affinityRepository;
     private final FestivalCalendarRepository festivalRepository;
+    private final AiTaskService aiTaskService;
 
     public ProductFestivalAffinityService(
             ProductRepository productRepository,
             ItemFestivalAffinityRepository affinityRepository,
-            FestivalCalendarRepository festivalRepository
+            FestivalCalendarRepository festivalRepository,
+            AiTaskService aiTaskService
     ) {
         this.productRepository = productRepository;
         this.affinityRepository = affinityRepository;
         this.festivalRepository = festivalRepository;
+        this.aiTaskService = aiTaskService;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +57,7 @@ public class ProductFestivalAffinityService {
             Long productId,
             ProductFestivalAffinityUpdateRequest request
     ) {
-        Product product = findProduct(productId);
+        Product product = findProductForUpdate(productId);
         Map<String, ProductFestivalAffinityItemRequest> normalized = new LinkedHashMap<>();
         for (ProductFestivalAffinityItemRequest item : request.affinities()) {
             String code = item.festivalCode().trim().toUpperCase(Locale.ROOT);
@@ -75,6 +80,15 @@ public class ProductFestivalAffinityService {
                     ErrorCode.RESOURCE_NOT_FOUND,
                     "找不到指定的節慶代碼：" + missingCodes
             );
+        }
+
+
+        List<ItemFestivalAffinity> current =
+                affinityRepository.findByProductIdOrderByFestivalCodeAsc(productId);
+        if (affinitiesChanged(current, normalized)) {
+            aiTaskService.assertFullAnalysisInputsEditable(productId);
+        } else {
+            return toResponses(current);
         }
 
         affinityRepository.deleteByProductId(productId);
@@ -119,6 +133,31 @@ public class ProductFestivalAffinityService {
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
                 ));
+    }
+
+    private Product findProductForUpdate(Long productId) {
+        return productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+    }
+
+    private boolean affinitiesChanged(
+            List<ItemFestivalAffinity> current,
+            Map<String, ProductFestivalAffinityItemRequest> requested
+    ) {
+        if (current.size() != requested.size()) {
+            return true;
+        }
+        Map<String, BigDecimal> currentValues = current.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ItemFestivalAffinity::getFestivalCode,
+                        ItemFestivalAffinity::getAffinity));
+        return requested.entrySet().stream().anyMatch(entry -> {
+            BigDecimal existing = currentValues.get(entry.getKey());
+            return existing == null || existing.compareTo(entry.getValue().affinity()) != 0;
+        });
     }
 
     private BusinessException validationException(String message) {

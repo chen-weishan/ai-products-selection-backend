@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.example.ssds.api.aitask.dto.CreateAiTaskRequest;
 import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
 import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
@@ -34,6 +35,47 @@ class AiTaskServiceTest {
     @Mock AiTaskItemRepository itemRepository;
     @Mock ProductRepository productRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+
+    @Test
+    void rejectsScoringInputEditWhileFullAnalysisIsActive() {
+        AiTask activeTask = AiTask.builder()
+                .id(88L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .status(TaskStatus.RUNNING)
+                .build();
+        when(taskRepository.findBlockingProductTasks(
+                eq(50L),
+                eq(AiTaskType.FULL_ANALYSIS),
+                anyList(),
+                eq(TaskStatus.CANCELLED),
+                eq(PageRequest.of(0, 1))))
+                .thenReturn(List.of(activeTask));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.assertFullAnalysisInputsEditable(50L));
+
+        assertAll(
+                () -> assertEquals(ErrorCode.PRODUCT_ANALYSIS_IN_PROGRESS, exception.getErrorCode()),
+                () -> assertTrue(exception.getMessage().contains("#88")));
+    }
+
+    @Test
+    void allowsScoringInputEditWhenNoTaskBlocksTheProduct() {
+        when(taskRepository.findBlockingProductTasks(
+                eq(50L),
+                eq(AiTaskType.FULL_ANALYSIS),
+                anyList(),
+                eq(TaskStatus.CANCELLED),
+                eq(PageRequest.of(0, 1))))
+                .thenReturn(List.of());
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        assertDoesNotThrow(() -> service.assertFullAnalysisInputsEditable(50L));
+    }
 
     @Test
     void listsNewestTasksWithOptionalStatusFilter() {
@@ -76,7 +118,7 @@ class AiTaskServiceTest {
     }
 
     @Test
-    void cancelsRunningTaskAndRecordsFinishTime() {
+    void cancellingRunningTaskWaitsForWorkerAcknowledgement() {
         AiTask task = AiTask.builder()
                 .id(12L)
                 .taskType(AiTaskType.FULL_ANALYSIS)
@@ -88,6 +130,25 @@ class AiTaskServiceTest {
                 taskRepository, itemRepository, productRepository, eventPublisher);
 
         var response = service.cancel(12L);
+
+        assertAll(
+                () -> assertEquals(TaskStatus.CANCELLED, response.status()),
+                () -> assertNull(response.finishedAt()));
+    }
+
+    @Test
+    void cancellingPendingTaskFinishesImmediately() {
+        AiTask task = AiTask.builder()
+                .id(13L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .status(TaskStatus.PENDING)
+                .build();
+        when(taskRepository.findByIdForUpdate(13L)).thenReturn(Optional.of(task));
+        when(taskRepository.save(task)).thenReturn(task);
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.cancel(13L);
 
         assertAll(
                 () -> assertEquals(TaskStatus.CANCELLED, response.status()),
@@ -187,6 +248,12 @@ class AiTaskServiceTest {
                 .status(ProductStatus.EVALUATING)
                 .build();
         AppUser actor = AppUser.builder().id(9L).email("buyer@ssds.dev").build();
+        when(productRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(product));
+        when(itemRepository.findProductIdsInActiveTasks(
+                Set.of(102L),
+                AiTaskType.FULL_ANALYSIS,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of());
         when(taskRepository.save(any())).thenAnswer(invocation -> {
             AiTask task = invocation.getArgument(0);
             task.setId(702L);
@@ -208,6 +275,73 @@ class AiTaskServiceTest {
         ArgumentCaptor<AiTaskCreatedEvent> event = ArgumentCaptor.forClass(AiTaskCreatedEvent.class);
         verify(eventPublisher).publishEvent(event.capture());
         assertEquals(702L, event.getValue().taskId());
+    }
+
+    @Test
+    void reusesActiveFullAnalysisWithoutCreatingParallelTask() {
+        Product product = Product.builder()
+                .id(103L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        AiTask activeTask = AiTask.builder()
+                .id(703L)
+                .taskType(AiTaskType.FULL_ANALYSIS)
+                .budgetPool(AiTaskType.BudgetPool.TRACK_A)
+                .status(TaskStatus.RUNNING)
+                .totalCount(1)
+                .build();
+        when(productRepository.findByIdForUpdate(103L)).thenReturn(Optional.of(product));
+        when(itemRepository.findProductIdsInActiveTasks(
+                Set.of(103L),
+                AiTaskType.FULL_ANALYSIS,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of(103L));
+        when(taskRepository.findActiveProductTasks(
+                eq(103L), eq(AiTaskType.FULL_ANALYSIS), anyList(), eq(PageRequest.of(0, 1))))
+                .thenReturn(List.of(activeTask));
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.enqueueFullAnalysis(List.of(product), null, false);
+
+        assertAll(
+                () -> assertEquals(703L, response.taskId()),
+                () -> assertEquals(TaskStatus.RUNNING, response.status()));
+        verify(taskRepository, never()).save(any());
+        verify(itemRepository, never()).saveAll(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void createsReplacementWhenActiveTaskFinishesDuringMerge() {
+        Product product = Product.builder()
+                .id(105L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findByIdForUpdate(105L)).thenReturn(Optional.of(product));
+        when(itemRepository.findProductIdsInActiveTasks(
+                Set.of(105L),
+                AiTaskType.FULL_ANALYSIS,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of(105L));
+        when(taskRepository.findActiveProductTasks(
+                eq(105L), eq(AiTaskType.FULL_ANALYSIS), anyList(), eq(PageRequest.of(0, 1))))
+                .thenReturn(List.of());
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(705L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.enqueueFullAnalysis(List.of(product), null, false);
+
+        assertEquals(705L, response.taskId());
+        verify(itemRepository).saveAll(argThat(items ->
+                items.iterator().next().getProduct() == product));
     }
 
     @Test
@@ -587,6 +721,12 @@ class AiTaskServiceTest {
                 .status(ProductStatus.EVALUATING)
                 .build();
         when(productRepository.findAllById(List.of(101L))).thenReturn(List.of(product));
+        when(productRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(product));
+        when(itemRepository.findProductIdsInActiveTasks(
+                Set.of(101L),
+                AiTaskType.FULL_ANALYSIS,
+                Set.of(TaskStatus.PENDING, TaskStatus.RUNNING)))
+                .thenReturn(Set.of());
         when(taskRepository.save(any())).thenAnswer(invocation -> {
             AiTask task = invocation.getArgument(0);
             task.setId(730L);
