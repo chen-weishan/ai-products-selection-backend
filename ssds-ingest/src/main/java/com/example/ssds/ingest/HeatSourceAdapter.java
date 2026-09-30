@@ -3,6 +3,7 @@ package com.example.ssds.ingest;
 import com.example.ssds.core.domain.HeatSourceCode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 熱度來源 adapter 的統一介面（規格書 §3.3 / FR-14）。
@@ -26,22 +27,18 @@ public interface HeatSourceAdapter {
      */
     List<HeatDataPoint> fetch(List<String> targets, LocalDate date);
 
-    /** 健康檢查排程（{@code HeatSourceHealthCheckJob}）探測用的佔位查詢字串。 */
+    /** 探測用的佔位查詢字串（僅供沒有覆寫 {@link #probe()} 的 adapter 預設實作使用）。 */
     String PROBE_TARGET = "probe";
 
     /**
-     * 健康檢查用的極輕量探測（規格書 §FR-14-2：「對每個 enabled 的來源送出一次極輕量查詢」）。
+     * 「測試連線」用的探測。
      *
-     * <p><b>⚠️ 已知限制：預設實作直接呼叫 {@link #fetch} 對單一佔位目標送出一次真實查詢，
-     * 而非真正意義上的「輕量」探測（例如只驗證 API 金鑰有效性、不觸發實際採集）。</b>
-     * 三個既有 adapter（Threads／Google Trends／Instagram）背後都是 Apify 第三方 actor，
-     * 本次補實作沒有逐一深入每個 client 找出真正低成本的探測方式（例如 Apify 是否有
-     * 獨立的「金鑰驗證」端點），所以先提供這個通用但保守的預設值，讓每 15 分鐘一次的
-     * 健康檢查排程至少能運作；之後若確認會頻繁消耗 Apify 額度或耗時過長，
-     * 應由各 adapter 覆寫本方法，改用更輕量的驗證方式。
+     * <p>預設實作直接呼叫 {@link #fetch} 對單一佔位目標送出一次真實查詢——會消耗爬取額度，
+     * 而且 adapter 的 fetch 會吞掉單一 target 的例外，實際上很難回 false。
+     * 背後是 Apify 的 adapter（Threads／Google Trends／Instagram）都應覆寫本方法，
+     * 改用 {@link ApifyTokenProbe} 只驗證 token 與連線，不執行任何 actor。
      *
-     * @return 探測成功回傳 true；任何例外（連線失敗、金鑰失效等）一律視為探測失敗回傳 false，
-     *         不向外拋出——健康檢查排程需要能持續巡檢所有來源，單一來源探測失敗不該中斷整批
+     * @return 探測成功回傳 true；任何例外一律視為失敗回傳 false，不向外拋出
      */
     default boolean probe() {
         try {
@@ -50,5 +47,15 @@ public interface HeatSourceAdapter {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 查詢此來源目前的額度用量（單位見 {@link ApifyUsage}）。
+     *
+     * <p>不消耗爬取額度。查不到（未設定 token、Apify 無回應等）回傳 {@link Optional#empty()}，
+     * 呼叫端保留資料庫既有數值。不是 Apify 來源的 adapter 不需要覆寫，預設就是查不到。
+     */
+    default Optional<ApifyUsage> fetchQuota() {
+        return Optional.empty();
     }
 }

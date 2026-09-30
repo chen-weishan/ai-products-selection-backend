@@ -1,5 +1,6 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.heat.HeatSourceQuota;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.core.domain.SourceAvailability;
 import com.example.ssds.infra.entity.HeatReading;
@@ -103,7 +104,8 @@ public class GoogleTrendsHeatIngestJob {
 
         source.setAvailability(points.isEmpty() ? SourceAvailability.DEGRADED : SourceAvailability.AVAILABLE);
         source.setLastFetchedAt(Instant.now());
-        source.setQuotaUsed(source.getQuotaUsed() + keywordTexts.size());
+        // 額度改讀 Apify 後台的本月用量（不再自行累加關鍵字數，單位不同）
+        HeatSourceQuota.refresh(source, trendsAdapter);
         heatSourceRepository.save(source);
 
         log.info("Google Trends 熱度採集完成：查詢 {} 個關鍵字，取得 {} 筆讀值。", keywordTexts.size(), points.size());

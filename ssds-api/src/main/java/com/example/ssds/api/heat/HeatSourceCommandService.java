@@ -55,9 +55,8 @@ public class HeatSourceCommandService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * 與 {@code HeatSourceHealthCheckJob} 共用同一個開關（2026-09-23 暫停 FR-14 探測，
-     * 見該類別註解）。手動「測試連線」也會真的打一次 Apify，暫停期間一併擋掉，
-     * 避免變成繞過排程停用的漏洞。
+     * 探測總開關（2026-09-23 為節省成本暫停 FR-14 探測時加入）。現在 Apify 來源的探測只驗證
+     * token 與讀取用量、不消耗爬取額度，但開關保留，設為 false 時「測試連線」直接短路。
      */
     @Value("${ssds.heat-source-probe.enabled:true}")
     private boolean probeEnabled;
@@ -108,8 +107,11 @@ public class HeatSourceCommandService {
     }
 
     /**
-     * S-16「測試連線」：立即探測一次並回饋結果，不等下一輪 15 分鐘排程。
-     * 與排程共用同一套 {@link HeatSource#applyProbeResult} 判定邏輯，避免兩處邏輯分岔。
+     * S-16「測試連線」：立即檢查一次並回饋結果（目前沒有自動排程，狀態靠這個按鈕與人工標記更新）。
+     *
+     * <p>Apify 來源只驗證 token 與連線（{@code GET /v2/users/me}），並順便把 Apify 帳號本月用量
+     * 寫入 {@code quota_used／quota_limit}；兩者都不執行 actor、不消耗爬取額度。
+     * 判定邏輯與其他探測共用 {@link HeatSource#applyProbeResult}，避免兩處邏輯分岔。
      */
     @Transactional
     public HeatSourceTestResponse testConnection(Long id) {
@@ -117,8 +119,7 @@ public class HeatSourceCommandService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到熱度來源 id=" + id));
 
         if (!probeEnabled) {
-            // 暫停期間直接短路，不呼叫 probe()、不動 heat_source 任何欄位，
-            // 保證這個按鈕不會消耗 Apify 額度。
+            // 暫停期間直接短路，不呼叫 probe()、不動 heat_source 任何欄位。
             return new HeatSourceTestResponse(
                     source.getSourceCode().name(),
                     false,
@@ -127,6 +128,11 @@ public class HeatSourceCommandService {
         }
 
         boolean success = probe(source.getSourceCode());
+        if (success && source.getSourceCode() != HeatSourceCode.MANUAL) {
+            // token 驗證通過才讀 Apify 本月用量，且先寫入再判定狀態，
+            // 讓「額度 ≥80% 降級、100% 不可用」用的是剛讀到的數字，而不是上次殘留的值。
+            HeatSourceQuota.refresh(source, adapterFor(source.getSourceCode()));
+        }
         source.applyProbeResult(success, LocalDate.now(TAIPEI));
         heatSourceRepository.save(source);
 
@@ -138,20 +144,24 @@ public class HeatSourceCommandService {
     /**
      * MANUAL 來源沒有對應的 {@link HeatSourceAdapter}（人工標記走資料庫、不走外部 API），
      * 改用「最近 30 日是否有標記」判定（§FR-14-2 表格）；其餘來源交給對應 adapter 的
-     * {@link HeatSourceAdapter#probe()}。
+     * {@link HeatSourceAdapter#probe()}（Apify 來源為輕量 token 驗證）。
      */
     private boolean probe(HeatSourceCode sourceCode) {
         if (sourceCode == HeatSourceCode.MANUAL) {
             Instant since = Instant.now().minus(MANUAL_PROBE_LOOKBACK_DAYS, ChronoUnit.DAYS);
             return manualHeatTagRepository.existsByObservedAtAfter(since);
         }
+        return adapterFor(sourceCode).probe();
+    }
+
+    private HeatSourceAdapter adapterFor(HeatSourceCode sourceCode) {
         Map<HeatSourceCode, HeatSourceAdapter> byCode = adapters.stream()
                 .collect(java.util.stream.Collectors.toMap(HeatSourceAdapter::sourceCode, Function.identity()));
         HeatSourceAdapter adapter = byCode.get(sourceCode);
         if (adapter == null) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "來源 " + sourceCode + " 沒有對應的 adapter，無法測試連線");
         }
-        return adapter.probe();
+        return adapter;
     }
 
     /** 比照 {@code ManualHeatTagCommandService}：取用目前登入者 id（見 {@link CurrentUserId}）。 */
