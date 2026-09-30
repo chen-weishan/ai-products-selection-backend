@@ -20,6 +20,7 @@ import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * FR-14-1 人工熱度標記的新增／編輯／刪除。
@@ -42,6 +43,7 @@ public class ManualHeatTagCommandService {
     private final ProductRepository productRepository;
     private final TrendKeywordRepository trendKeywordRepository;
     private final AppUserRepository appUserRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public ManualHeatTagResponse create(ManualHeatTagCreateRequest request) {
@@ -64,6 +66,8 @@ public class ManualHeatTagCommandService {
                 .build();
 
         manualHeatTagRepository.save(tag);
+        // 送出標記後，交易提交才更新 MANUAL 來源的健康狀態（見 ManualSourceHealthListener）。
+        eventPublisher.publishEvent(new ManualHeatTagSubmittedEvent(tag.getId()));
         return ManualHeatTagMapper.toResponse(tag);
     }
 

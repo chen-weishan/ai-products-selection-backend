@@ -36,6 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -67,11 +68,18 @@ class ManualHeatTagCommandServiceTest {
 
     private ManualHeatTagCommandService service;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @BeforeEach
     void setUp() {
         service = new ManualHeatTagCommandService(
                 manualHeatTagRepository, productRepository, trendKeywordRepository, appUserRepository);
         loginAs(CURRENT_USER_ID);
+
+        service = new ManualHeatTagCommandService(
+                manualHeatTagRepository, productRepository, trendKeywordRepository, appUserRepository,
+                eventPublisher);
     }
 
     @AfterEach
