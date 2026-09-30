@@ -101,6 +101,7 @@ class HeatCompositeCalibrationJobTest {
 
         InOrder order = inOrder(percentileDao, calibrationService, timeGapJob, trendJob);
         order.verify(percentileDao).applyPercentiles(businessDate);
+        order.verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
         order.verify(calibrationService).computeAndPersist(7L, businessDate);
         order.verify(timeGapJob).recalculateAfterDailyHeatComposition();
         order.verify(trendJob).enqueueSignificantKeywords(businessDate);
@@ -253,13 +254,14 @@ class HeatCompositeCalibrationJobTest {
         InOrder order = inOrder(threadsJob, googleTrendsJob, instagramJob, percentileDao, calibrationService);
         order.verify(threadsJob).runForKeywordIds(List.of(7L), businessDate);
         order.verify(googleTrendsJob).runForKeywordIds(List.of(7L), businessDate);
-        order.verify(instagramJob).run();
+        order.verify(instagramJob).runMissingForWeek(businessDate);
         order.verify(percentileDao).applyPercentiles(businessDate);
+        order.verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
         order.verify(calibrationService).computeAndPersist(7L, businessDate);
     }
 
     @Test
-    void scheduledRerunDoesNotRepeatCompletedSourceCollection() {
+    void scheduledRerunOnlyReconcilesExistingInstagramWithoutRepeatingCollection() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
@@ -289,8 +291,47 @@ class HeatCompositeCalibrationJobTest {
 
         job.runScheduled(businessDate);
 
-        verifyNoInteractions(threadsJob, googleTrendsJob, instagramJob);
+        verifyNoInteractions(threadsJob, googleTrendsJob);
+        verify(instagramJob).runMissingForWeek(businessDate);
+        verify(instagramJob).restoreAvailabilityFromCurrentWeek(businessDate);
         verify(percentileDao).applyPercentiles(businessDate);
+        verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
+    }
+
+    @Test
+    void scheduledRunStillFillsMissingInstagramCategoriesWhenWeekHasPartialData() {
+        HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        HeatReadingRepository heatReadingRepository = mock(HeatReadingRepository.class);
+        InstagramHeatIngestJob instagramJob = mock(InstagramHeatIngestJob.class);
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        when(compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate))
+                .thenReturn(List.of());
+        when(heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM,
+                LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 27)))
+                .thenReturn(true);
+        when(instagramJob.runMissingForWeek(businessDate)).thenReturn(true);
+        HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
+                percentileDao,
+                keywordRepository,
+                compositeRepository,
+                heatReadingRepository,
+                mock(HeatCompositeCalibrationService.class),
+                provider(null),
+                provider(null),
+                provider(instagramJob),
+                provider(null),
+                provider(null));
+
+        job.runScheduled(businessDate);
+
+        verify(instagramJob).runMissingForWeek(businessDate);
+        verify(instagramJob, never()).restoreAvailabilityFromCurrentWeek(businessDate);
+        verify(percentileDao).applyPercentiles(businessDate);
+        verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
     }
 
     @SuppressWarnings("unchecked")

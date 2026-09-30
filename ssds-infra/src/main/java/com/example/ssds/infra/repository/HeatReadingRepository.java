@@ -5,6 +5,7 @@ import com.example.ssds.infra.entity.HeatReading;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -48,6 +49,18 @@ public interface HeatReadingRepository extends JpaRepository<HeatReading, Long> 
 
     boolean existsBySourceSourceCodeAndReadingDateBetween(
             HeatSourceCode sourceCode, LocalDate from, LocalDate to);
+
+    /** 指定期間已有讀值的品類，供週頻品類來源只補採缺漏品類。 */
+    @Query("""
+            select distinct reading.category.id from HeatReading reading
+            where reading.source.sourceCode = :sourceCode
+              and reading.category is not null
+              and reading.readingDate between :from and :to
+            """)
+    Set<Long> findCategoryIdsWithReadingBetween(
+            @Param("sourceCode") HeatSourceCode sourceCode,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
 
     boolean existsByKeywordIdAndSourceSourceCodeAndReadingDate(
             Long keywordId, HeatSourceCode sourceCode, LocalDate readingDate);

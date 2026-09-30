@@ -607,6 +607,38 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     }
 
     @Test
+    void lateInstagramCategoryCatchUpRecalculatesPercentilesAcrossTheWholeWeek() {
+        LocalDate monday = LocalDate.of(2026, 9, 21);
+        LocalDate tuesday = monday.plusDays(1);
+        Category completed = categories.saveAndFlush(Category.builder().name("先完成 IG 品類").build());
+        Category caughtUp = categories.saveAndFlush(Category.builder().name("後補 IG 品類").build());
+        HeatSource instagram = saveSource(
+                HeatSourceCode.INSTAGRAM,
+                HeatGranularity.CATEGORY,
+                "0.200",
+                SourceAvailability.AVAILABLE);
+        saveReading(instagram, null, completed, monday, "10.00");
+        saveReading(instagram, null, caughtUp, tuesday, "20.00");
+
+        assertEquals(2, percentileDao.applyInstagramWeeklyPercentiles(tuesday));
+        entityManager.clear();
+
+        assertAll(
+                () -> assertEquals(
+                        new BigDecimal("50.00"),
+                        heatReadings.findByCategoryIdAndSourceIdAndReadingDate(
+                                        completed.getId(), instagram.getId(), monday)
+                                .orElseThrow()
+                                .getPercentileWithinSource()),
+                () -> assertEquals(
+                        new BigDecimal("100.00"),
+                        heatReadings.findByCategoryIdAndSourceIdAndReadingDate(
+                                        caughtUp.getId(), instagram.getId(), tuesday)
+                                .orElseThrow()
+                                .getPercentileWithinSource()));
+    }
+
+    @Test
     void ruleBaselineCoversAllStagesTransitionAndMissingDayRestart() {
         LocalDate businessDate = LocalDate.of(2026, 9, 22);
         Category category = categories.saveAndFlush(Category.builder().name("Phase6 階段品類").build());
