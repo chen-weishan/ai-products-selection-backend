@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,6 +27,7 @@ import com.example.ssds.ingest.Threads.ThreadsHeatSourceAdapter;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
@@ -148,6 +150,66 @@ class HeatSourceIngestJobTest {
         assertTrue(restored);
         assertEquals(SourceAvailability.DEGRADED, source.getAvailability());
         verify(sources).save(source);
+    }
+
+    @Test
+    void instagramWeeklyCollectionFetchesOnlyCategoriesMissingThisWeek() {
+        HeatSource source = enabledSource(HeatSourceCode.INSTAGRAM);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        InstagramHashtagMappingRepository mappings = mock(InstagramHashtagMappingRepository.class);
+        InstagramHeatSourceAdapter adapter = mock(InstagramHeatSourceAdapter.class);
+        Category completed = Category.builder().id(1L).name("已有資料品類").build();
+        Category missing = Category.builder().id(2L).name("缺漏品類").build();
+        when(mappings.findAllEnabledWithCategory()).thenReturn(List.of(
+                InstagramHashtagMapping.builder()
+                        .hashtag("completed")
+                        .category(completed)
+                        .enabled(true)
+                        .build(),
+                InstagramHashtagMapping.builder()
+                        .hashtag("missing")
+                        .category(missing)
+                        .enabled(true)
+                        .build()));
+        when(readings.findCategoryIdsWithReadingBetween(
+                HeatSourceCode.INSTAGRAM,
+                LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 24)))
+                .thenReturn(Set.of(completed.getId()));
+        when(adapter.fetch(List.of("missing"), LocalDate.of(2026, 9, 24)))
+                .thenReturn(List.of());
+        InstagramHeatIngestJob job = new InstagramHeatIngestJob(
+                sourceRepository(source), readings, mappings, adapter);
+
+        job.runMissingForWeek(LocalDate.of(2026, 9, 24));
+
+        verify(adapter).fetch(List.of("missing"), LocalDate.of(2026, 9, 24));
+    }
+
+    @Test
+    void instagramWeeklyCollectionSkipsExternalRequestWhenEveryCategoryIsComplete() {
+        HeatSource source = enabledSource(HeatSourceCode.INSTAGRAM);
+        HeatReadingRepository readings = mock(HeatReadingRepository.class);
+        InstagramHashtagMappingRepository mappings = mock(InstagramHashtagMappingRepository.class);
+        InstagramHeatSourceAdapter adapter = mock(InstagramHeatSourceAdapter.class);
+        Category completed = Category.builder().id(1L).name("已有資料品類").build();
+        when(mappings.findAllEnabledWithCategory()).thenReturn(List.of(
+                InstagramHashtagMapping.builder()
+                        .hashtag("completed")
+                        .category(completed)
+                        .enabled(true)
+                        .build()));
+        when(readings.findCategoryIdsWithReadingBetween(
+                HeatSourceCode.INSTAGRAM,
+                LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 24)))
+                .thenReturn(Set.of(completed.getId()));
+        InstagramHeatIngestJob job = new InstagramHeatIngestJob(
+                sourceRepository(source), readings, mappings, adapter);
+
+        job.runMissingForWeek(LocalDate.of(2026, 9, 24));
+
+        verify(adapter, never()).fetch(anyList(), any(LocalDate.class));
     }
 
     @Test

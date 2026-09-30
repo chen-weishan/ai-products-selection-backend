@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -65,30 +66,50 @@ public class InstagramHeatIngestJob {
     @Scheduled(cron = "${ssds.ingest.instagram.cron:0 30 3 * * MON}", zone = "Asia/Taipei")
     @Transactional
     public void run() {
+        runMissingForWeek(LocalDate.now(TAIPEI));
+    }
+
+    /**
+     * 只採集指定營業日所在週、截至該日仍無 reading 的啟用品類。
+     *
+     * @return 是否新增或更新了至少一筆缺漏品類 reading
+     */
+    @Transactional
+    public boolean runMissingForWeek(LocalDate businessDate) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.INSTAGRAM).orElse(null);
         if (source == null) {
             log.warn("heat_source 找不到代碼 INSTAGRAM 這筆，放棄本次執行。");
-            return;
+            return false;
         }
         if (!source.isEnabled()) {
             log.info("INSTAGRAM 資料來源已停用（enabled=false），放棄本次執行。");
-            return;
+            return false;
         }
 
         List<InstagramHashtagMapping> mappings = instagramHashtagMappingRepository.findAllEnabledWithCategory();
         if (mappings.isEmpty()) {
             log.info("InstagramHashtagMapping 沒有啟用中的 hashtag，放棄本次執行。");
-            return;
+            return false;
         }
 
-        LocalDate today = LocalDate.now(TAIPEI);
+        LocalDate weekStart = businessDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        Set<Long> completedCategoryIds = heatReadingRepository.findCategoryIdsWithReadingBetween(
+                HeatSourceCode.INSTAGRAM, weekStart, businessDate);
+        mappings = mappings.stream()
+                .filter(mapping -> !completedCategoryIds.contains(mapping.getCategory().getId()))
+                .toList();
+        if (mappings.isEmpty()) {
+            log.info("Instagram 本週截至 {} 的啟用品類皆已有資料，不需重複採集。", businessDate);
+            return false;
+        }
+
         List<String> hashtags = mappings.stream().map(InstagramHashtagMapping::getHashtag).toList();
 
         List<HeatDataPoint> points;
         try {
-            points = instagramAdapter.fetch(hashtags, today);
+            points = instagramAdapter.fetch(hashtags, businessDate);
         } catch (Exception e) {
-            boolean currentWeekReadingExists = hasCurrentWeekReading(today);
+            boolean currentWeekReadingExists = hasCurrentWeekReading(businessDate);
             SourceAvailability failureAvailability = currentWeekReadingExists
                     ? SourceAvailability.DEGRADED
                     : SourceAvailability.UNAVAILABLE;
@@ -98,14 +119,19 @@ public class InstagramHeatIngestJob {
                     e);
             source.setAvailability(failureAvailability);
             heatSourceRepository.save(source);
-            return;
+            return false;
         }
 
+        int persisted = 0;
         for (HeatDataPoint point : points) {
-            mappings.stream()
+            InstagramHashtagMapping mapping = mappings.stream()
                     .filter(m -> m.getHashtag().equals(point.target()))
                     .findFirst()
-                    .ifPresent(m -> upsert(source, m.getCategory(), today, point));
+                    .orElse(null);
+            if (mapping != null) {
+                upsert(source, mapping.getCategory(), businessDate, point);
+                persisted++;
+            }
         }
 
         source.setAvailability(points.isEmpty() ? SourceAvailability.DEGRADED : SourceAvailability.AVAILABLE);
@@ -113,7 +139,12 @@ public class InstagramHeatIngestJob {
         source.setQuotaUsed(source.getQuotaUsed() + hashtags.size());
         heatSourceRepository.save(source);
 
-        log.info("Instagram 熱度採集完成，採集 {} 個 hashtag，取得 {} 筆讀值。", hashtags.size(), points.size());
+        log.info(
+                "Instagram 缺漏品類採集完成，採集 {} 個 hashtag，取得 {} 筆讀值、寫入 {} 筆。",
+                hashtags.size(),
+                points.size(),
+                persisted);
+        return persisted > 0;
     }
 
     /** 本週已有有效快照時，修復舊版失敗流程留下的 UNAVAILABLE，保留為可降級使用。 */

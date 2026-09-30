@@ -125,23 +125,21 @@ public class HeatCompositeCatchUp {
         boolean instagramReadingExists = instagramIngestJob != null
                 && heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
                         HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
-        boolean instagramCatchUpDue = instagramIngestJob != null
-                && instagramSchedulePassed
-                && !instagramReadingExists;
         boolean instagramDataAdded = false;
         boolean instagramAvailabilityRestored = false;
-        if (instagramCatchUpDue) {
-            log.info("本週尚無 Instagram 熱度資料，開始補跑：weekStart={}", weekStart);
-            instagramIngestJob.run();
-            instagramDataAdded = heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
-                    HeatSourceCode.INSTAGRAM, weekStart, weekEnd);
-            if (!instagramDataAdded) {
+        if (instagramIngestJob != null && instagramSchedulePassed) {
+            instagramDataAdded = instagramIngestJob.runMissingForWeek(businessDate);
+            if (!instagramDataAdded && instagramReadingExists) {
+                instagramAvailabilityRestored =
+                        instagramIngestJob.restoreAvailabilityFromCurrentWeek(businessDate);
+            }
+            if (instagramDataAdded) {
+                log.info("Instagram 本週缺漏品類已補到資料：weekStart={}", weekStart);
+            } else if (instagramReadingExists) {
+                log.info("Instagram 本週啟用品類沒有新增資料：weekStart={}", weekStart);
+            } else {
                 log.warn("Instagram 補跑完成但本週仍無可用資料，不擴大重合範圍：weekStart={}", weekStart);
             }
-        } else if (instagramIngestJob != null && instagramSchedulePassed) {
-            instagramAvailabilityRestored =
-                    instagramIngestJob.restoreAvailabilityFromCurrentWeek(businessDate);
-            log.info("本週 Instagram 熱度資料已存在，不需補跑：weekStart={}", weekStart);
         }
 
         if (!threadsSchedulePassed && !googleTrendsSchedulePassed && !dailySchedulePassed) {

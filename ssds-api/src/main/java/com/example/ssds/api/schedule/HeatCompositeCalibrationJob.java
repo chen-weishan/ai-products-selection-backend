@@ -106,10 +106,9 @@ public class HeatCompositeCalibrationJob {
             boolean instagramReadingExists = heatReadingRepository
                     .existsBySourceSourceCodeAndReadingDateBetween(
                             HeatSourceCode.INSTAGRAM, weekStart, weekStart.plusDays(6));
-            if (instagramReadingExists) {
+            boolean instagramDataAdded = instagramIngestJob.runMissingForWeek(businessDate);
+            if (!instagramDataAdded && instagramReadingExists) {
                 instagramIngestJob.restoreAvailabilityFromCurrentWeek(businessDate);
-            } else {
-                instagramIngestJob.run();
             }
         }
 
@@ -135,6 +134,8 @@ public class HeatCompositeCalibrationJob {
             List<Long> agentKeywordIds) {
         int updated = percentileDao.applyPercentiles(businessDate);
         log.info("百分位重算完成：{} 筆讀值（{}）。", updated, businessDate);
+        int instagramUpdated = percentileDao.applyInstagramWeeklyPercentiles(businessDate);
+        log.info("Instagram 本週品類百分位重算完成：{} 筆讀值（截至 {}）。", instagramUpdated, businessDate);
 
         List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
         if (compositionKeywordIds != null) {
