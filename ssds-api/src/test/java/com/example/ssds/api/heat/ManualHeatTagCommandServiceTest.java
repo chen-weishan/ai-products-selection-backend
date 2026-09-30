@@ -73,8 +73,6 @@ class ManualHeatTagCommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ManualHeatTagCommandService(
-                manualHeatTagRepository, productRepository, trendKeywordRepository, appUserRepository);
         loginAs(CURRENT_USER_ID);
 
         service = new ManualHeatTagCommandService(
