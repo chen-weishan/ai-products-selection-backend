@@ -98,6 +98,8 @@ public class ManualHeatTagCommandService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到人工熱度標記 id=" + id));
         requireOwnerOrAdmin(tag);
         manualHeatTagRepository.delete(tag);
+        // 刪除後交易提交才重新探測 MANUAL 來源（最近 30 日是否還有標記）。
+        eventPublisher.publishEvent(new ManualHeatTagDeletedEvent(id));
     }
 
     private Product loadProduct(Long productId) {

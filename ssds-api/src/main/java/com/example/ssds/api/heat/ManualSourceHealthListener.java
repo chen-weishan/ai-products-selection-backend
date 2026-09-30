@@ -57,13 +57,23 @@ public class ManualSourceHealthListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTagSubmitted(ManualHeatTagSubmittedEvent event) {
         try {
-            newTransaction.executeWithoutResult(status -> refreshManualSource(event.tagId()));
+            newTransaction.executeWithoutResult(status -> refreshManualSource(event.tagId(), true));
         } catch (RuntimeException e) {
             log.error("送出人工標記 id={} 後更新 MANUAL 來源狀態失敗", event.tagId(), e);
         }
     }
 
-    private void refreshManualSource(Long tagId) {
+    /** 刪除標記後重新探測：只重判「最近 30 日是否還有標記」，不動 lastFetchedAt（刪除不是新資料）。 */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onTagDeleted(ManualHeatTagDeletedEvent event) {
+        try {
+            newTransaction.executeWithoutResult(status -> refreshManualSource(event.tagId(), false));
+        } catch (RuntimeException e) {
+            log.error("刪除人工標記 id={} 後更新 MANUAL 來源狀態失敗", event.tagId(), e);
+        }
+    }
+
+    private void refreshManualSource(Long tagId, boolean submitted) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.MANUAL).orElse(null);
         if (source == null) {
             log.warn("heat_source 尚未註冊 MANUAL 這筆，略過狀態更新。");
@@ -74,7 +84,7 @@ public class ManualSourceHealthListener {
 
         // 只有「當日（Asia/Taipei）觀察到的標記」才刷新 lastFetchedAt；補登昨日以前的標記不算，
         // 資料落後（> 2 日）的降級判定因此不會被舊標記洗掉。
-        boolean taggedToday = manualHeatTagRepository.findById(tagId)
+        boolean taggedToday = submitted && manualHeatTagRepository.findById(tagId)
                 .map(tag -> tag.getObservedAt().atZone(TAIPEI).toLocalDate().equals(LocalDate.now(TAIPEI)))
                 .orElse(false);
         if (success && taggedToday) {
@@ -83,7 +93,7 @@ public class ManualSourceHealthListener {
 
         source.applyProbeResult(success, LocalDate.now(TAIPEI));
         heatSourceRepository.save(source);
-        log.info("送出人工標記 id={} 後 MANUAL 來源探測{}，狀態 {}，連續失敗 {} 次",
-                tagId, success ? "成功" : "失敗", source.getAvailability(), source.getConsecutiveProbeFailures());
+        log.info("{}人工標記 id={} 後 MANUAL 來源探測{}，狀態 {}，連續失敗 {} 次",
+                submitted ? "送出" : "刪除", tagId, success ? "成功" : "失敗", source.getAvailability(), source.getConsecutiveProbeFailures());
     }
 }
