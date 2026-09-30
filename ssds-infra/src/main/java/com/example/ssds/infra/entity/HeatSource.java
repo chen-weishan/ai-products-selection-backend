@@ -129,7 +129,43 @@ public class HeatSource {
                 ? 0
                 : (short) (consecutiveProbeFailures + 1);
         lastProbedAt = Instant.now();
+        availability = evaluateAvailability(probeSuccess, today, true);
+    }
 
+    /**
+     * 套用一次「採集」的結果：判定規則與 {@link #applyProbeResult} 相同（額度 ≥80% 降級、
+     * 資料落後降級），但不動 {@code lastProbedAt}，也不累計探測失敗次數。
+     *
+     * <p>與探測的差別：採集剛好把額度用到 100% 時只降為 DEGRADED，<b>不會</b>標 UNAVAILABLE
+     * ——這次採集其實成功了，資料是新的。額度 100% 判 UNAVAILABLE 只保留給「測試連線」。
+     *
+     * <p>採集有取得資料視為來源健康，順便把連續探測失敗次數歸零（與舊行為一致：
+     * 採集成功就是 AVAILABLE，不會被先前的探測失敗卡住）。
+     * 呼叫前請先更新 {@code lastFetchedAt} 與額度用量，讓判定用的是最新數字。
+     *
+     * @param hasData 本次採集是否取得至少一筆資料（沒有資料 → 至少 DEGRADED）
+     */
+    public void applyIngestResult(boolean hasData, LocalDate today) {
+        if (hasData) {
+            consecutiveProbeFailures = 0;
+        }
+        availability = evaluateAvailability(hasData, today, false);
+    }
+
+    /**
+     * 排程發現本月額度已經用完（採集前讀到 ≥100%）而略過採集時呼叫：標為 UNAVAILABLE。
+     *
+     * <p>只改 {@code availability}，不動 {@code enabled}（使用者的意圖）、{@code lastProbedAt}
+     * 與探測失敗次數。額度重置後下一次採集成功，{@link #applyIngestResult} 會自動把狀態恢復。
+     * 注意：採集<b>當下</b>剛好把額度用滿只會降為 DEGRADED（見 {@link #applyIngestResult}），
+     * 要到下一次排程才會走到這裡。
+     */
+    public void markQuotaExhausted() {
+        availability = SourceAvailability.UNAVAILABLE;
+    }
+
+    private SourceAvailability evaluateAvailability(
+            boolean healthy, LocalDate today, boolean fullQuotaIsUnavailable) {
         boolean quotaFull = quotaLimit != null && quotaLimit > 0 && quotaUsed >= quotaLimit;
         boolean quotaHigh = quotaLimit != null && quotaLimit > 0
                 && BigDecimal.valueOf(quotaUsed)
@@ -137,12 +173,13 @@ public class HeatSource {
         boolean stale = lastFetchedAt != null
                 && ChronoUnit.DAYS.between(lastFetchedAt.atZone(TAIPEI).toLocalDate(), today) > STALE_AFTER_DAYS;
 
-        if (consecutiveProbeFailures >= UNAVAILABLE_AFTER_CONSECUTIVE_FAILURES || quotaFull) {
-            availability = SourceAvailability.UNAVAILABLE;
-        } else if (!probeSuccess || quotaHigh || stale) {
-            availability = SourceAvailability.DEGRADED;
-        } else {
-            availability = SourceAvailability.AVAILABLE;
+        if (consecutiveProbeFailures >= UNAVAILABLE_AFTER_CONSECUTIVE_FAILURES
+                || (quotaFull && fullQuotaIsUnavailable)) {
+            return SourceAvailability.UNAVAILABLE;
         }
+        if (!healthy || quotaHigh || stale) {
+            return SourceAvailability.DEGRADED;
+        }
+        return SourceAvailability.AVAILABLE;
     }
 }

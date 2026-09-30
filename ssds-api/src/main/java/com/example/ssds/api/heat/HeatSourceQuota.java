@@ -39,4 +39,27 @@ public final class HeatSourceQuota {
         source.setQuotaLimit(usage.get().limitCents());
         return true;
     }
+
+    /**
+     * 依資料庫目前記的用量判斷本月額度是否已用完（不連網）。
+     * {@code quotaLimit} 為 null 或 ≤ 0 視為無上限，永遠回 false。
+     */
+    public static boolean isExhausted(HeatSource source) {
+        Integer limit = source.getQuotaLimit();
+        return limit != null && limit > 0 && source.getQuotaUsed() >= limit;
+    }
+
+    /**
+     * 採集前的額度護欄：先向 Apify 讀最新用量（免費端點，不消耗爬取額度），再判斷是否還有額度。
+     *
+     * <p>讀不到用量（未設定 token、Apify 無回應）時<b>放行</b>——額度只是輔助資訊，
+     * 且 Apify 帳號本身仍有每月硬上限，不會無限超支。只有「剛讀到的數字」顯示已用完才擋。
+     * 讀到的最新用量會寫進 {@code source}，呼叫端記得 save。
+     *
+     * @return true 表示可以繼續採集
+     */
+    public static boolean hasRoom(HeatSource source, HeatSourceAdapter adapter) {
+        boolean refreshed = refresh(source, adapter);
+        return !(refreshed && isExhausted(source));
+    }
 }

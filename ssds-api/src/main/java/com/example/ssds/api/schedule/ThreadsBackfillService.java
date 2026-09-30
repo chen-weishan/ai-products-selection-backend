@@ -1,5 +1,6 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.heat.HeatSourceQuota;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.infra.entity.HeatReading;
 import com.example.ssds.infra.entity.HeatSource;
@@ -52,6 +53,9 @@ public class ThreadsBackfillService {
     public void backfillDate(LocalDate targetDate) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.THREADS)
                 .orElseThrow(() -> new IllegalStateException("heat_source 尚未註冊 THREADS 這筆。"));
+        if (spendingBlocked(source)) {
+            return;
+        }
 
         List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
         if (keywords.isEmpty()) {
@@ -93,6 +97,9 @@ public class ThreadsBackfillService {
     public void backfillRange(LocalDate startDate, LocalDate endDateInclusive) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.THREADS)
                 .orElseThrow(() -> new IllegalStateException("heat_source 尚未註冊 THREADS 這筆。"));
+        if (spendingBlocked(source)) {
+            return;
+        }
 
         List<TrendKeyword> keywords = trendKeywordRepository.findByEnabledTrue();
         if (keywords.isEmpty()) {
@@ -130,6 +137,9 @@ public class ThreadsBackfillService {
     public void backfillKeyword(Long keywordId, LocalDate targetDate) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.THREADS)
                 .orElseThrow(() -> new IllegalStateException("heat_source 尚未註冊 THREADS 這筆。"));
+        if (spendingBlocked(source)) {
+            return;
+        }
         TrendKeyword keyword = trendKeywordRepository.getReferenceById(keywordId);
 
         Long heat = client.fetchEngagementHeatForDate(keyword.getKeyword(), targetDate);
@@ -145,6 +155,9 @@ public class ThreadsBackfillService {
     public void backfillRangeForKeyword(Long keywordId, LocalDate startDate, LocalDate endDateInclusive) {
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.THREADS)
                 .orElseThrow(() -> new IllegalStateException("heat_source 尚未註冊 THREADS 這筆。"));
+        if (spendingBlocked(source)) {
+            return;
+        }
         TrendKeyword keyword = trendKeywordRepository.getReferenceById(keywordId);
 
         java.util.Map<LocalDate, Long> byDate =
@@ -157,6 +170,23 @@ public class ThreadsBackfillService {
                     "Threads 區間回補：{} 在 {} ~ {} 只查到 {} 天有資料，其餘天數可能被 max_posts 上限擠掉，缺漏的天數需另外用 backfillKeyword 補。",
                     keyword.getKeyword(), startDate, endDateInclusive, byDate.size());
         }
+    }
+
+    /**
+     * 回補不經過 ingest job，所以要自己擋：來源被停用或本月額度已用完時不打 Apify。
+     * 這裡只看資料庫記的用量（不連網），最新用量由排程採集與「測試連線」負責更新。
+     */
+    private boolean spendingBlocked(HeatSource source) {
+        if (!source.isEnabled()) {
+            log.info("THREADS 來源已停用（enabled=false），略過回補。");
+            return true;
+        }
+        if (HeatSourceQuota.isExhausted(source)) {
+            log.warn("THREADS 本月 Apify 額度已用完（{}/{} 美分），略過回補。",
+                    source.getQuotaUsed(), source.getQuotaLimit());
+            return true;
+        }
+        return false;
     }
 
     private void upsert(HeatSource source, TrendKeyword keyword, LocalDate date, Long heat) {

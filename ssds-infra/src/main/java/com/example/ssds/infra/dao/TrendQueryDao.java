@@ -103,6 +103,11 @@ public class TrendQueryDao {
      * 分支）涵蓋；「單一來源默默停採超過其預期頻率」目前的 schema 沒有
      * 存「預期頻率」，抓不到這種半停擺狀態，是已知限制，之後如果要處理
      * 得先在 heat_source 加一個 expected_interval 之類的欄位。
+     * <p><b>停用的來源一律列出（enabled = false 不再被過濾掉）：</b>enabled 只控制採集，
+     * 停用來源當日已有讀值時仍會計入合成，明細若把它藏起來就會跟合成分數、
+     * applied_weights 對不上。回傳 {@code enabled} 讓前端標示「已停用」；
+     * 停用來源沒有當日讀值不是資料異常，所以 availability 維持資料庫的值，
+     * 不會被改成 DEGRADED（UNAVAILABLE 仍照舊優先）。
      */
 public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     return jdbcClient
@@ -155,26 +160,28 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                      WHERE rr.reading_date <= sol.own_asof - INTERVAL '30 days'
                      ORDER BY rr.source_id, rr.reading_date DESC
                  ),
-                 applicable_sources AS (
-                     SELECT hs.id, hs.source_code, hs.granularity, hs.availability
+                    applicable_sources AS (
+                     SELECT hs.id, hs.source_code, hs.granularity, hs.availability, hs.enabled
                      FROM heat_source hs
-                     WHERE hs.enabled = TRUE AND hs.granularity = 'KEYWORD'
+                     WHERE hs.granularity = 'KEYWORD'
 
                      UNION ALL
 
-                     SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability
+                     SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability, hs.enabled
                      FROM heat_source hs
                      JOIN heat_reading hr ON hr.source_id = hs.id
                      JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                     WHERE hs.enabled = TRUE AND hs.granularity = 'CATEGORY'
+                     WHERE hs.granularity = 'CATEGORY'
                  )
                  SELECT a.source_code AS sourceCode,
                         a.granularity AS granularity,
                         CASE
                             WHEN a.availability = 'UNAVAILABLE' THEN 'UNAVAILABLE'
+                            WHEN a.enabled = FALSE THEN a.availability
                             WHEN t.today_pct IS NULL THEN 'DEGRADED'
                             ELSE a.availability
                         END AS availability,
+                        a.enabled AS enabled,
                         t.today_pct AS percentileWithinSource,
                         CASE WHEN t.today_pct IS NULL OR d7.pct_7d IS NULL THEN NULL ELSE
                             ROUND((t.today_pct - d7.pct_7d)
@@ -275,7 +282,16 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
      * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
      * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
      * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
-     * 的定義（enabled 且非 UNAVAILABLE）不一致，以那兩處為準改過來。
+          * <p><b>2026-09-07 修正：「可用」的判定改成 {@code availability <> 'UNAVAILABLE'}</b>，
+     * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
+     * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
+     * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
+     * 的定義不一致，以那兩處為準改過來。
+     *
+     * <p><b>enabled 只管採集、不參與合成：</b>這裡刻意不看 {@code heat_source.enabled}。
+     * 來源被停用後不會再抓新資料，但只要該日（Instagram 為當週）已有讀值就照常計入；
+     * 當日沒有讀值則自然被 UNION 排除，權重在剩下的來源間重新正規化。
+     * 要讓舊讀值退出評分，請走 availability = UNAVAILABLE。
      */
     public Double findCompositeHeat(Long keywordId, LocalDate readingDate) {
         return jdbcClient
@@ -324,8 +340,7 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                            END AS composite
                     FROM matched_readings mr
                     JOIN heat_source hs ON hs.id = mr.source_id
-                    WHERE hs.enabled = TRUE
-                      AND hs.availability <> 'UNAVAILABLE'
+                    WHERE hs.availability <> 'UNAVAILABLE'
                     """)
                 .param("keywordId", keywordId)
                 .param("readingDate", readingDate)
@@ -376,8 +391,7 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                                 * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END AS effectiveWeight
                      FROM matched_readings mr
                      JOIN heat_source hs ON hs.id = mr.source_id
-                     WHERE hs.enabled = TRUE
-                       AND hs.availability <> 'UNAVAILABLE'
+                     WHERE hs.availability <> 'UNAVAILABLE'
                      """)
                 .param("keywordId", keywordId)
                 .param("readingDate", readingDate)

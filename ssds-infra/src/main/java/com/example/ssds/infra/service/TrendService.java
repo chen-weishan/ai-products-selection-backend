@@ -73,15 +73,21 @@ public class TrendService {
         response.setDivergenceFlag(snapshot.divergenceFlag());
 
         response.setSourceDetails(sources.stream()
-                .map(s -> new TrendKeywordDetailResponse.SourceDetail(
-                        s.sourceCode(),
-                        s.percentileWithinSource(),
-                        s.availability(),
-                        s.granularity(),
-                        "CATEGORY".equals(s.granularity()),
-                        appliedWeights.get(s.sourceCode()),
-                        s.slope7d(),
-                        s.slope30d()))
+                .map(s -> {
+                    // UNAVAILABLE 的來源不參與合成，不顯示它的數值；
+                    // 停用（enabled=false）但仍可用的來源照常顯示。
+                    boolean hideValues = "UNAVAILABLE".equals(s.availability());
+                    return new TrendKeywordDetailResponse.SourceDetail(
+                            s.sourceCode(),
+                            hideValues ? null : s.percentileWithinSource(),
+                            s.availability(),
+                            s.granularity(),
+                            "CATEGORY".equals(s.granularity()),
+                            appliedWeights.get(s.sourceCode()),
+                            hideValues ? null : s.slope7d(),
+                            hideValues ? null : s.slope30d(),
+                            s.enabled());
+                })
                 .toList());
 
         return response;

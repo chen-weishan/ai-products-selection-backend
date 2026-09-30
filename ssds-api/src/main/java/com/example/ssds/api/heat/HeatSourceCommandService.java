@@ -31,12 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * S-16 熱度來源管理的異動操作（規格書 FR-14-2）：啟用／停用、調整合成權重、測試連線。
  *
- * <p>AC-14-5：合成權重或啟用狀態<b>實際變動</b>時，本服務在交易內寫入新值與 audit_log 後發布
+ * <p>AC-14-5：合成權重<b>實際變動</b>時，本服務在交易內寫入新值與 audit_log 後發布
  * {@link HeatSourceCompositionChangedEvent}；交易提交後由
  * {@link HeatCompositionRecalculationListener} 非同步重算當日 {@code heat_composite_daily}
  * 並執行全量重新評分，不等次日 06:00 排程。事件在 AFTER_COMMIT 才處理，
  * 因為合成 SQL 直接讀 {@code heat_source.composite_weight}，必須讀到已提交的新值。
  * 值沒有變的 PUT（例如 0.3 送成 0.300）不會發布事件，避免無意義的全量重評。
+ *
+ * <p>啟用狀態（enabled）只控制排程是否採集，不影響合成，所以切換 enabled 只寫
+ * audit_log、不發布事件，也就不會觸發全量重評。
  */
 @Service
 @RequiredArgsConstructor
@@ -67,14 +70,13 @@ public class HeatSourceCommandService {
      * 權重或啟用狀態有實際變動時，於交易提交後觸發合成重算與全量重評分。
      */
     @Transactional
-    public HeatSourceDetailResponse update(Long id, HeatSourceUpdateRequest request) {
+        public HeatSourceDetailResponse update(Long id, HeatSourceUpdateRequest request) {
         HeatSource source = heatSourceRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到熱度來源 id=" + id));
 
         String beforeJson = String.format(
                 "{\"enabled\":%s,\"compositeWeight\":%s}", source.isEnabled(), source.getCompositeWeight());
 
-        boolean enabledChanged = request.enabled() != null && request.enabled() != source.isEnabled();
         boolean weightChanged = request.compositeWeight() != null
                 && source.getCompositeWeight().compareTo(request.compositeWeight()) != 0;
 
@@ -98,13 +100,13 @@ public class HeatSourceCommandService {
                 .afterJson(afterJson)
                 .build());
 
-        if (enabledChanged || weightChanged) {
+        if (weightChanged) {
             eventPublisher.publishEvent(
                     new HeatSourceCompositionChangedEvent(source.getId(), source.getSourceCode()));
         }
 
         return HeatSourceMapper.toDetail(source);
-    }
+    }   
 
     /**
      * S-16「測試連線」：立即檢查一次並回饋結果（目前沒有自動排程，狀態靠這個按鈕與人工標記更新）。

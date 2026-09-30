@@ -117,40 +117,28 @@ class HeatSourceCommandServiceTest {
     @DisplayName("update：調整合成權重／啟用狀態（AC-14-5）")
     class Update {
 
-        @Test
-        @DisplayName("調整合成權重會寫入新值並留下 audit_log")
-        void updatesCompositeWeightAndWritesAuditLog() {
+         @Test
+        @DisplayName("只切換啟用狀態不影響合成，不發布事件（避免為省額度開關而全量重評）")
+        void togglingEnabledOnlyDoesNotPublishEvent() {
             HeatSource source = threadsSource();
             when(heatSourceRepository.findById(1L)).thenReturn(Optional.of(source));
 
-            HeatSourceUpdateRequest request = new HeatSourceUpdateRequest(null, new BigDecimal("0.500"));
-            HeatSourceDetailResponse response = service.update(1L, request);
+            service.update(1L, new HeatSourceUpdateRequest(false, null));
 
-            assertThat(response.compositeWeight()).isEqualByComparingTo("0.500");
-            assertThat(source.getCompositeWeight()).isEqualByComparingTo("0.500");
-            assertThat(source.isEnabled()).isTrue(); // enabled 未帶值，維持原樣
-
-            ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
-            verify(auditLogRepository).save(captor.capture());
-            assertThat(captor.getValue().getEntityType()).isEqualTo("HeatSource");
-            assertThat(captor.getValue().getEntityId()).isEqualTo(1L);
-            assertThat(captor.getValue().getBeforeJson()).contains("0.300");
-            assertThat(captor.getValue().getAfterJson()).contains("0.500");
+            assertThat(source.isEnabled()).isFalse();
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
-        @DisplayName("停用來源時只改 enabled，權重維持原值")
-        void disablingSourceKeepsExistingWeight() {
+        @DisplayName("同時改 enabled 與權重時，權重有變動仍會發布事件")
+        void togglingEnabledWithWeightChangePublishesEvent() {
             HeatSource source = threadsSource();
             when(heatSourceRepository.findById(1L)).thenReturn(Optional.of(source));
 
-            HeatSourceUpdateRequest request = new HeatSourceUpdateRequest(false, null);
-            HeatSourceDetailResponse response = service.update(1L, request);
+            service.update(1L, new HeatSourceUpdateRequest(false, new BigDecimal("0.5")));
 
-            assertThat(response.enabled()).isFalse();
-            assertThat(response.compositeWeight()).isEqualByComparingTo("0.300");
+            verify(eventPublisher).publishEvent(any(HeatSourceCompositionChangedEvent.class));
         }
-
         @Test
         @DisplayName("找不到來源時拋出 BusinessException，且不寫 audit_log、不發布事件")
         void throwsWhenSourceNotFound() {

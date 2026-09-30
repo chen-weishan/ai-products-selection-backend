@@ -104,6 +104,16 @@ public class InstagramHeatIngestJob {
             return false;
         }
 
+        // 採集前先讀 Apify 最新用量：本月額度已用完就不再呼叫（enabled 仍保持使用者設定，月初重置後自動恢復）
+        if (!HeatSourceQuota.hasRoom(source, instagramAdapter)) {
+            log.warn("INSTAGRAM 本月 Apify 額度已用完（{}/{} 美分），略過採集。",
+                    source.getQuotaUsed(), source.getQuotaLimit());
+            // 略過本次採集：標 UNAVAILABLE（不動 enabled），並保存剛讀到的最新用量；下月額度重置後自動恢復
+            source.markQuotaExhausted();
+            heatSourceRepository.save(source);
+            return false;
+        }
+
         List<String> hashtags = mappings.stream().map(InstagramHashtagMapping::getHashtag).toList();
 
         List<HeatDataPoint> points;
@@ -135,10 +145,11 @@ public class InstagramHeatIngestJob {
             }
         }
 
-        source.setAvailability(points.isEmpty() ? SourceAvailability.DEGRADED : SourceAvailability.AVAILABLE);
         source.setLastFetchedAt(Instant.now());
         // 額度改讀 Apify 後台的本月用量（不再自行累加關鍵字數，單位不同）
         HeatSourceQuota.refresh(source, instagramAdapter);
+        // 狀態統一走 HeatSource 的判定（額度 ≥80% 降級、100% 不可用），不再只看有沒有資料
+        source.applyIngestResult(!points.isEmpty(), businessDate);
         heatSourceRepository.save(source);
 
         log.info(

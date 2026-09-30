@@ -95,6 +95,8 @@ public class TrendKeywordDetailResponse {
         private BigDecimal appliedWeight; // 本次實際採用的合成權重（來自 applied_weights JSON）
         private BigDecimal slope7d;
         private BigDecimal slope30d;
+        /** false = 使用者已停用採集（只影響抓取，是否計入合成看 appliedWeight）。 */
+        private boolean enabled = true;
 
         public SourceDetail() {}
 
@@ -109,6 +111,14 @@ public class TrendKeywordDetailResponse {
             this.appliedWeight = appliedWeight;
             this.slope7d = slope7d;
             this.slope30d = slope30d;
+        }
+
+        public SourceDetail(String sourceName, BigDecimal percentile, String status,
+                             String granularity, boolean categoryLevel, BigDecimal appliedWeight,
+                             BigDecimal slope7d, BigDecimal slope30d, boolean enabled) {
+            this(sourceName, percentile, status, granularity, categoryLevel, appliedWeight,
+                    slope7d, slope30d);
+            this.enabled = enabled;
         }
 
         public String getSourceName() { return sourceName; }
@@ -134,5 +144,8 @@ public class TrendKeywordDetailResponse {
 
         public BigDecimal getSlope30d() { return slope30d; }
         public void setSlope30d(BigDecimal slope30d) { this.slope30d = slope30d; }
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
     }
 }
