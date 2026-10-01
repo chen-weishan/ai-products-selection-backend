@@ -5,6 +5,7 @@ import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.decision.dto.DecisionResponse;
 import com.example.ssds.api.decision.dto.DecisionSnapshotResponse;
+import com.example.ssds.api.score.DrivingTargetLookup;
 import com.example.ssds.api.score.ScoreMapper;
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.SceneType;
@@ -13,6 +14,7 @@ import com.example.ssds.infra.entity.CampaignSnapshot;
 import com.example.ssds.infra.entity.DecisionRecord;
 import com.example.ssds.infra.entity.ProductScore;
 import com.example.ssds.infra.entity.SceneClassificationLog;
+import com.example.ssds.infra.entity.ScoreFactor;
 import com.example.ssds.infra.repository.DecisionRecordRepository;
 import com.example.ssds.infra.repository.SceneClassificationLogRepository;
 import com.example.ssds.infra.repository.ScoreFactorRepository;
@@ -48,25 +50,29 @@ public class DecisionQueryService {
     private final DecisionRecordRepository decisionRecordRepository;
     private final ScoreFactorRepository scoreFactorRepository;
     private final SceneClassificationLogRepository sceneClassificationLogRepository;
+    private final DrivingTargetLookup drivingTargetLookup;
     private final Clock clock;
 
     @Autowired
     public DecisionQueryService(
             DecisionRecordRepository decisionRecordRepository,
             ScoreFactorRepository scoreFactorRepository,
-            SceneClassificationLogRepository sceneClassificationLogRepository) {
+            SceneClassificationLogRepository sceneClassificationLogRepository,
+            DrivingTargetLookup drivingTargetLookup) {
         this(decisionRecordRepository, scoreFactorRepository, sceneClassificationLogRepository,
-                Clock.system(DecisionMapper.BUSINESS_ZONE));
+                drivingTargetLookup, Clock.system(DecisionMapper.BUSINESS_ZONE));
     }
 
     DecisionQueryService(
             DecisionRecordRepository decisionRecordRepository,
             ScoreFactorRepository scoreFactorRepository,
             SceneClassificationLogRepository sceneClassificationLogRepository,
+            DrivingTargetLookup drivingTargetLookup,
             Clock clock) {
         this.decisionRecordRepository = decisionRecordRepository;
         this.scoreFactorRepository = scoreFactorRepository;
         this.sceneClassificationLogRepository = sceneClassificationLogRepository;
+        this.drivingTargetLookup = drivingTargetLookup;
         this.clock = clock;
     }
 
@@ -104,10 +110,11 @@ public class DecisionQueryService {
                 .findFirst()
                 .orElse(null);
         boolean overridden = snapshot != null && snapshot.isSceneOverridden();
+        List<ScoreFactor> factors = scoreFactorRepository.findByScoreId(score.getId());
 
         return new DecisionSnapshotResponse(
                 record.getId(),
-                ScoreMapper.toDetail(score, scoreFactorRepository.findByScoreId(score.getId())),
+                ScoreMapper.toDetail(score, factors, drivingTargetLookup.resolve(factors)),
                 score.getWeightVersion() == null ? null : score.getWeightVersion().getId(),
                 score.getWeightVersion() == null ? null : score.getWeightVersion().getVersionNo(),
                 scene == null ? null : scene.getAiSceneType(),

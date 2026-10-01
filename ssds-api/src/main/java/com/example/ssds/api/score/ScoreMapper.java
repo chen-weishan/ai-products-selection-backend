@@ -11,6 +11,7 @@ import java.util.Set;
 
 import org.springframework.data.domain.Page;
 
+import com.example.ssds.api.score.DrivingTargetLookup.DrivingTargets;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
 import com.example.ssds.api.score.dto.ScoreDetailResponse;
 import com.example.ssds.api.score.dto.ScoreFactorBarResponse;
@@ -40,21 +41,24 @@ public final class ScoreMapper {
      * @param factorsByScoreId     這一頁全部分數的因子，依 score id 分組
      * @param overriddenProductIds 這一頁裡「情境判定經人工覆寫」的品項 id
      *                             （§FR-04 顯示內容表：情境判定「經人工覆寫者附標記」）
+     * @param targets              這一頁因子的生效關鍵字／節慶名稱（AC-17-6）
      */
     public static Page<ScoreRankingRowResponse> toRankingRows(
             Page<ProductScore> page,
             Map<Long, List<ScoreFactor>> factorsByScoreId,
-            Set<Long> overriddenProductIds) {
+            Set<Long> overriddenProductIds,
+            DrivingTargets targets) {
         // Page.map 保留分頁中繼資料（totalElements、totalPages），
         // 用 getContent().stream() 重組會把那些資訊弄丟
         return page.map(score -> toRow(score, factorsByScoreId,
-                overriddenProductIds.contains(score.getProduct().getId())));
+                overriddenProductIds.contains(score.getProduct().getId()), targets));
     }
 
     private static ScoreRankingRowResponse toRow(
             ProductScore score,
             Map<Long, List<ScoreFactor>> factorsByScoreId,
-            boolean sceneOverridden) {
+            boolean sceneOverridden,
+            DrivingTargets targets) {
 
         // 只取加分因子：扣分明細是獨立卡片（§FR-04「扣分明細以獨立卡片呈現」），
         // 由 GET /scores/{id}/deductions 另外供應，不塞在排行列裡。
@@ -68,7 +72,7 @@ public final class ScoreMapper {
                 .stream()
                 .filter(f -> !f.isPenalty())
                 .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
-                .map(ScoreMapper::toBar)
+                .map(f -> toBar(f, targets))
                 .toList();
 
         // 分數三欄取資料庫的既有值
@@ -114,13 +118,23 @@ public final class ScoreMapper {
                 bars);
     }
 
-    private static ScoreFactorBarResponse toBar(ScoreFactor factor) {
+    private static ScoreFactorBarResponse toBar(ScoreFactor factor, DrivingTargets targets) {
+        return toBar(factor, factor.getWeight(), targets);
+    }
+
+    /** {@code weight} 由參數決定：試算要顯示分攤後的權重，不是資料庫那組。 */
+    private static ScoreFactorBarResponse toBar(
+            ScoreFactor factor, BigDecimal weight, DrivingTargets targets) {
         return new ScoreFactorBarResponse(
                 factor.getFactorCode(),
                 factor.getNormalizedValue(),
-                factor.getWeight(),
+                weight,
                 factor.isDataAvailable(),
-                factor.isImputed());
+                factor.isImputed(),
+                factor.getDrivingKeywordId(),
+                targets.keyword(factor.getDrivingKeywordId()),
+                factor.getDrivingFestivalId(),
+                targets.festival(factor.getDrivingFestivalId()));
     }
 
     /**
@@ -173,12 +187,13 @@ public final class ScoreMapper {
      * @param factors 該筆分數的<b>全部</b>九個因子，由
      *                {@code ScoreFactorRepository.findByScoreId(...)} 取得
      */
-    public static ScoreDetailResponse toDetail(ProductScore score, List<ScoreFactor> factors) {
+    public static ScoreDetailResponse toDetail(
+            ProductScore score, List<ScoreFactor> factors, DrivingTargets targets) {
 
         List<ScoreFactorBarResponse> bonusFactors = factors.stream()
                 .filter(f -> !f.isPenalty())
                 .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
-                .map(ScoreMapper::toBar)
+                .map(f -> toBar(f, targets))
                 .toList();
 
         List<ScoreDeductionsResponse.DeductionItem> penaltyFactors = factors.stream()
@@ -230,18 +245,14 @@ public final class ScoreMapper {
             boolean sceneOverridden,
             BigDecimal bonusSubtotal,
             BigDecimal finalScore,
-            Grade grade) {
+            Grade grade,
+            DrivingTargets targets) {
 
         List<ScoreFactorBarResponse> bars = factors.stream()
                 .filter(f -> !f.isPenalty())
                 .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
-                .map(f -> new ScoreFactorBarResponse(
-                        f.getFactorCode(),
-                        f.getNormalizedValue(),
-                        // 無資料的因子不在 effectiveWeights 裡，回 null（權重已被分攤掉）
-                        effectiveWeights.get(f.getFactorCode()),
-                        f.isDataAvailable(),
-                        f.isImputed()))
+                // 無資料的因子不在 effectiveWeights 裡，回 null（權重已被分攤掉）
+                .map(f -> toBar(f, effectiveWeights.get(f.getFactorCode()), targets))
                 .toList();
 
         // 分數三欄用重算值；扣分不重算（§5.2.2），由 buildRankingRow 沿用原值

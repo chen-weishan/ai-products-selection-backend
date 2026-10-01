@@ -33,6 +33,7 @@ public class ScoreQueryService {
     private final ProductScoreRepository productScoreRepository;
     private final ScoreFactorRepository scoreFactorRepository;
     private final SceneOverrideLookup sceneOverrideLookup;
+    private final DrivingTargetLookup drivingTargetLookup;
 
     /**
      * 排行清單。{@code scene} 或 {@code categoryId} 為 null 時該條件不生效。
@@ -56,7 +57,8 @@ public class ScoreQueryService {
 
         // 一次撈完這一頁的全部因子再依 score 分組，避免逐列查詢造成 N+1。
         // f.getScore().getId() 只讀 LAZY proxy 的外鍵值，不會觸發載入
-        Map<Long, List<ScoreFactor>> factorsByScoreId = scoreFactorRepository.findByScoreIdIn(scoreIds).stream()
+        List<ScoreFactor> factors = scoreFactorRepository.findByScoreIdIn(scoreIds);
+        Map<Long, List<ScoreFactor>> factorsByScoreId = factors.stream()
                 .collect(Collectors.groupingBy(f -> f.getScore().getId()));
 
         // §FR-04 顯示內容表：情境判定「經人工覆寫者附標記」。
@@ -65,7 +67,8 @@ public class ScoreQueryService {
                 period,
                 page.getContent().stream().map(s -> s.getProduct().getId()).distinct().toList());
 
-        return ScoreMapper.toRankingRows(page, factorsByScoreId, overriddenProductIds);
+        return ScoreMapper.toRankingRows(page, factorsByScoreId, overriddenProductIds,
+                drivingTargetLookup.resolve(factors));
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +86,7 @@ public class ScoreQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到品項 " + id + " 在 " + period + " 的分數"));
         List<ScoreFactor> factors = scoreFactorRepository.findByScoreId(score.getId());
-        return ScoreMapper.toDetail(score, factors);
+        return ScoreMapper.toDetail(score, factors, drivingTargetLookup.resolve(factors));
     }
 
     @Transactional(readOnly = true)
