@@ -4,6 +4,7 @@ import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
 import com.example.ssds.api.weight.dto.ApproveWeightVersionRequest;
 import com.example.ssds.api.weight.dto.CreateWeightVersionRequest;
+import com.example.ssds.api.weight.dto.SceneStatsResponse;
 import com.example.ssds.api.weight.dto.WeightVersionDetailResponse;
 import com.example.ssds.api.weight.dto.WeightVersionSummaryResponse;
 
@@ -41,6 +42,18 @@ public class WeightVersionController {
 
     private final WeightVersionQueryService queryService;
     private final WeightVersionCommandService commandService;
+    private final WeightVersionSceneStatsService sceneStatsService;
+
+    /**
+     * 該版本各情境的 AI 判定數與人工覆寫率（§8.2，v3.0 補入；S-09「AI 選組規則卡」）。
+     * 版本不存在時 404；草稿版本回全 0。
+     */
+    // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}/scene-stats")
+    public ApiResponse<SceneStatsResponse> getSceneStats(@PathVariable Long id) {
+        return ApiResponse.success(sceneStatsService.getSceneStats(id));
+    }
 
     /** 該版本的四組權重與四榜門檻。 */
     // §2.1 權限列 2「檢視排行、品項詳情、趨勢」：五個角色皆可讀，故只要求已登入
