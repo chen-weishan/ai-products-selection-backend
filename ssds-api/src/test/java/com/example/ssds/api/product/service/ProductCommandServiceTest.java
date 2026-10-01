@@ -551,6 +551,61 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    void deferredUpdateInvalidatesCurrentScoreWithoutQueuingEarly() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = mockActor(product);
+
+        ProductUpdateResponse response = service.update(
+                product.getId(),
+                updateRequest(
+                        TrackType.A,
+                        null,
+                        new BigDecimal("90.00"),
+                        new BigDecimal("150.00")
+                ),
+                actor.getEmail(),
+                true
+        );
+
+        assertNull(response.taskId());
+        verify(productScoreRepository).deactivateAllCurrent(product.getId());
+        verify(aiTaskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
+    }
+
+    @Test
+    void finalizeQueuesAnalysisWhenScoringInputsInvalidatedCurrentScore() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = mockActor(product);
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(task.taskId()).thenReturn(701L);
+        when(task.status()).thenReturn(TaskStatus.PENDING);
+        when(aiTaskService.enqueueFullAnalysis(List.of(product), actor, false))
+                .thenReturn(task);
+        when(productScoreRepository.existsByProductIdAndActiveTrue(product.getId()))
+                .thenReturn(false);
+
+        var response = service.finalizeAnalysis(product.getId(), actor.getEmail());
+
+        assertEquals(701L, response.taskId());
+        assertEquals(TaskStatus.PENDING, response.taskStatus());
+        assertTrue(response.queued());
+    }
+
+    @Test
+    void finalizeSkipsAnalysisWhenCurrentScoreIsStillValid() {
+        Product product = existingProduct(TrackType.A, null);
+        AppUser actor = mockActor(product);
+        when(productScoreRepository.existsByProductIdAndActiveTrue(product.getId()))
+                .thenReturn(true);
+
+        var response = service.finalizeAnalysis(product.getId(), actor.getEmail());
+
+        assertNull(response.taskId());
+        assertEquals(false, response.queued());
+        verify(aiTaskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
+    }
+
+    @Test
     void updateScoringInputIsRejectedWhileFullAnalysisIsRunning() {
         Product product = existingProduct(TrackType.A, null);
         doThrow(new BusinessException(

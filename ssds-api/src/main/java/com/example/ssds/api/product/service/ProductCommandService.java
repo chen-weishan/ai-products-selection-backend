@@ -9,6 +9,7 @@ import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
 import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
+import com.example.ssds.api.product.dto.ProductAnalysisFinalizeResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -184,13 +185,22 @@ public class ProductCommandService {
             Long productId,
             ProductUpdateRequest request
     ) {
-        return update(productId, request, null);
+        return update(productId, request, null, false);
     }
 
     public ProductUpdateResponse update(
             Long productId,
             ProductUpdateRequest request,
             String actorEmail
+    ) {
+        return update(productId, request, actorEmail, false);
+    }
+
+    public ProductUpdateResponse update(
+            Long productId,
+            ProductUpdateRequest request,
+            String actorEmail,
+            boolean deferAnalysis
     ) {
         Product product = findProductForUpdate(productId);
         String name = request.name().trim();
@@ -283,7 +293,7 @@ public class ProductCommandService {
         AppUser taskActor = enqueueAnalysis && actorEmail != null
                 ? findActor(actorEmail)
                 : null;
-        AiTaskResponse task = enqueueAnalysis
+        AiTaskResponse task = enqueueAnalysis && !deferAnalysis
                 ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), taskActor, false)
                 : null;
         return new ProductUpdateResponse(
@@ -292,6 +302,28 @@ public class ProductCommandService {
                 task == null ? null : task.taskId(),
                 task == null ? null : task.status()
         );
+    }
+
+    /**
+     * 前端完成主檔與補充資料的多段儲存後，由這個入口做最後一次排程判斷。
+     *
+     * <p>若輸入沒有異動且仍有現行分數，不會浪費額度重跑；若任一段寫入已讓
+     * 現行分數失效，則只建立一個 FULL_ANALYSIS 任務。
+     */
+    public ProductAnalysisFinalizeResponse finalizeAnalysis(
+            Long productId,
+            String actorEmail
+    ) {
+        Product product = findProductForUpdate(productId);
+        if (!eligibleForFullAnalysis(product)
+                || productScoreRepository.existsByProductIdAndActiveTrue(productId)) {
+            return new ProductAnalysisFinalizeResponse(null, null, false);
+        }
+        AppUser actor = actorEmail == null ? null : findActor(actorEmail);
+        AiTaskResponse task = aiTaskService.enqueueFullAnalysis(
+                List.of(product), actor, false);
+        return new ProductAnalysisFinalizeResponse(
+                task.taskId(), task.status(), true);
     }
 
     /**

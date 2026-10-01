@@ -51,6 +51,9 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
 
     boolean existsByProductIdAndPeriod(Long productId, String period);
 
+    /** 品項是否仍有可對外顯示的現行分數；評分輸入異動時會先全部失效。 */
+    boolean existsByProductIdAndActiveTrue(Long productId);
+
     @Query(value = """
             select s from ProductScore s
             join fetch s.product p

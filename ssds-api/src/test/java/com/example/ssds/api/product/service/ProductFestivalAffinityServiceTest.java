@@ -3,6 +3,8 @@ package com.example.ssds.api.product.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -21,6 +23,9 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.ItemFestivalAffinityRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
+import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +39,7 @@ class ProductFestivalAffinityServiceTest {
     private ItemFestivalAffinityRepository affinityRepository;
     private FestivalCalendarRepository festivalRepository;
     private AiTaskService aiTaskService;
+    private ProductScoreRepository productScoreRepository;
     private ProductFestivalAffinityService service;
     private Product product;
 
@@ -43,17 +49,66 @@ class ProductFestivalAffinityServiceTest {
         affinityRepository = mock(ItemFestivalAffinityRepository.class);
         festivalRepository = mock(FestivalCalendarRepository.class);
         aiTaskService = mock(AiTaskService.class);
+        productScoreRepository = mock(ProductScoreRepository.class);
         service = new ProductFestivalAffinityService(
                 productRepository,
                 affinityRepository,
                 festivalRepository,
-                aiTaskService
+                aiTaskService,
+                productScoreRepository
         );
         product = Product.builder().id(50L).build();
         when(productRepository.findById(50L)).thenReturn(Optional.of(product));
         when(productRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(product));
         when(affinityRepository.saveAllAndFlush(anyList()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void changedAffinitiesInvalidateScoreAndQueueEligibleProduct() {
+        product = Product.builder()
+                .id(50L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(product));
+        when(festivalRepository.findByFestivalCodeIn(Set.of("MID_AUTUMN")))
+                .thenReturn(List.of(festival("MID_AUTUMN", "中秋節")));
+        when(affinityRepository.findByProductIdOrderByFestivalCodeAsc(50L))
+                .thenReturn(List.of());
+
+        service.replace(
+                50L,
+                new ProductFestivalAffinityUpdateRequest(List.of(
+                        new ProductFestivalAffinityItemRequest(
+                                "MID_AUTUMN", new BigDecimal("0.80")))));
+
+        verify(productScoreRepository).deactivateAllCurrent(50L);
+        verify(aiTaskService).enqueueFullAnalysis(List.of(product), null, false);
+    }
+
+    @Test
+    void deferredAffinityChangeInvalidatesScoreWithoutQueuingEarly() {
+        product = Product.builder()
+                .id(50L)
+                .trackType(TrackType.A)
+                .status(ProductStatus.EVALUATING)
+                .build();
+        when(productRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(product));
+        when(festivalRepository.findByFestivalCodeIn(Set.of("MID_AUTUMN")))
+                .thenReturn(List.of(festival("MID_AUTUMN", "中秋節")));
+        when(affinityRepository.findByProductIdOrderByFestivalCodeAsc(50L))
+                .thenReturn(List.of());
+
+        service.replace(
+                50L,
+                new ProductFestivalAffinityUpdateRequest(List.of(
+                        new ProductFestivalAffinityItemRequest(
+                                "MID_AUTUMN", new BigDecimal("0.80")))),
+                true);
+
+        verify(productScoreRepository).deactivateAllCurrent(50L);
+        verify(aiTaskService, never()).enqueueFullAnalysis(anyList(), any(), anyBoolean());
     }
 
     @Test

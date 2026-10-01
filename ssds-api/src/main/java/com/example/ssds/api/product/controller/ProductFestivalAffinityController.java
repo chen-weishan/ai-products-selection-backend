@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 品項表單的節慶關聯度子資源 API。 */
@@ -37,8 +38,10 @@ public class ProductFestivalAffinityController {
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
     public ApiResponse<List<ProductFestivalAffinityResponse>> replace(
             @PathVariable(name = "productId") Long productId,
+            @RequestParam(name = "deferAnalysis", defaultValue = "false") boolean deferAnalysis,
             @Valid @RequestBody ProductFestivalAffinityUpdateRequest request
     ) {
-        return ApiResponse.success(affinityService.replace(productId, request));
+        return ApiResponse.success(affinityService.replace(
+                productId, request, deferAnalysis));
     }
 }

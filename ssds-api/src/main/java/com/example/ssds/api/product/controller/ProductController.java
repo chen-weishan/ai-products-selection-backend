@@ -8,6 +8,7 @@ import com.example.ssds.api.product.dto.ProductBatchAnalyzeRequest;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeResponse;
 import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
 import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
+import com.example.ssds.api.product.dto.ProductAnalysisFinalizeResponse;
 import com.example.ssds.api.product.dto.ProductBatchQueueScoreRequest;
 import com.example.ssds.api.product.dto.ProductBatchQueueScoreResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
@@ -154,11 +155,24 @@ public class ProductController {
     public ApiResponse<ProductUpdateResponse> updateProduct(
             @PathVariable(name = "id") Long id,
             @Valid @RequestBody ProductUpdateRequest request,
+            @RequestParam(name = "deferAnalysis", defaultValue = "false") boolean deferAnalysis,
             Authentication authentication
     ) {
         return ApiResponse.success(
-                productCommandService.update(id, request, authentication.getName())
+                productCommandService.update(
+                        id, request, authentication.getName(), deferAnalysis)
         );
+    }
+
+    /** 多段品項資料均儲存成功後，依目前分數有效性統一建立完整分析任務。 */
+    @PostMapping("/{id}/analysis/finalize")
+    @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<ProductAnalysisFinalizeResponse> finalizeAnalysis(
+            @PathVariable(name = "id") Long id,
+            Authentication authentication
+    ) {
+        return ApiResponse.success(productCommandService.finalizeAnalysis(
+                id, authentication.getName()));
     }
 
     /** FR-03 依狀態機變更品項狀態。 */

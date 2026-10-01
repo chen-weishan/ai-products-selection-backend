@@ -13,6 +13,9 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.ItemFestivalAffinityRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
+import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.TrackType;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -32,17 +35,20 @@ public class ProductFestivalAffinityService {
     private final ItemFestivalAffinityRepository affinityRepository;
     private final FestivalCalendarRepository festivalRepository;
     private final AiTaskService aiTaskService;
+    private final ProductScoreRepository productScoreRepository;
 
     public ProductFestivalAffinityService(
             ProductRepository productRepository,
             ItemFestivalAffinityRepository affinityRepository,
             FestivalCalendarRepository festivalRepository,
-            AiTaskService aiTaskService
+            AiTaskService aiTaskService,
+            ProductScoreRepository productScoreRepository
     ) {
         this.productRepository = productRepository;
         this.affinityRepository = affinityRepository;
         this.festivalRepository = festivalRepository;
         this.aiTaskService = aiTaskService;
+        this.productScoreRepository = productScoreRepository;
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +62,14 @@ public class ProductFestivalAffinityService {
     public List<ProductFestivalAffinityResponse> replace(
             Long productId,
             ProductFestivalAffinityUpdateRequest request
+    ) {
+        return replace(productId, request, false);
+    }
+
+    public List<ProductFestivalAffinityResponse> replace(
+            Long productId,
+            ProductFestivalAffinityUpdateRequest request,
+            boolean deferAnalysis
     ) {
         Product product = findProductForUpdate(productId);
         Map<String, ProductFestivalAffinityItemRequest> normalized = new LinkedHashMap<>();
@@ -102,7 +116,18 @@ public class ProductFestivalAffinityService {
                                 .build())
                         .toList()
         );
+        productScoreRepository.deactivateAllCurrent(productId);
+        if (!deferAnalysis && eligibleForFullAnalysis(product)) {
+            aiTaskService.enqueueFullAnalysis(List.of(product), null, false);
+        }
         return toResponses(saved);
+    }
+
+    private boolean eligibleForFullAnalysis(Product product) {
+        return product.getTrackType() == TrackType.A
+                && product.getDeletedAt() == null
+                && product.getStatus() != ProductStatus.DRAFT
+                && product.getStatus() != ProductStatus.REJECTED;
     }
 
     private List<ProductFestivalAffinityResponse> toResponses(
