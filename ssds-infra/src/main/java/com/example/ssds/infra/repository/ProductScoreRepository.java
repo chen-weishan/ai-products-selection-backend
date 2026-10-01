@@ -30,6 +30,17 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
 
         List<ProductScore> findByProductIdOrderByCalculatedAtDesc(Long productId);
 
+        /**
+         * FR-11-1 決策綁定的評分：該品項最新 period 的主情境、現行（is_active）那筆。
+         * 次要情境與被重算取代的舊列都不可綁（AC-11-1）。
+         * 「該 period」取 calculated_at 最新者：全量評分每週一次、重複評分以 calculated_at 最新者為有效（§5.10），
+         * 故最新一筆即當前 period；
+         * 決策是對「現在」的判斷，不接受由呼叫端指定舊 period。
+         */
+        @EntityGraph(attributePaths = { "weightVersion" })
+        Optional<ProductScore> findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(
+                        Long productId);
+
         @Query("""
                         SELECT s FROM ProductScore s
                         WHERE s.period = :period AND s.penaltySubtotal >= 20

@@ -9,14 +9,28 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** 採購決策（規格書 §7.2 decision_record、FR-11）。 */
 @Repository
-public interface DecisionRecordRepository extends JpaRepository<DecisionRecord, Long> {
+public interface DecisionRecordRepository
+    extends JpaRepository<DecisionRecord, Long>, JpaSpecificationExecutor<DecisionRecord> {
+
+  /** FR-11 決策清單：篩選條件由呼叫端組成 Specification，關聯一次撈齊避免 N+1。 */
+  @Override
+  @EntityGraph(attributePaths = {
+      "product", "product.category", "score", "decidedBy", "reviewedBy", "result" })
+  Page<DecisionRecord> findAll(Specification<DecisionRecord> spec, Pageable pageable);
+
+  /** FR-11-3 準確度分析：母體全數載入後在記憶體統計（決策量級為百筆，非百萬筆）。 */
+  @Override
+  @EntityGraph(attributePaths = { "product", "score", "result", "snapshot" })
+  List<DecisionRecord> findAll(Specification<DecisionRecord> spec);
 
   @EntityGraph(attributePaths = { "product", "score", "decidedBy" })
   Page<DecisionRecord> findByDecidedAtBetween(Instant from, Instant to, Pageable pageable);
