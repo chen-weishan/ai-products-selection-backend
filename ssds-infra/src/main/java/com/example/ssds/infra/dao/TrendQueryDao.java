@@ -103,6 +103,11 @@ public class TrendQueryDao {
      * 分支）涵蓋；「單一來源默默停採超過其預期頻率」目前的 schema 沒有
      * 存「預期頻率」，抓不到這種半停擺狀態，是已知限制，之後如果要處理
      * 得先在 heat_source 加一個 expected_interval 之類的欄位。
+     * <p><b>關鍵字級（每日）來源的讀值落後於合成日 → DEGRADED：</b>合成只採用「當日」的
+     * 關鍵字級讀值（見 {@link #findCompositeHeat}），所以某來源最新讀值若早於該關鍵字最新
+     * 合成日，它沒有參與當日合成（applied_weights 沒有它）。先前這裡仍用該來源自己的最新
+     * 讀值顯示 AVAILABLE ＋ 百分位，卻沒有權重，畫面前後矛盾。現在改標 DEGRADED，數值與
+     * 斜率照常保留供參考。品類級週頻來源（Instagram）不適用此規則，維持 09-17 的行為。
      * <p><b>停用的來源一律列出（enabled = false 不再被過濾掉）：</b>enabled 只控制採集，
      * 停用來源當日已有讀值時仍會計入合成，明細若把它藏起來就會跟合成分數、
      * applied_weights 對不上。回傳 {@code enabled} 讓前端標示「已停用」；
@@ -136,6 +141,11 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                      SELECT source_id, MAX(reading_date) AS own_asof
                      FROM relevant_readings
                      GROUP BY source_id
+                 ),
+                 latest_composite AS (
+                     SELECT MAX(stat_date) AS composite_asof
+                     FROM heat_composite_daily
+                     WHERE keyword_id = :keywordId
                  ),
                  Today AS (
                      SELECT rr.source_id, AVG(rr.percentile_within_source) AS today_pct
@@ -179,6 +189,8 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                             WHEN a.availability = 'UNAVAILABLE' THEN 'UNAVAILABLE'
                             WHEN a.enabled = FALSE THEN a.availability
                             WHEN t.today_pct IS NULL THEN 'DEGRADED'
+                            WHEN a.granularity = 'KEYWORD'
+                                 AND sol.own_asof < lc.composite_asof THEN 'DEGRADED'
                             ELSE a.availability
                         END AS availability,
                         a.enabled AS enabled,
@@ -193,6 +205,8 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                         END AS slope30d
                  FROM applicable_sources a
                     LEFT JOIN Today t ON t.source_id = a.id
+                    LEFT JOIN SourceOwnLatest sol ON sol.source_id = a.id
+                    CROSS JOIN latest_composite lc
                     LEFT JOIN D7   d7 ON d7.source_id = a.id
                     LEFT JOIN D30 d30 ON d30.source_id = a.id
                     ORDER BY a.id
