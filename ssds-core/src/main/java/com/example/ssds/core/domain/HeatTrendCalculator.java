@@ -2,6 +2,10 @@ package com.example.ssds.core.domain;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.Map;
 
 /**
  * 熱度趨勢規則引擎（§5.3.3 斜率計算、§5.8 階段轉換與壽命推估的 RULE 基準層）。
@@ -28,6 +32,48 @@ public final class HeatTrendCalculator {
     private static final BigDecimal RISE_THRESHOLD = new BigDecimal("0.10");
 
     private static final BigDecimal DECLINE_THRESHOLD = new BigDecimal("-0.10");
+
+        /** §5.3.3 觀測點容錯窗半徑（天）：目標日前後各 3 天，共 7 天窗口。 */
+    private static final long ANCHOR_WINDOW_RADIUS_DAYS = 3;
+
+    /**
+     * 7 天窗口內至少要有這麼多天有資料，才信任容錯後取到的值；
+     * 未達門檻視為「這段期間資料太稀疏、無法判斷走勢」，直接回傳 null
+     * （而不是硬湊一個可能失真的數字）。
+     */
+    private static final long ANCHOR_MIN_COVERED_DAYS = 4;
+
+    /**
+     * §5.3.3：在目標日 ±{@link #ANCHOR_WINDOW_RADIUS_DAYS} 天的窗口內，
+     * 找出可信任的觀測值來代表「目標日」。
+     *
+     * <p>窗口內有資料的天數 &lt; {@link #ANCHOR_MIN_COVERED_DAYS} 回傳 null；
+     * 否則取離目標日最近的一天，平手時取較晚（離「現在」較近）的那天。
+     */
+    public static BigDecimal resolveAnchor(Map<LocalDate, BigDecimal> series, LocalDate target) {
+        if (series == null || target == null) {
+            return null;
+        }
+        LocalDate windowFrom = target.minusDays(ANCHOR_WINDOW_RADIUS_DAYS);
+        LocalDate windowTo = target.plusDays(ANCHOR_WINDOW_RADIUS_DAYS);
+
+        var covered = series.entrySet().stream()
+                .filter(e -> e.getValue() != null)
+                .filter(e -> !e.getKey().isBefore(windowFrom) && !e.getKey().isAfter(windowTo))
+                .toList();
+
+        if (covered.size() < ANCHOR_MIN_COVERED_DAYS) {
+            return null;
+        }
+
+        return covered.stream()
+                .min(Comparator
+                        .comparing((Map.Entry<LocalDate, BigDecimal> e) ->
+                                Math.abs(ChronoUnit.DAYS.between(target, e.getKey())))
+                        .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+                .map(Map.Entry::getValue)
+                .orElse(null);
+    }
 
     /**
      * §5.3.3：slope = (heat_t − heat_anchor) / max(heat_anchor, ε)。

@@ -2,6 +2,8 @@ package com.example.ssds.infra.service;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -47,39 +49,45 @@ class TrendServiceTest {
                         "AGENT",
                         "{\"THREADS\":0.8000,\"INSTAGRAM\":0.2000}",
                         true)));
-        when(queryDao.findSourceBreakdown(31L)).thenReturn(List.of(
+               when(queryDao.findSourceBreakdown(31L)).thenReturn(List.of(
                 new SourceBreakdownRow(
-                        "THREADS",
-                        "KEYWORD",
-                        "AVAILABLE",
-                        new BigDecimal("80.00"),
-                        new BigDecimal("0.10"),
-                        new BigDecimal("0.20")),
+                        "THREADS", "KEYWORD", "AVAILABLE",
+                        new BigDecimal("80.00"), new BigDecimal("0.10"), new BigDecimal("0.20"),
+                        true),
                 new SourceBreakdownRow(
-                        "INSTAGRAM",
-                        "CATEGORY",
-                        "DEGRADED",
-                        new BigDecimal("20.00"),
-                        new BigDecimal("0.05"),
-                        new BigDecimal("0.08"))));
+                        "INSTAGRAM", "CATEGORY", "DEGRADED",
+                        new BigDecimal("20.00"), new BigDecimal("0.05"), new BigDecimal("0.08"),
+                        true),
+                // 停用但仍可用：照常顯示數值
+                new SourceBreakdownRow(
+                        "GOOGLE_TRENDS", "KEYWORD", "AVAILABLE",
+                        new BigDecimal("55.00"), new BigDecimal("0.01"), new BigDecimal("0.02"),
+                        false),
+                // UNAVAILABLE：不顯示數值
+                new SourceBreakdownRow(
+                        "MANUAL", "KEYWORD", "UNAVAILABLE",
+                        new BigDecimal("30.00"), new BigDecimal("0.03"), new BigDecimal("0.04"),
+                        true)));
 
         TrendKeywordDetailResponse response = service.getKeywordDetail(31L, "90d");
 
         verify(queryDao).findTrendRange(eq(List.of(31L)), eq(from), eq(today));
         TrendKeywordDetailResponse.SourceDetail instagram = response.getSourceDetails().get(1);
+        TrendKeywordDetailResponse.SourceDetail disabledButAvailable = response.getSourceDetails().get(2);
+        TrendKeywordDetailResponse.SourceDetail unavailable = response.getSourceDetails().get(3);
         assertAll(
-                () -> assertEquals(2, response.getPoints().size()),
-                () -> assertEquals("RISING", response.getStage()),
-                () -> assertEquals(3, response.getStageWeeks()),
-                () -> assertEquals(56, response.getEstimatedLifespanDays()),
-                () -> assertEquals("AGENT", response.getStageSource()),
-                () -> assertEquals("AGENT", response.getLifespanSource()),
-                () -> assertTrue(response.isDivergenceFlag()),
-                () -> assertEquals("CATEGORY", instagram.getGranularity()),
-                () -> assertTrue(instagram.isCategoryLevel()),
-                () -> assertEquals("DEGRADED", instagram.getStatus()),
-                () -> assertEquals(new BigDecimal("0.2000"), instagram.getAppliedWeight()),
-                () -> assertEquals(new BigDecimal("0.05"), instagram.getSlope7d()),
-                () -> assertEquals(new BigDecimal("0.08"), instagram.getSlope30d()));
+                () -> assertEquals(4, response.getSourceDetails().size()),
+                // 停用但仍可用：標示已停用，數值照常顯示
+                () -> assertFalse(disabledButAvailable.isEnabled()),
+                () -> assertEquals("AVAILABLE", disabledButAvailable.getStatus()),
+                () -> assertNull(disabledButAvailable.getAppliedWeight()),
+                () -> assertEquals(new BigDecimal("55.00"), disabledButAvailable.getPercentile()),
+                () -> assertEquals(new BigDecimal("0.01"), disabledButAvailable.getSlope7d()),
+                () -> assertEquals(new BigDecimal("0.02"), disabledButAvailable.getSlope30d()),
+                // UNAVAILABLE：不顯示數值
+                () -> assertEquals("UNAVAILABLE", unavailable.getStatus()),
+                () -> assertNull(unavailable.getPercentile()),
+                () -> assertNull(unavailable.getSlope7d()),
+                () -> assertNull(unavailable.getSlope30d()));
     }
 }

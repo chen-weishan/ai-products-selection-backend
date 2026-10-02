@@ -20,14 +20,13 @@ public interface HeatSourceRepository extends JpaRepository<HeatSource, Long> {
     List<HeatSource> findByAvailability(SourceAvailability availability);
 
     /**
-     * §5.3.2 合成時可用的來源：啟用且非 UNAVAILABLE。
+     * §5.3.2 合成時可用的來源：非 UNAVAILABLE（enabled 只控制是否採集，不影響合成）。
      * 呼叫端需自行把這些來源的權重重新正規化為總和 1 ——
      * 資料庫存的是「原始設定權重」，降級後的實際比例是運算結果，不落地。
      */
     @Query("""
             select s from HeatSource s
-            where s.enabled = true
-              and s.availability <> com.example.ssds.core.domain.SourceAvailability.UNAVAILABLE
+            where s.availability <> com.example.ssds.core.domain.SourceAvailability.UNAVAILABLE
             """)
     List<HeatSource> findContributingSources();
 }

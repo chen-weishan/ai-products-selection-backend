@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,7 +29,15 @@ import org.springframework.web.client.RestClient;
 @Component
 public class GoogleTrendsClient {
 
+    private static final Logger log = LoggerFactory.getLogger(GoogleTrendsClient.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 歷史回補專用的 maxItems 下限。每日排程沿用 properties（預設 30）即可，
+     * 但回補的 timeframe 是一個月以上的逐日序列，30 筆會從最新那端被截掉，
+     * 導致資料停在「起點 + 30 天」而不是今天。
+     */
+    private static final int BACKFILL_MIN_MAX_ITEMS = 400;
     private final RestClient restClient;
     private final GoogleTrendsIngestProperties properties;
 
@@ -84,7 +94,7 @@ public class GoogleTrendsClient {
                     "geo", properties.geoOrDefault(),
                     "timeframe", timeframe,
                     "dataTypes", List.of("interestOverTime"),
-                    "maxItems", properties.maxItemsOrDefault()))
+                    "maxItems", Math.max(properties.maxItemsOrDefault(), BACKFILL_MIN_MAX_ITEMS)))
             .retrieve()
             .body(String.class);
 
@@ -92,10 +102,15 @@ public class GoogleTrendsClient {
     if (points == null) {
         return List.of();
     }
+    if (!points.isEmpty()) {
+        log.info("Google Trends 回補原始回傳：keyword={} timeframe={} 共 {} 筆，第一筆 {}，最後一筆 {}",
+                keyword, timeframe, points.size(), points.get(0), points.get(points.size() - 1));
+    }
 
     return points.stream()
             .filter(p -> p.value() != null && p.date() != null && p.date().length() >= 10)
-            .filter(p -> !Boolean.TRUE.equals(p.isPartial()))
+            // 不再過濾 isPartial：最近幾天未統計完的點也寫入，以取得最新日期。
+            // 這些點的值之後可能被 Google 修正，重跑回補會以 upsert 覆蓋。
             .map(p -> new DailyInterest(LocalDate.parse(p.date().substring(0, 10)), p.value()))
             .toList();
 }
