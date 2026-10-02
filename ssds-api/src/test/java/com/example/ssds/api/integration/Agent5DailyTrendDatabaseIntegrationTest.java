@@ -368,7 +368,7 @@ class Agent5DailyTrendDatabaseIntegrationTest {
             saveComposite(keyword, businessDate.minusDays(daysAgo), "50.00", HeatStage.RISING);
         }
         saveComposite(keyword, businessDate.minusDays(8), "50.00", HeatStage.RISING);
-        saveComposite(keyword, businessDate.minusDays(31), "50.00", HeatStage.PLATEAU);
+        saveThirtyDayAnchorWindow(keyword, businessDate, "50.00", HeatStage.PLATEAU);
         heatReadings.saveAndFlush(HeatReading.builder()
                 .source(source)
                 .keyword(keyword)
@@ -1106,16 +1106,16 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                 SourceAvailability.AVAILABLE);
 
         TrendKeyword rising = saveKeywordProduct("Phase6 上升", category);
-        saveComposite(rising, businessDate.minusDays(31), "50.00", HeatStage.PLATEAU);
+        saveThirtyDayAnchorWindow(rising, businessDate, "50.00", HeatStage.PLATEAU);
         saveReading(source, rising, null, businessDate, "100.00");
 
         TrendKeyword plateau = saveKeywordProduct("Phase6 盤整", category);
-        saveComposite(plateau, businessDate.minusDays(31), "50.00", HeatStage.PLATEAU);
+        saveThirtyDayAnchorWindow(plateau, businessDate, "50.00", HeatStage.PLATEAU);
         saveComposite(plateau, businessDate.minusDays(1), "51.00", HeatStage.RISING);
         saveReading(source, plateau, null, businessDate, "52.00");
 
         TrendKeyword declining = saveKeywordProduct("Phase6 衰退", category);
-        saveComposite(declining, businessDate.minusDays(31), "100.00", HeatStage.RISING);
+        saveThirtyDayAnchorWindow(declining, businessDate, "100.00", HeatStage.RISING);
         saveComposite(declining, businessDate.minusDays(2), "55.00", HeatStage.DECLINING);
         saveReading(source, declining, null, businessDate, "50.00");
 
@@ -1330,6 +1330,13 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                 .divergenceFlag(false)
                 .volumeBelowFloor(false)
                 .build());
+    }
+
+    private void saveThirtyDayAnchorWindow(
+            TrendKeyword keyword, LocalDate businessDate, String value, HeatStage stage) {
+        for (int daysAgo = 31; daysAgo <= 34; daysAgo++) {
+            saveComposite(keyword, businessDate.minusDays(daysAgo), value, stage);
+        }
     }
 
     private void saveSourcingComposite(
