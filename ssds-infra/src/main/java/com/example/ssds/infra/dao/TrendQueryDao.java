@@ -302,6 +302,21 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                         JOIN product p ON p.id = pk.product_id
                         WHERE pk.keyword_id = :keywordId
                     ),
+                    manual_conf AS (
+                        -- FR-14-1-a 步驟 4：未失效標記的「相異標記人數」→ 信心係數（1 人 0.6／2 人 0.8／3 人以上 1.0）。
+                        -- 品項標記依 ManualHeatReadingJob 的映射規則，展開計入該品項關聯的關鍵字。
+                        SELECT CASE COUNT(DISTINCT t.tagged_by)
+                                   WHEN 1 THEN 0.6
+                                   WHEN 2 THEN 0.8
+                                   ELSE 1.0
+                               END AS factor
+                        FROM manual_heat_tag t
+                        WHERE CAST(:readingDate AS date) - t.observed_at::date < 30
+                          AND (t.keyword_id = :keywordId
+                               OR t.product_id IN (SELECT pk.product_id
+                                                   FROM product_keyword pk
+                                                   WHERE pk.keyword_id = :keywordId))
+                    ),
                     instagram_latest AS (
                         SELECT DISTINCT ON (hr.source_id, hr.category_id)
                                hr.source_id, hr.category_id, hr.percentile_within_source
@@ -332,11 +347,14 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                         GROUP BY source_id
                     )
                     SELECT CASE WHEN SUM(hs.composite_weight
-                                    * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END) = 0 THEN NULL
+                                    * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END
+                                    * CASE WHEN hs.source_code = 'MANUAL' THEN (SELECT factor FROM manual_conf) ELSE 1.0 END) = 0 THEN NULL
                                 ELSE SUM(mr.percentile_within_source * hs.composite_weight
-                                         * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
+                                         * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END
+                                         * CASE WHEN hs.source_code = 'MANUAL' THEN (SELECT factor FROM manual_conf) ELSE 1.0 END)
                                     / SUM(hs.composite_weight
-                                         * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END)
+                                         * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END
+                                         * CASE WHEN hs.source_code = 'MANUAL' THEN (SELECT factor FROM manual_conf) ELSE 1.0 END)
                            END AS composite
                     FROM matched_readings mr
                     JOIN heat_source hs ON hs.id = mr.source_id
@@ -358,6 +376,21 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                           JOIN product p ON p.id = pk.product_id
                           WHERE pk.keyword_id = :keywordId
                       ),
+                    manual_conf AS (
+                        -- FR-14-1-a 步驟 4：未失效標記的「相異標記人數」→ 信心係數（1 人 0.6／2 人 0.8／3 人以上 1.0）。
+                        -- 品項標記依 ManualHeatReadingJob 的映射規則，展開計入該品項關聯的關鍵字。
+                        SELECT CASE COUNT(DISTINCT t.tagged_by)
+                                   WHEN 1 THEN 0.6
+                                   WHEN 2 THEN 0.8
+                                   ELSE 1.0
+                               END AS factor
+                        FROM manual_heat_tag t
+                        WHERE CAST(:readingDate AS date) - t.observed_at::date < 30
+                          AND (t.keyword_id = :keywordId
+                               OR t.product_id IN (SELECT pk.product_id
+                                                   FROM product_keyword pk
+                                                   WHERE pk.keyword_id = :keywordId))
+                    ),
                       instagram_latest AS (
                           SELECT DISTINCT ON (hr.source_id, hr.category_id)
                                  hr.source_id, hr.category_id
@@ -388,7 +421,8 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                      )
                      SELECT hs.source_code AS sourceCode,
                             hs.composite_weight
-                                * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END AS effectiveWeight
+                                * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END
+                                * CASE WHEN hs.source_code = 'MANUAL' THEN (SELECT factor FROM manual_conf) ELSE 1.0 END AS effectiveWeight
                      FROM matched_readings mr
                      JOIN heat_source hs ON hs.id = mr.source_id
                      WHERE hs.availability <> 'UNAVAILABLE'
