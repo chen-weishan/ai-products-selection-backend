@@ -19,14 +19,17 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -106,6 +109,37 @@ public class ManualHeatReadingJob {
         Instant evaluationInstant = Instant.now();
         Instant since = evaluationInstant.minus(expireDays, ChronoUnit.DAYS);
 
+        Collected collected = collectObservations(since);
+        Map<Long, List<Observation>> observationsByKeyword = collected.byKeyword();
+        int unmappableProducts = collected.unmappableProducts();
+
+        int written = 0;
+        int skippedExpired = 0;
+        for (Map.Entry<Long, List<Observation>> entry : observationsByKeyword.entrySet()) {
+            Optional<java.math.BigDecimal> rawValue = ManualHeatTagCalculator.computeRawValue(
+                    entry.getValue(), evaluationInstant, halveAfterDays, expireDays);
+
+            if (rawValue.isEmpty()) {
+                // 該關鍵字（含展開進來的品項觀測）全部已失效（age ≥ expireDays）：
+                // 衰減已歸零，不再寫入——這正是步驟 5「向前填補直到衰減歸零為止」的終點。
+                skippedExpired++;
+                continue;
+            }
+
+            upsert(source, entry.getKey(), today, rawValue.get());
+            written++;
+        }
+
+        source.setLastFetchedAt(Instant.now());
+        heatSourceRepository.save(source);
+
+        log.info(
+                "人工熱度標記寫入完成：{} 個關鍵字有效、{} 個關鍵字已全數衰減歸零略過、{} 個品項因未綁定關鍵字而無法映射。",
+                written, skippedExpired, unmappableProducts);
+    }
+
+    /** 一次收齊「最近 expireDays 天內仍可能有效」的觀測，依關鍵字分組（品項標記已展開成其關聯關鍵字）。 */
+    private Collected collectObservations(Instant since) {
         Map<Long, List<Observation>> observationsByKeyword = new LinkedHashMap<>();
 
         // 直接綁在關鍵字上的標記（原本就有的路徑）。
@@ -139,29 +173,59 @@ public class ManualHeatReadingJob {
             }
         }
 
-        int written = 0;
-        int skippedExpired = 0;
-        for (Map.Entry<Long, List<Observation>> entry : observationsByKeyword.entrySet()) {
-            Optional<java.math.BigDecimal> rawValue = ManualHeatTagCalculator.computeRawValue(
-                    entry.getValue(), evaluationInstant, halveAfterDays, expireDays);
+        return new Collected(observationsByKeyword, unmappableProducts);
+    }
 
-            if (rawValue.isEmpty()) {
-                // 該關鍵字（含展開進來的品項觀測）全部已失效（age ≥ expireDays）：
-                // 衰減已歸零，不再寫入——這正是步驟 5「向前填補直到衰減歸零為止」的終點。
-                skippedExpired++;
-                continue;
-            }
+    private record Collected(Map<Long, List<Observation>> byKeyword, int unmappableProducts) {}
 
-            upsert(source, entry.getKey(), today, rawValue.get());
-            written++;
+    /**
+     * 送出／編輯／刪除人工標記後的即時同步：只重算受影響關鍵字「今天」的 MANUAL 讀值。
+     *
+     * <p>計算邏輯與每日排程完全共用（{@link #collectObservations}＋{@link ManualHeatTagCalculator}），
+     * 差別只在範圍：這裡只處理 {@code keywordId}，或 {@code productId} 展開後的關聯關鍵字。
+     * 受影響關鍵字若已沒有任何有效標記（例如剛刪掉最後一筆），今天的讀值會被移除，
+     * 否則畫面會一直吃到已不存在的標記。
+     *
+     * <p>用 REQUIRES_NEW：呼叫端是 AFTER_COMMIT 階段，原交易已結束，寫入必須開新交易。
+     *
+     * @return 受影響的關鍵字 id；來源未註冊／已停用／找不到對應關鍵字時為空集合
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Set<Long> syncForTarget(Long keywordId, Long productId, LocalDate today, Instant evaluationInstant) {
+        HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.MANUAL).orElse(null);
+        if (source == null || !source.isEnabled()) {
+            return Set.of();
         }
 
-        source.setLastFetchedAt(Instant.now());
-        heatSourceRepository.save(source);
+        Set<Long> targets = new LinkedHashSet<>();
+        if (keywordId != null) {
+            targets.add(keywordId);
+        }
+        if (productId != null) {
+            productRepository.findWithDetailsById(productId)
+                    .ifPresent(product -> product.getKeywords().forEach(k -> targets.add(k.getId())));
+        }
+        if (targets.isEmpty()) {
+            log.warn("人工標記即時同步：keywordId={}、productId={} 找不到可映射的關鍵字，略過。", keywordId, productId);
+            return Set.of();
+        }
 
-        log.info(
-                "人工熱度標記寫入完成：{} 個關鍵字有效、{} 個關鍵字已全數衰減歸零略過、{} 個品項因未綁定關鍵字而無法映射。",
-                written, skippedExpired, unmappableProducts);
+        Collected collected = collectObservations(evaluationInstant.minus(expireDays, ChronoUnit.DAYS));
+        for (Long targetId : targets) {
+            List<Observation> observations = collected.byKeyword().getOrDefault(targetId, List.of());
+            Optional<java.math.BigDecimal> rawValue = observations.isEmpty()
+                    ? Optional.empty()
+                    : ManualHeatTagCalculator.computeRawValue(observations, evaluationInstant, halveAfterDays, expireDays);
+            if (rawValue.isPresent()) {
+                upsert(source, targetId, today, rawValue.get());
+            } else {
+                heatReadingRepository
+                        .findByKeywordIdAndSourceIdAndReadingDate(targetId, source.getId(), today)
+                        .ifPresent(heatReadingRepository::delete);
+            }
+        }
+        log.info("人工標記即時同步完成：關鍵字 {}。", targets);
+        return targets;
     }
 
     private List<Observation> toObservations(List<ManualHeatTag> tags) {
