@@ -117,7 +117,7 @@ class HeatSourceCommandServiceTest {
     @DisplayName("update：調整合成權重／啟用狀態（AC-14-5）")
     class Update {
 
-         @Test
+        @Test
         @DisplayName("只切換啟用狀態不影響合成，不發布事件（避免為省額度開關而全量重評）")
         void togglingEnabledOnlyDoesNotPublishEvent() {
             HeatSource source = threadsSource();
@@ -166,17 +166,6 @@ class HeatSourceCommandServiceTest {
             order.verify(eventPublisher).publishEvent(captor.capture());
             assertThat(captor.getValue().sourceId()).isEqualTo(1L);
             assertThat(captor.getValue().sourceCode()).isEqualTo(HeatSourceCode.THREADS);
-        }
-
-        @Test
-        @DisplayName("啟用狀態切換同樣影響合成，也會發布事件")
-        void togglingEnabledPublishesEvent() {
-            HeatSource source = threadsSource();
-            when(heatSourceRepository.findById(1L)).thenReturn(Optional.of(source));
-
-            service.update(1L, new HeatSourceUpdateRequest(false, null));
-
-            verify(eventPublisher).publishEvent(any(HeatSourceCompositionChangedEvent.class));
         }
 
         @Test

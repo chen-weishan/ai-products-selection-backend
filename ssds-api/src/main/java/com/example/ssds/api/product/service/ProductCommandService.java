@@ -258,7 +258,6 @@ public class ProductCommandService {
         product.setShelfLifeDays(request.shelfLifeDays());
         product.getKeywords().clear();
         product.getKeywords().addAll(keywords);
-
         List<String> warnings = new ArrayList<>();
         if (productRepository.existsDuplicateName(
                 category.getId(),
@@ -526,10 +525,13 @@ public class ProductCommandService {
         if (trackType == TrackType.A) {
             return null;
         }
-        if (sourcingStatus == null) {
-            return SourcingStatus.PENDING;
+        if (sourcingStatus != null && sourcingStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "B 軌品項建立時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
         }
-        return sourcingStatus;
+        return SourcingStatus.PENDING;
     }
 
     private SourcingStatus resolveSourcingStatusForUpdate(
@@ -540,12 +542,22 @@ public class ProductCommandService {
         if (targetTrackType == TrackType.A) {
             return null;
         }
-        if (requestedStatus != null) {
-            return requestedStatus;
-        }
         if (product.getTrackType() == TrackType.B
                 && product.getSourcingStatus() != null) {
+            if (requestedStatus != null
+                    && requestedStatus != product.getSourcingStatus()) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_STATE_TRANSITION,
+                        "一般品項更新不可變更尋源狀態；請使用存為觀察或加入尋源優先序操作"
+                );
+            }
             return product.getSourcingStatus();
+        }
+        if (requestedStatus != null && requestedStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "轉為 B 軌時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
         }
         return SourcingStatus.PENDING;
     }
@@ -740,10 +752,11 @@ public class ProductCommandService {
     private void validateTrackStatus(ProductStatus status, TrackType trackType) {
         if (trackType == TrackType.B
                 && status != ProductStatus.DRAFT
-                && status != ProductStatus.EVALUATING) {
+                && status != ProductStatus.EVALUATING
+                && status != ProductStatus.WATCHING) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "B 軌品項狀態固定為 EVALUATING，實際進度請使用 sourcingStatus"
+                    "B 軌品項狀態僅允許 DRAFT、EVALUATING 或 WATCHING，實際尋源進度請使用 sourcingStatus"
             );
         }
     }

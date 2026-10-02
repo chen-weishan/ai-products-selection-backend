@@ -541,16 +541,17 @@ class AiTaskServiceTest {
     @Test
     void reusesActiveSourcingTaskForSameProduct() {
         Product product = Product.builder().id(136L).trackType(TrackType.B).build();
+        Category category = Category.builder().id(10L).name("零食").build();
         AiTask active = AiTask.builder()
                 .id(24L).taskType(AiTaskType.SOURCING_SCOUT)
                 .status(TaskStatus.RUNNING).totalCount(1).build();
-        when(taskRepository.findActiveProductTasks(
-                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+        when(taskRepository.findActiveSourcingScoutTasks(
+                eq("低糖零食"), eq(10L), anyList(), any(Pageable.class)))
                 .thenReturn(List.of(active));
         AiTaskService service = new AiTaskService(
                 taskRepository, itemRepository, productRepository, eventPublisher);
 
-        var response = service.createSourcingScout(product, true);
+        var response = service.createSourcingScout("低糖零食", category, product, true);
 
         assertEquals(24L, response.taskId());
         assertEquals(TaskStatus.RUNNING, response.status());
@@ -561,8 +562,9 @@ class AiTaskServiceTest {
     @Test
     void createsSourcingTaskWhenNoActiveTaskExists() {
         Product product = Product.builder().id(136L).trackType(TrackType.B).build();
-        when(taskRepository.findActiveProductTasks(
-                eq(136L), eq(AiTaskType.SOURCING_SCOUT), anyList(), any(Pageable.class)))
+        Category category = Category.builder().id(10L).name("零食").build();
+        when(taskRepository.findActiveSourcingScoutTasks(
+                eq("低糖零食"), eq(10L), anyList(), any(Pageable.class)))
                 .thenReturn(List.of());
         when(taskRepository.save(any())).thenAnswer(invocation -> {
             AiTask task = invocation.getArgument(0);
@@ -572,11 +574,37 @@ class AiTaskServiceTest {
         AiTaskService service = new AiTaskService(
                 taskRepository, itemRepository, productRepository, eventPublisher);
 
-        var response = service.createSourcingScout(product, false);
+        var response = service.createSourcingScout("低糖零食", category, product, false);
 
         assertEquals(26L, response.taskId());
-        verify(itemRepository).save(argThat(item -> item.getProduct().getId().equals(136L)));
+        verify(itemRepository).save(argThat(item -> item.getProduct().getId().equals(136L)
+                && item.getScoutKeyword().equals("低糖零食")
+                && item.getScoutCategory().getId().equals(10L)));
         verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(26L, false));
+    }
+
+    @Test
+    void createsRawSourcingTaskWithoutProductForUnknownKeyword() {
+        Category category = Category.builder().id(10L).name("零食").build();
+        when(taskRepository.findActiveSourcingScoutTasks(
+                eq("陌生新品"), eq(10L), anyList(), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(taskRepository.save(any())).thenAnswer(invocation -> {
+            AiTask task = invocation.getArgument(0);
+            task.setId(27L);
+            return task;
+        });
+        AiTaskService service = new AiTaskService(
+                taskRepository, itemRepository, productRepository, eventPublisher);
+
+        var response = service.createSourcingScout("陌生新品", category, null, false);
+
+        assertEquals(27L, response.taskId());
+        verify(itemRepository).save(argThat(item -> item.getProduct() == null
+                && item.getKeyword() == null
+                && item.getScoutKeyword().equals("陌生新品")
+                && item.getScoutCategory().getId().equals(10L)));
+        verify(eventPublisher).publishEvent(new AiTaskCreatedEvent(27L, false));
     }
 
     @Test

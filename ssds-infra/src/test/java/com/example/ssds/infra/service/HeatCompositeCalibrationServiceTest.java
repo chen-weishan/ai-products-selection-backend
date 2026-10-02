@@ -59,8 +59,16 @@ class HeatCompositeCalibrationServiceTest {
 
         when(queryDao.findCompositeHeat(keywordId, date)).thenReturn(100.0);
         when(queryDao.findAppliedWeights(keywordId, date)).thenReturn(Map.of("google", BigDecimal.ONE));
-        when(queryDao.findSlopeAnchors(keywordId, date.minusDays(1)))
-                .thenReturn(Map.of("t7", new BigDecimal("110"), "t30", new BigDecimal("100")));
+        when(queryDao.findCompositeSeries(keywordId, date.minusDays(34), date.minusDays(5)))
+                .thenReturn(Map.of(
+                        date.minusDays(7), new BigDecimal("110"),
+                        date.minusDays(8), new BigDecimal("110"),
+                        date.minusDays(9), new BigDecimal("110"),
+                        date.minusDays(10), new BigDecimal("110"),
+                        date.minusDays(30), new BigDecimal("100"),
+                        date.minusDays(31), new BigDecimal("100"),
+                        date.minusDays(32), new BigDecimal("100"),
+                        date.minusDays(33), new BigDecimal("100")));
         when(keywordRepository.getReferenceById(keywordId)).thenReturn(keyword);
         when(dailyRepository.findByKeywordIdAndStatDate(keywordId, date)).thenReturn(Optional.of(existing));
         when(dailyRepository.findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(keywordId, date))
@@ -100,7 +108,8 @@ class HeatCompositeCalibrationServiceTest {
                 .build();
         when(queryDao.findCompositeHeat(keywordId, date)).thenReturn(100.0);
         when(queryDao.findAppliedWeights(keywordId, date)).thenReturn(Map.of("google", BigDecimal.ONE));
-        when(queryDao.findSlopeAnchors(keywordId, date.minusDays(1))).thenReturn(Map.of());
+        when(queryDao.findCompositeSeries(keywordId, date.minusDays(34), date.minusDays(5)))
+                .thenReturn(Map.of());
         when(keywordRepository.getReferenceById(keywordId)).thenReturn(keyword);
         when(dailyRepository.findByKeywordIdAndStatDate(keywordId, date)).thenReturn(Optional.of(existing));
         when(dailyRepository.findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(keywordId, date))

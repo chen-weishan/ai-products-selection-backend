@@ -212,10 +212,10 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                             d.slope_7d         AS slope7d,
                             d.slope_30d        AS slope30d,
                             d.stage            AS stage,
-                            d.divergence_flag  AS divergenceFlag
+                            d.divergence_flag  AS divergenceFlag,
+                            k.enabled          AS enabled
                      FROM heat_composite_daily d
                      JOIN trend_keyword k ON k.id = d.keyword_id
-                     WHERE k.enabled = TRUE
                      ORDER BY d.keyword_id, d.stat_date DESC
                      """)
                 .query(TrendSignalRow.class)

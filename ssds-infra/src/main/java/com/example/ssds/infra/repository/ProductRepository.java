@@ -168,6 +168,14 @@ public interface ProductRepository
 
         long countBySupplierId(Long supplierId);
 
+        /** S-07：停用關鍵字前列出所有會受影響的未刪除品項。 */
+        @Query("""
+                        select distinct p from Product p join p.keywords k
+                        where k.id = :keywordId
+                        order by p.name asc, p.id asc
+                        """)
+        List<Product> findAllByKeywordId(@Param("keywordId") Long keywordId);
+
         /**
          * FR-02 KPI 候選品項總數（軌別），不含軟刪除品項。
          */

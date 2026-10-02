@@ -73,6 +73,8 @@ class TrendServiceTest {
 
         verify(queryDao).findTrendRange(eq(List.of(31L)), eq(from), eq(today));
         TrendKeywordDetailResponse.SourceDetail instagram = response.getSourceDetails().get(1);
+        TrendKeywordDetailResponse.SourceDetail disabledButAvailable = response.getSourceDetails().get(2);
+        TrendKeywordDetailResponse.SourceDetail unavailable = response.getSourceDetails().get(3);
         assertAll(
                 () -> assertEquals(4, response.getSourceDetails().size()),
                 // 停用但仍可用：標示已停用，數值照常顯示

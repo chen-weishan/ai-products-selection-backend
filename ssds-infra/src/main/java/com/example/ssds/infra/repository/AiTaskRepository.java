@@ -56,6 +56,22 @@ public interface AiTaskRepository extends JpaRepository<AiTask, Long> {
             @Param("statuses") List<TaskStatus> statuses,
             Pageable pageable);
 
+    /** 相同 raw 字詞與品類的探索仍在執行時沿用，陌生字詞不需要 product_id。 */
+    @Query("""
+            select t
+            from AiTaskItem i join i.task t
+            where i.scoutKeyword = :keyword
+              and i.scoutCategory.id = :categoryId
+              and t.taskType = com.example.ssds.core.domain.AiTaskType.SOURCING_SCOUT
+              and t.status in :statuses
+            order by t.id desc
+            """)
+    List<AiTask> findActiveSourcingScoutTasks(
+            @Param("keyword") String keyword,
+            @Param("categoryId") Long categoryId,
+            @Param("statuses") List<TaskStatus> statuses,
+            Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select t from AiTask t

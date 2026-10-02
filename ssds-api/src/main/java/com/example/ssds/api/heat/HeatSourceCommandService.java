@@ -67,10 +67,10 @@ public class HeatSourceCommandService {
     /**
      * AC-14-5：僅 SYS_ADMIN 可調整合成權重（由 controller 的 {@code @PreAuthorize} 把關，
      * 這裡是資料異動本身）。{@link HeatSourceUpdateRequest} 兩欄皆為選填，null 表不異動。
-     * 權重或啟用狀態有實際變動時，於交易提交後觸發合成重算與全量重評分。
+     * 合成權重有實際變動時，於交易提交後觸發合成重算與全量重評分；enabled 只控制後續採集。
      */
     @Transactional
-        public HeatSourceDetailResponse update(Long id, HeatSourceUpdateRequest request) {
+    public HeatSourceDetailResponse update(Long id, HeatSourceUpdateRequest request) {
         HeatSource source = heatSourceRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到熱度來源 id=" + id));
 
@@ -79,7 +79,6 @@ public class HeatSourceCommandService {
 
         boolean weightChanged = request.compositeWeight() != null
                 && source.getCompositeWeight().compareTo(request.compositeWeight()) != 0;
-
         if (request.enabled() != null) {
             source.setEnabled(request.enabled());
         }
@@ -106,7 +105,7 @@ public class HeatSourceCommandService {
         }
 
         return HeatSourceMapper.toDetail(source);
-    }   
+    }
 
     /**
      * S-16「測試連線」：立即檢查一次並回饋結果（目前沒有自動排程，狀態靠這個按鈕與人工標記更新）。

@@ -50,7 +50,9 @@ public interface HeatCompositeDailyRepository
     @Query(value = """
             select distinct on (h.keyword_id) h.*
             from heat_composite_daily h
+            join trend_keyword keyword on keyword.id = h.keyword_id
             where h.keyword_id in (:keywordIds)
+              and keyword.enabled = true
               and (select count(*) from heat_composite_daily history
                    where history.keyword_id = h.keyword_id) >= 7
             order by h.keyword_id, h.stat_date desc
