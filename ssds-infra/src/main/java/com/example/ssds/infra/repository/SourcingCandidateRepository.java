@@ -58,27 +58,26 @@ public interface SourcingCandidateRepository extends JpaRepository<SourcingCandi
      */
     List<SourcingCandidate> findByKeywordId(Long keywordId);
 
-    /** §5.8 每日重算範圍；REJECTED 是終態，PROMOTED 已轉 A 軌。 */
+    /** §5.8 每日重算範圍；REJECTED 更新資料但保持終態，PROMOTED 已轉 A 軌。 */
     @EntityGraph(attributePaths = { "product", "product.keywords", "drivingKeyword" })
     @Query("""
             select distinct c from SourcingCandidate c
             where c.product.trackType = com.example.ssds.core.domain.TrackType.B
-              and c.product.sourcingStatus not in (
-                  com.example.ssds.core.domain.SourcingStatus.PROMOTED,
-                  com.example.ssds.core.domain.SourcingStatus.REJECTED)
+              and c.product.sourcingStatus <>
+                  com.example.ssds.core.domain.SourcingStatus.PROMOTED
               and c.product.deletedAt is null
+            order by c.id
             """)
     List<SourcingCandidate> findEligibleForTimeGapRecalculation();
 
-    /** Agent 5 覆寫某關鍵字後，重算所有與該關鍵字關聯的可變動 B 軌候選。 */
+    /** Agent 5 覆寫某關鍵字後，重算所有與該關鍵字關聯的 B 軌候選資料。 */
     @EntityGraph(attributePaths = { "product", "product.keywords", "drivingKeyword" })
     @Query("""
             select distinct c from SourcingCandidate c join c.product.keywords k
             where k.id = :keywordId
               and c.product.trackType = com.example.ssds.core.domain.TrackType.B
-              and c.product.sourcingStatus not in (
-                  com.example.ssds.core.domain.SourcingStatus.PROMOTED,
-                  com.example.ssds.core.domain.SourcingStatus.REJECTED)
+              and c.product.sourcingStatus <>
+                  com.example.ssds.core.domain.SourcingStatus.PROMOTED
               and c.product.deletedAt is null
             """)
     List<SourcingCandidate> findEligibleForTimeGapRecalculationByKeywordId(

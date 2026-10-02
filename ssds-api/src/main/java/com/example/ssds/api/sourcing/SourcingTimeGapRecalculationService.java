@@ -4,8 +4,6 @@ import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
-import java.math.BigDecimal;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,9 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SourcingTimeGapRecalculationService {
     private static final Logger log = LoggerFactory.getLogger(SourcingTimeGapRecalculationService.class);
-    private static final BigDecimal SLOPE_7D_WEIGHT = new BigDecimal("0.7");
-    private static final BigDecimal SLOPE_30D_WEIGHT = new BigDecimal("0.3");
-
     private final SourcingCandidateRepository candidates;
     private final HeatCompositeDailyRepository composites;
 
@@ -59,34 +54,16 @@ public class SourcingTimeGapRecalculationService {
                                 value -> value.getKeyword().getId(), Function.identity()));
 
         for (SourcingCandidate candidate : values) {
-            HeatCompositeDaily driving = selectDriving(candidate, latestByKeyword);
-            candidate.setDrivingKeyword(driving == null ? null : driving.getKeyword());
-            candidate.recalculateTimeGap(
-                    driving == null ? null : driving.getEstimatedLifespanDays());
+            HeatCompositeDaily driving = SourcingDrivingHeatSelector.select(
+                    candidate.getProduct().getKeywords(), latestByKeyword);
+            if (driving != null) {
+                candidate.setDrivingKeyword(driving.getKeyword());
+                candidate.recalculateTimeGap(driving.getEstimatedLifespanDays());
+            }
         }
         candidates.saveAll(values);
         log.info("Sourcing time-gap recalculation completed: candidateCount={}", values.size());
         return values.size();
     }
 
-    private static HeatCompositeDaily selectDriving(
-            SourcingCandidate candidate, Map<Long, HeatCompositeDaily> latestByKeyword) {
-        return candidate.getProduct().getKeywords().stream()
-                .map(keyword -> latestByKeyword.get(keyword.getId()))
-                .filter(Objects::nonNull)
-                .filter(value -> value.getSlope7d() != null
-                        && value.getSlope30d() != null
-                        && value.getEstimatedLifespanDays() != null)
-                .max(Comparator
-                        .comparing(SourcingTimeGapRecalculationService::trendRaw)
-                        .thenComparing(
-                                value -> value.getKeyword().getId(),
-                                Comparator.reverseOrder()))
-                .orElse(null);
-    }
-
-    private static BigDecimal trendRaw(HeatCompositeDaily value) {
-        return value.getSlope7d().multiply(SLOPE_7D_WEIGHT)
-                .add(value.getSlope30d().multiply(SLOPE_30D_WEIGHT));
-    }
 }

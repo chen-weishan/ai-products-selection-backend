@@ -11,15 +11,18 @@ import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.product.dto.CategoryUpsertRequest;
 import com.example.ssds.api.product.dto.SupplierUpsertRequest;
+import com.example.ssds.api.product.dto.TrendKeywordEnabledUpdateRequest;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
+import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,7 @@ class ReferenceDataCommandServiceTest {
     private AuditLogRepository auditLogRepository;
     private ProductRepository productRepository;
     private ReferenceDataCommandService service;
+    private TrendKeywordRepository trendKeywordRepository;
 
     @BeforeEach
     void setUp() {
@@ -40,6 +44,7 @@ class ReferenceDataCommandServiceTest {
         AppUserRepository appUserRepository = mock(AppUserRepository.class);
         auditLogRepository = mock(AuditLogRepository.class);
         productRepository = mock(ProductRepository.class);
+        trendKeywordRepository = mock(TrendKeywordRepository.class);
         when(appUserRepository.findByEmail("admin@example.com"))
                 .thenReturn(Optional.of(AppUser.builder()
                         .id(7L)
@@ -50,7 +55,8 @@ class ReferenceDataCommandServiceTest {
                 supplierRepository,
                 productRepository,
                 appUserRepository,
-                auditLogRepository
+                auditLogRepository,
+                trendKeywordRepository
         );
     }
 
@@ -203,5 +209,29 @@ class ReferenceDataCommandServiceTest {
                 service.deleteSupplier(8L, "admin@example.com", "127.0.0.1"));
 
         assertEquals(ErrorCode.RESOURCE_IN_USE, exception.getErrorCode());
+    }
+
+    @Test
+    void disablesTrendKeywordAndWritesAuditLog() {
+        TrendKeyword keyword = TrendKeyword.builder()
+                .id(10L)
+                .keyword("巧克力")
+                .enabled(true)
+                .build();
+        when(trendKeywordRepository.findById(10L)).thenReturn(Optional.of(keyword));
+        when(trendKeywordRepository.saveAndFlush(keyword)).thenReturn(keyword);
+
+        var result = service.updateTrendKeywordEnabled(
+                10L,
+                new TrendKeywordEnabledUpdateRequest(false),
+                "admin@example.com",
+                "127.0.0.1"
+        );
+
+        assertEquals(false, result.enabled());
+        ArgumentCaptor<AuditLog> audit = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(audit.capture());
+        assertEquals("DISABLE", audit.getValue().getAction());
+        assertEquals("TrendKeyword", audit.getValue().getEntityType());
     }
 }

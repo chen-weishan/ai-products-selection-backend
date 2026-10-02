@@ -8,6 +8,8 @@ import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.SupplierUpsertRequest;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
+import com.example.ssds.api.product.dto.TrendKeywordEnabledUpdateRequest;
+import com.example.ssds.api.product.dto.TrendKeywordUsageResponse;
 import com.example.ssds.api.product.service.ProductReferenceQueryService;
 import com.example.ssds.api.product.service.ReferenceDataCommandService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -151,6 +153,30 @@ public class ProductReferenceController {
         return ApiResponse.success(
                 queryService.getTrendKeywords(keyword, enabled)
         );
+    }
+
+    @GetMapping("/trends/keywords/{id}/usage")
+    @PreAuthorize("hasAnyRole('DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<TrendKeywordUsageResponse> getTrendKeywordUsage(
+            @PathVariable(name = "id") Long id
+    ) {
+        return ApiResponse.success(queryService.getTrendKeywordUsage(id));
+    }
+
+    @PutMapping("/trends/keywords/{id}/enabled")
+    @PreAuthorize("hasAnyRole('DATA_ADMIN', 'SYS_ADMIN')")
+    public ApiResponse<TrendKeywordResponse> updateTrendKeywordEnabled(
+            @PathVariable(name = "id") Long id,
+            @Valid @RequestBody TrendKeywordEnabledUpdateRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest
+    ) {
+        return ApiResponse.success(commandService.updateTrendKeywordEnabled(
+                id,
+                request,
+                authentication.getName(),
+                httpRequest.getRemoteAddr()
+        ));
     }
 
     // GET /festivals 已移至 FestivalController（FR-17）：規格書 §9 要求同一路徑支援

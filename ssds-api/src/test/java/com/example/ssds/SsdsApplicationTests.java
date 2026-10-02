@@ -3,6 +3,7 @@ package com.example.ssds;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,42 @@ class SsdsApplicationTests {
         mockMvc.perform(get("/api/v1/ai/tasks/999999")
                         .contextPath("/api/v1")
                         .with(user("test-user").roles("BUYER")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void buyerCannotInspectKeywordUsageForToggle() throws Exception {
+        mockMvc.perform(get("/api/v1/trends/keywords/999999/usage")
+                        .contextPath("/api/v1")
+                        .with(user("buyer@example.com").roles("BUYER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void viewerCannotUpdateKeywordEnabledState() throws Exception {
+        mockMvc.perform(put("/api/v1/trends/keywords/999999/enabled")
+                        .contextPath("/api/v1")
+                        .contentType("application/json")
+                        .content("{\"enabled\":false}")
+                        .with(user("viewer@example.com").roles("VIEWER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void dataAdminCanInspectKeywordUsage() throws Exception {
+        mockMvc.perform(get("/api/v1/trends/keywords/999999/usage")
+                        .contextPath("/api/v1")
+                        .with(user("data-admin@example.com").roles("DATA_ADMIN")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void sysAdminCanReachKeywordEnabledCommand() throws Exception {
+        mockMvc.perform(put("/api/v1/trends/keywords/999999/enabled")
+                        .contextPath("/api/v1")
+                        .contentType("application/json")
+                        .content("{\"enabled\":false}")
+                        .with(user("sys-admin@example.com").roles("SYS_ADMIN")))
                 .andExpect(status().isNotFound());
     }
 

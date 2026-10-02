@@ -283,10 +283,10 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    void createTrackBWithoutPricingSucceeds() {
+    void createPendingTrackBWithoutPricingSucceeds() {
         ProductCreateResponse response = createProduct(createRequest(
                 TrackType.B,
-                SourcingStatus.SOURCING,
+                SourcingStatus.PENDING,
                 null,
                 null
         ));
@@ -297,10 +297,10 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    void createTrackBWithOptionalPricingReturnsPricingForEditing() {
+    void createPendingTrackBWithOptionalPricingReturnsPricingForEditing() {
         ProductCreateResponse response = createProduct(createRequest(
                 TrackType.B,
-                SourcingStatus.SOURCING,
+                SourcingStatus.PENDING,
                 new BigDecimal("80.00"),
                 new BigDecimal("120.00")
         ));
@@ -320,6 +320,20 @@ class ProductCommandServiceTest {
         ));
 
         assertEquals(SourcingStatus.PENDING, response.product().sourcingStatus());
+    }
+
+    @Test
+    void createTrackBCannotBypassSourcingPriorityCommands() {
+        BusinessException exception = assertThrows(BusinessException.class, () ->
+                createProduct(createRequest(
+                        TrackType.B,
+                        SourcingStatus.SOURCING,
+                        null,
+                        null
+                )));
+
+        assertEquals(ErrorCode.INVALID_STATE_TRANSITION, exception.getErrorCode());
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
 
     @Test
@@ -445,6 +459,21 @@ class ProductCommandServiceTest {
 
         assertEquals(TrackType.B, response.product().trackType());
         assertEquals(SourcingStatus.SOURCING, response.product().sourcingStatus());
+    }
+
+    @Test
+    void updateCannotBypassSourcingPriorityCommands() {
+        Product product = existingProduct(TrackType.B, SourcingStatus.PENDING);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+
+        BusinessException exception = assertThrows(BusinessException.class, () ->
+                service.update(
+                        product.getId(),
+                        updateRequest(null, SourcingStatus.SOURCING, null, null)
+                ));
+
+        assertEquals(ErrorCode.INVALID_STATE_TRANSITION, exception.getErrorCode());
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
 
     @Test

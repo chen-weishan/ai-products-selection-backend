@@ -212,25 +212,34 @@ public class AiTaskService {
         return Optional.of(createKeywordTask(request, AiTaskType.BudgetPool.TRACK_A));
     }
 
-    /** Agent 6 專用入口；B 軌仍沿用相同的非同步 task/item 管線。 */
+    /** Agent 6 專用入口；raw 輸入保存在 item，陌生字詞不建立主資料。 */
     @Transactional
-    public AiTaskResponse createSourcingScout(Product product, boolean forceRefresh) {
-        if (product.getDeletedAt() != null) {
+    public AiTaskResponse createSourcingScout(
+            String normalizedKeyword,
+            Category category,
+            Product product,
+            boolean forceRefresh) {
+        if (product != null && product.getDeletedAt() != null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "品項不存在或已刪除");
         }
-        if (product.getTrackType() != TrackType.B) {
+        if (product != null && product.getTrackType() != TrackType.B) {
             throw new BusinessException(ErrorCode.INVALID_STATE_TRANSITION, "尋源探索只能使用 B 軌品項");
         }
-        List<AiTask> active = taskRepository.findActiveProductTasks(
-                product.getId(),
-                AiTaskType.SOURCING_SCOUT,
+        List<AiTask> active = taskRepository.findActiveSourcingScoutTasks(
+                normalizedKeyword,
+                category.getId(),
                 List.of(TaskStatus.PENDING, TaskStatus.RUNNING),
                 PageRequest.of(0, 1));
         if (!active.isEmpty()) return AiTaskResponse.from(active.getFirst());
         AiTask task = taskRepository.save(AiTask.builder()
                 .taskType(AiTaskType.SOURCING_SCOUT).budgetPool(AiTaskType.BudgetPool.TRACK_B)
                 .status(TaskStatus.PENDING).totalCount(1).build());
-        itemRepository.save(AiTaskItem.builder().task(task).product(product).build());
+        itemRepository.save(AiTaskItem.builder()
+                .task(task)
+                .product(product)
+                .scoutKeyword(normalizedKeyword)
+                .scoutCategory(category)
+                .build());
         eventPublisher.publishEvent(new AiTaskCreatedEvent(task.getId(), forceRefresh));
         return AiTaskResponse.from(task);
     }
@@ -298,6 +307,8 @@ public class AiTaskService {
                         .product(item.getProduct())
                         .keyword(item.getKeyword())
                         .calibrationReport(item.getCalibrationReport())
+                        .scoutKeyword(item.getScoutKeyword())
+                        .scoutCategory(item.getScoutCategory())
                         .build())
                 .toList());
         eventPublisher.publishEvent(new AiTaskCreatedEvent(retryTask.getId(), true));

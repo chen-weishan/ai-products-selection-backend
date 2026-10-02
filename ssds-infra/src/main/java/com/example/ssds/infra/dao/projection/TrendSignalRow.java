@@ -9,6 +9,6 @@ public record TrendSignalRow(
         BigDecimal slope7d,
         BigDecimal slope30d,
         String stage,
-        boolean divergenceFlag) {
-            
-        }
+        boolean divergenceFlag,
+        boolean enabled) {
+}

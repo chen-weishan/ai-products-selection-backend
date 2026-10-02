@@ -344,7 +344,7 @@ class AiTaskWorkerTest {
             case SOURCING_SCOUT -> {
                 SourcingScoutResponse response = mock(SourcingScoutResponse.class);
                 when(response.cacheHit()).thenReturn(true);
-                when(sourcingService.scout(101L, false)).thenReturn(response);
+                when(sourcingService.scout(any(AiTaskItem.class), eq(false))).thenReturn(response);
             }
             default -> throw new IllegalArgumentException("unexpected task type");
         }
@@ -382,7 +382,7 @@ class AiTaskWorkerTest {
             budget.acquire(AiTaskType.BudgetPool.TRACK_B, false);
             budget.acquire(AiTaskType.BudgetPool.TRACK_B, true);
             return mock(SourcingScoutResponse.class);
-        }).when(sourcingService).scout(101L, true);
+        }).when(sourcingService).scout(any(AiTaskItem.class), eq(true));
         AiTaskWorker worker = new AiTaskWorker(
                 taskRepository, itemRepository, sceneService, reviewRiskService,
                 productInsightService, recommendationService, trendService, sourcingService,
@@ -412,7 +412,7 @@ class AiTaskWorkerTest {
         AiTaskItem item = AiTaskItem.builder().id(713L).task(task).product(product).build();
         when(taskRepository.findById(712L)).thenReturn(Optional.of(task));
         when(itemRepository.findByTaskId(712L)).thenReturn(List.of(item));
-        when(sourcingService.scout(101L, true))
+        when(sourcingService.scout(any(AiTaskItem.class), eq(true)))
                 .thenThrow(new SourcingConnectorQuotaExceededException(null));
         AiTaskWorker worker = new AiTaskWorker(
                 taskRepository, itemRepository, sceneService, reviewRiskService,
@@ -420,7 +420,7 @@ class AiTaskWorkerTest {
 
         worker.run(new AiTaskCreatedEvent(712L, true));
 
-        verify(sourcingService).scout(101L, true);
+        verify(sourcingService).scout(item, true);
         assertEquals(TaskItemStatus.FAILED, item.getStatus());
         assertEquals(TaskStatus.FAILED, task.getStatus());
         assertEquals("B 軌尋源 Connector 額度已達上限，請於服務額度重置後再試", item.getErrorMessage());
