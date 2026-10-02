@@ -94,9 +94,11 @@ public class SecurityConfig {
 
 				.cors(cors -> cors.configurationSource(corsConfigurationSource())) // 開啟跨域
 
-				.sessionManagement(session -> // 支援確認頁暫存
-
-				session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+				// STATELESS：每個請求只認 Authorization 的 JWT，不從 JSESSIONID 還原舊的登入身分。
+				// 原本 IF_REQUIRED 會把第一次驗證成功的身分存進 session，之後帶著同一個 cookie 的請求
+				// （例如 Postman 保留 cookie）即使換了 token，JwtAuthFilter 也因為「已有身分」而略過新 token，
+				// 導致建立者永遠是第一個登入的帳號。專案內沒有使用 HttpSession。
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
 				.authorizeHttpRequests(auth -> auth.anyRequest().permitAll()); // 開發環境全公開
 
