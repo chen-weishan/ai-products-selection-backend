@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Demisak 維護的 B 軌尋源 migration 回歸測試。
  *
- * <p>本測試獨立於原有 {@link MigrationVerificationTest}，專門驗證 V22 與
+ * <p>本測試獨立於原有 {@link MigrationVerificationTest}，專門驗證 V22、V32、V33 與
  * dev-only V899/V908 對既有 V903 假資料的相容轉換。
  */
 @Testcontainers
@@ -52,8 +52,7 @@ class DemisakMigrationVerificationTest {
                   AND is_nullable = 'NO'
                 """));
 
-        // V899 只暫時補回 V903 需要的舊欄位；V908 後的最終 schema
-        // 必須與正式 V22 相同。
+        // V899 只暫時補回 V903 需要的舊欄位；V908 最終對齊規格的即時讀取模型。
         assertEquals(List.of("driving_keyword_id", "time_gap_days"), queryStrings("""
                 SELECT column_name
                 FROM information_schema.columns
@@ -61,7 +60,20 @@ class DemisakMigrationVerificationTest {
                   AND table_name = 'sourcing_candidate'
                   AND column_name IN (
                       'driving_keyword_id', 'time_gap_days',
-                      'heat_stage', 'stage_weeks', 'estimated_lifespan_days')
+                      'heat_stage', 'stage_weeks', 'estimated_lifespan_days',
+                      'snapshot_stat_date', 'snapshot_updated_at', 'snapshot_legacy')
+                ORDER BY column_name
+                """));
+
+        assertEquals(List.of(
+                "scout_category_id", "scout_keyword", "scout_model",
+                "scout_opportunity_signals", "scout_prompt_version", "scout_report",
+                "scout_report_generated_at", "scout_risk_signals"), queryStrings("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'ai_task_item'
+                  AND column_name LIKE 'scout_%'
                 ORDER BY column_name
                 """));
 
@@ -133,6 +145,40 @@ class DemisakMigrationVerificationTest {
                   AND column_name IN (
                       'driving_keyword_id', 'time_gap_days',
                       'heat_stage', 'stage_weeks', 'estimated_lifespan_days')
+                ORDER BY column_name
+                """));
+    }
+
+    @Test
+    @DisplayName("Demisak：已套用 V32 的正式資料庫只向前套用 V33")
+    void v33MigratesForwardFromV32() {
+        Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/migration")
+                .target("32")
+                .load()
+                .migrate();
+
+        Flyway v33 = Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/migration")
+                .target("33")
+                .load();
+
+        assertTrue(v33.migrate().success, "V33 向前套用失敗");
+        assertEquals(List.of("33"), queryStrings("""
+                SELECT version
+                FROM flyway_schema_history
+                WHERE version = '33' AND success
+                """));
+        assertEquals(List.of(), queryStrings("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'sourcing_candidate'
+                  AND column_name IN (
+                      'heat_stage', 'stage_weeks', 'estimated_lifespan_days',
+                      'snapshot_stat_date', 'snapshot_updated_at', 'snapshot_legacy')
                 ORDER BY column_name
                 """));
     }

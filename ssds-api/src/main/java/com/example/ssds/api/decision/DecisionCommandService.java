@@ -147,9 +147,12 @@ public class DecisionCommandService {
         record.setSnapshot(snapshotFactory.create(record));
         DecisionRecord saved = decisionRecordRepository.saveAndFlush(record);
 
-        // §7.4：決策與品項狀態在同一交易內轉換（ProductCommandService#changeStatus 的 TODO FR-11）。
-        // 只改 status；product.reject_reason 屬 FR-03 的淘汰流程（至少 10 字），決策理由留在 decision_record.reason
+        // §7.4：決策與品項狀態在同一交易內轉換；PATCH /products/{id}/status 不接受觀察／採納／淘汰。
+        // 淘汰只能由決策進入，故 REJECT 時把決策理由同步到 product.reject_reason，品項詳情才看得到淘汰原因
         product.setStatus(nextStatus);
+        if (request.decision() == DecisionType.REJECT) {
+            product.setRejectReason(saved.getReason());
+        }
         productRepository.saveAndFlush(product);
         audit(actor, "UPDATE", "Product", productId,
                 "{\"status\":\"" + previousStatus + "\"}",

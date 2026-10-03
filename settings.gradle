@@ -3,7 +3,7 @@ rootProject.name = 'ssds'
 // 規格書 §3.3 ssds-backend 模組結構
 include 'ssds-api'          // Controller、DTO、Security 設定
 include 'ssds-core'         // 領域模型、ScoringEngine、RiskRuleEngine
-include 'ssds-ai'           // AiOrchestrator、PromptTemplate、OpenRouterClient
+include 'ssds-ai'           // AiOrchestrator、PromptTemplate、MistralClient
 include 'ssds-ingest'       // 熱度來源 Adapter
 include 'ssds-calibration'  // 統計迴歸與校準報告
 include 'ssds-infra'        // Entity、Repository、Flyway migration、排程

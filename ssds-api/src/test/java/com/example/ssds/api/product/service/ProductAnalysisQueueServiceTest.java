@@ -11,17 +11,17 @@ import static org.mockito.Mockito.when;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeRequest;
 import com.example.ssds.api.product.dto.ProductBatchAnalyzeResponse;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.TaskStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.entity.AiTask;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.AiTaskItemRepository;
-import com.example.ssds.infra.repository.AiTaskRepository;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import java.util.List;
@@ -34,21 +34,21 @@ class ProductAnalysisQueueServiceTest {
 
     private ProductRepository productRepository;
     private AppUserRepository appUserRepository;
-    private AiTaskRepository taskRepository;
     private AiTaskItemRepository taskItemRepository;
+    private AiTaskService taskService;
     private ProductAnalysisQueueService service;
 
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
         appUserRepository = mock(AppUserRepository.class);
-        taskRepository = mock(AiTaskRepository.class);
         taskItemRepository = mock(AiTaskItemRepository.class);
+        taskService = mock(AiTaskService.class);
         service = new ProductAnalysisQueueService(
                 productRepository,
                 appUserRepository,
-                taskRepository,
-                taskItemRepository
+                taskItemRepository,
+                taskService
         );
     }
 
@@ -63,12 +63,12 @@ class ProductAnalysisQueueServiceTest {
                 any(), any(), any())).thenReturn(Set.of());
         when(appUserRepository.findByEmail(actor.getEmail()))
                 .thenReturn(Optional.of(actor));
-        when(taskRepository.saveAndFlush(any(AiTask.class)))
-                .thenAnswer(invocation -> {
-                    AiTask task = invocation.getArgument(0);
-                    task.setId(90L);
-                    return task;
-                });
+        AiTaskResponse task = mock(AiTaskResponse.class);
+        when(task.taskId()).thenReturn(90L);
+        when(task.taskType()).thenReturn(AiTaskType.FULL_ANALYSIS);
+        when(task.status()).thenReturn(TaskStatus.PENDING);
+        when(taskService.enqueueFullAnalysis(anyList(), any(AppUser.class), any(Boolean.class)))
+                .thenReturn(task);
 
         ProductBatchAnalyzeResponse response = service.enqueue(
                 new ProductBatchAnalyzeRequest(Set.of(10L, 11L)),
@@ -79,7 +79,7 @@ class ProductAnalysisQueueServiceTest {
         assertEquals(AiTaskType.FULL_ANALYSIS, response.taskType());
         assertEquals(TaskStatus.PENDING, response.status());
         assertEquals(2, response.queuedCount());
-        verify(taskItemRepository).saveAllAndFlush(anyList());
+        verify(taskService).enqueueFullAnalysis(anyList(), any(AppUser.class), any(Boolean.class));
     }
 
     @Test
@@ -97,7 +97,7 @@ class ProductAnalysisQueueServiceTest {
         );
 
         assertEquals(ErrorCode.VALIDATION_FAILED, exception.getErrorCode());
-        verify(taskRepository, never()).saveAndFlush(any());
+        verify(taskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     @Test
@@ -117,7 +117,7 @@ class ProductAnalysisQueueServiceTest {
         );
 
         assertEquals(ErrorCode.DUPLICATE_RESOURCE, exception.getErrorCode());
-        verify(taskRepository, never()).saveAndFlush(any());
+        verify(taskService, never()).enqueueFullAnalysis(anyList(), any(), any(Boolean.class));
     }
 
     private Product product(Long id, TrackType trackType, ProductStatus status) {

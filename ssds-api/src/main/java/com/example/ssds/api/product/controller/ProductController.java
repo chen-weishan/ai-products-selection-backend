@@ -153,10 +153,11 @@ public class ProductController {
     @PreAuthorize("hasAnyRole('BUYER', 'BUYER_LEAD', 'DATA_ADMIN', 'SYS_ADMIN')")
     public ApiResponse<ProductUpdateResponse> updateProduct(
             @PathVariable(name = "id") Long id,
-            @Valid @RequestBody ProductUpdateRequest request
+            @Valid @RequestBody ProductUpdateRequest request,
+            Authentication authentication
     ) {
         return ApiResponse.success(
-                productCommandService.update(id, request)
+                productCommandService.update(id, request, authentication.getName())
         );
     }
 

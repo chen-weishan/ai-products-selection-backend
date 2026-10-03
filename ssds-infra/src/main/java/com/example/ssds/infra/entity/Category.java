@@ -1,6 +1,7 @@
 package com.example.ssds.infra.entity;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.*;
@@ -41,7 +42,23 @@ public class Category {
     @Builder.Default
     private int sortOrder = 0;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
+
     public boolean isRoot() {
         return parent == null;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    public void softDelete(AppUser actor) {
+        this.deletedAt = Instant.now();
+        this.deletedBy = actor;
     }
 }

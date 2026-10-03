@@ -1,6 +1,7 @@
 package com.example.ssds.infra.entity;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 import lombok.*;
 
 /** 供應商（規格書 §7.2 supplier）。B 軌品項成案前不綁供應商。 */
@@ -28,4 +29,20 @@ public class Supplier {
 
     @Column(length = 500)
     private String note;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    public void softDelete(AppUser actor) {
+        this.deletedAt = Instant.now();
+        this.deletedBy = actor;
+    }
 }

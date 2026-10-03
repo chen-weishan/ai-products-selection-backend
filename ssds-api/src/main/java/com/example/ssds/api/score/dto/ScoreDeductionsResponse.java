@@ -56,6 +56,9 @@ public record ScoreDeductionsResponse(
              * false 代表這項風險沒有資料可判定，因此<b>不扣分</b>（§5.7），
              * UI 應標示為「未評估」而非「無風險」。
              */
-            boolean dataAvailable) {
+            boolean dataAvailable,
+
+            /** 命中的固定規則或資料不足說明；可為 null。 */
+            String note) {
     }
 }

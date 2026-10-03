@@ -15,6 +15,7 @@ import com.example.ssds.api.score.DrivingTargetLookup.DrivingTargets;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
 import com.example.ssds.api.score.dto.ScoreDetailResponse;
 import com.example.ssds.api.score.dto.ScoreFactorBarResponse;
+import com.example.ssds.api.score.dto.ScoreFactorDetailResponse;
 import com.example.ssds.api.score.dto.ScoreHistoryPointResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
 import com.example.ssds.core.domain.Grade;
@@ -171,7 +172,8 @@ public final class ScoreMapper {
                 factor.getFactorCode(),
                 factor.getPenaltyValue(),
                 factor.getRawValue(),
-                factor.isDataAvailable());
+                factor.isDataAvailable(),
+                factor.getNote());
     }
 
     /**
@@ -190,10 +192,10 @@ public final class ScoreMapper {
     public static ScoreDetailResponse toDetail(
             ProductScore score, List<ScoreFactor> factors, DrivingTargets targets) {
 
-        List<ScoreFactorBarResponse> bonusFactors = factors.stream()
+        List<ScoreFactorDetailResponse> bonusFactors = factors.stream()
                 .filter(f -> !f.isPenalty())
                 .sorted(Comparator.comparing(ScoreFactor::getFactorCode))
-                .map(f -> toBar(f, targets))
+                .map(f -> toDetailFactor(f, targets))
                 .toList();
 
         List<ScoreDeductionsResponse.DeductionItem> penaltyFactors = factors.stream()
@@ -222,6 +224,23 @@ public final class ScoreMapper {
                 score.isRiskSuppressed(),
                 bonusFactors,
                 penaltyFactors);
+    }
+
+    private static ScoreFactorDetailResponse toDetailFactor(
+            ScoreFactor factor, DrivingTargets targets) {
+        return new ScoreFactorDetailResponse(
+                factor.getFactorCode(),
+                factor.getRawValue(),
+                factor.getNormalizedValue(),
+                factor.getWeight(),
+                factor.contribution(),
+                factor.isDataAvailable(),
+                factor.isImputed(),
+                factor.getDrivingKeywordId(),
+                targets.keyword(factor.getDrivingKeywordId()),
+                factor.getDrivingFestivalId(),
+                targets.festival(factor.getDrivingFestivalId()),
+                factor.getNote());
     }
 
     /**

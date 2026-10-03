@@ -138,7 +138,7 @@ class DecisionCommandServiceTest {
         }
 
         @Test
-        @DisplayName("§7.4：淘汰決策把品項轉為 REJECTED；決策理由留在決策紀錄，不覆寫 FR-03 的 reject_reason")
+        @DisplayName("§7.4：淘汰決策把品項轉為 REJECTED，決策理由同步為品項的 reject_reason")
         void rejectMovesProductToRejected() {
             givenAi("{\"action\":\"REJECT\",\"qtyMin\":0,\"qtyMax\":0}");
 
@@ -146,7 +146,7 @@ class DecisionCommandServiceTest {
                     BUYER_EMAIL, null);
 
             assertThat(product.getStatus()).isEqualTo(ProductStatus.REJECTED);
-            assertThat(product.getRejectReason()).isNull();
+            assertThat(product.getRejectReason()).isEqualTo("評論風險過高");
         }
 
         @Test

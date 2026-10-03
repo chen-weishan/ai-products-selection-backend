@@ -27,9 +27,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
+import com.example.ssds.api.scoring.WeightVersionActivatedEvent;
 import com.example.ssds.api.weight.dto.ApproveWeightVersionRequest;
 import com.example.ssds.api.weight.dto.CreateWeightVersionRequest;
 import com.example.ssds.api.weight.dto.SceneGroupRequest;
@@ -63,6 +65,9 @@ class WeightVersionCommandServiceTest {
 
     @Mock
     private AppUserRepository appUserRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private WeightVersionCommandService service;
@@ -270,6 +275,7 @@ class WeightVersionCommandServiceTest {
             verify(weightVersionRepository, never()).findByIsCurrentTrue();
             assertThat(draft.getStatus()).isEqualTo(WeightVersionStatus.APPROVED);
             assertThat(draft.isCurrent()).isTrue();
+            verify(eventPublisher).publishEvent(any(WeightVersionActivatedEvent.class));
         }
 
         @Test

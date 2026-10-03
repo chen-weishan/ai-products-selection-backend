@@ -1,6 +1,7 @@
 package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.SourcingStatus;
+import com.example.ssds.core.domain.ProductStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -112,20 +113,16 @@ public class SourcingCandidate extends BaseAuditEntity {
     private java.time.Instant scoutedAt;
 
     /**
-     * 依 §5.8 重算時效落差，並在落差為負時強制標記淘汰（AC-16-4）。
-     * 落差 0～14 天標記為需加速尋源。
+     * 依 §5.8 重算物化的時效落差。PENDING 只更新落差；使用者已加入優先序後，
+     * URGENT／SOURCING 才依門檻自動轉態。REJECTED 仍更新落差，但保持終態。
      *
      * <p>
      * 狀態寫在 {@code product.sourcingStatus} 上：v3.0.1 §7.2.9 明訂狀態
-     * 不重複於本表。壽命尚未產生時落差維持 null，而不是填 0。
+     * 不重複於本表。沒有新壽命資料時保留上一筆落差，而不是以 null 覆蓋。
      */
     public void recalculateTimeGap(Integer estimatedLifespanDays) {
         if (estimatedLifespanDays == null) {
-            this.timeGapDays = null;
-            if (product != null && product.getSourcingStatus() != SourcingStatus.REJECTED
-                    && product.getSourcingStatus() != SourcingStatus.PROMOTED) {
-                product.setSourcingStatus(SourcingStatus.PENDING);
-            }
+            // 沒有新的合格訊號時保留上一筆落差與狀態，不以「未知」覆蓋已知資料。
             return;
         }
         this.timeGapDays = estimatedLifespanDays - leadTimeDays;
@@ -133,8 +130,11 @@ public class SourcingCandidate extends BaseAuditEntity {
             return;
         }
         SourcingStatus currentStatus = product.getSourcingStatus();
-        boolean automaticallyManaged = currentStatus == SourcingStatus.PENDING
-                || currentStatus == SourcingStatus.URGENT
+        if (currentStatus == SourcingStatus.REJECTED
+                || currentStatus == SourcingStatus.PROMOTED) {
+            return;
+        }
+        boolean automaticallyManaged = currentStatus == SourcingStatus.URGENT
                 || currentStatus == SourcingStatus.SOURCING;
         if (!automaticallyManaged) {
             return;
@@ -146,5 +146,30 @@ public class SourcingCandidate extends BaseAuditEntity {
         } else {
             product.setSourcingStatus(SourcingStatus.SOURCING);
         }
+    }
+
+    /** 使用者明確將候選加入尋源優先序後，才依目前落差決定狀態。 */
+    public void prioritize() {
+        if (product == null || product.getSourcingStatus() == SourcingStatus.REJECTED
+                || product.getSourcingStatus() == SourcingStatus.PROMOTED
+                || timeGapDays == null) {
+            throw new IllegalStateException("候選目前不可加入尋源優先序");
+        }
+        if (timeGapDays < 0) {
+            throw new IllegalStateException("負時效落差不可加入尋源優先序");
+        } else if (timeGapDays <= FEASIBLE_GAP_DAYS) {
+            product.setSourcingStatus(SourcingStatus.URGENT);
+        } else {
+            product.setSourcingStatus(SourcingStatus.SOURCING);
+        }
+    }
+
+    /** 存為觀察會將業務狀態改為 WATCHING，並以人工操作復活淘汰品項。 */
+    public void watch() {
+        if (product == null || product.getSourcingStatus() == SourcingStatus.PROMOTED) {
+            throw new IllegalStateException("候選目前不可存為觀察");
+        }
+        product.setStatus(ProductStatus.WATCHING);
+        product.setSourcingStatus(SourcingStatus.PENDING);
     }
 }

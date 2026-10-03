@@ -13,9 +13,8 @@ import com.example.ssds.core.domain.SceneType;
  * <p>加分與扣分<b>分成兩個欄位</b>，不是混在同一個陣列讓前端自己用 isPenalty 拆——
  * §FR-04 要求「扣分明細以獨立卡片呈現，視覺上與加分區分離」。
  *
- * <p>兩個清單刻意重用既有的 record：{@link ScoreFactorBarResponse} 與
- * {@link ScoreDeductionsResponse.DeductionItem}。同一個概念在不同端點回同一種形狀，
- * 前端的型別可以共用，也不會出現「排行榜的因子」和「詳情的因子」欄位對不起來的問題。
+ * <p>排行只需長條所需的百分位與權重；本詳情端點另外回傳 raw value、貢獻值與
+ * 生效關鍵字／節慶，才能符合 AC-05-3 的可解釋性要求。
  *
  * <p>{@code penaltySubtotal} 為<b>正值</b>（AC-04-7）；
  * {@code isPrimary = false} 代表這是次要情境的分數（§FR-04 多情境評分）。
@@ -54,7 +53,7 @@ public record ScoreDetailResponse(
          * TREND → MARGIN → CVR → PRICE_FIT → FESTIVAL → CLIMATE
          * （§FR-04「因子組成」指定的顯示順序）。
          */
-        List<ScoreFactorBarResponse> bonusFactors,
+        List<ScoreFactorDetailResponse> bonusFactors,
 
         /**
          * 三個扣分因子，依宣告順序：

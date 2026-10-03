@@ -47,7 +47,7 @@ public class TrendService {
                 .orElseThrow(() -> new IllegalArgumentException("找不到關鍵字 id=" + keywordId));
 
         LocalDate to = LocalDate.now();
-        LocalDate from = to.minusDays(parseRangeDays(range));
+        LocalDate from = to.minusDays(parseRangeDays(range) - 1L);
         List<TrendPointRow> points = trendQueryDao.findTrendRange(List.of(keywordId), from, to);
 
         TrendCompositeSnapshot snapshot = trendQueryDao.findLatestComposite(keywordId)
@@ -68,17 +68,26 @@ public class TrendService {
         response.setStage(snapshot.stage());
         response.setStageWeeks(snapshot.stageWeeks());
         response.setEstimatedLifespanDays(snapshot.estimatedLifespanDays());
+        response.setStageSource(snapshot.stageSource());
+        response.setLifespanSource(snapshot.lifespanSource());
         response.setDivergenceFlag(snapshot.divergenceFlag());
 
         response.setSourceDetails(sources.stream()
-                .map(s -> new TrendKeywordDetailResponse.SourceDetail(
-                        s.sourceCode(),
-                        s.percentileWithinSource(),
-                        s.availability(),
-                        "CATEGORY".equals(s.granularity()),
-                        appliedWeights.getOrDefault(s.sourceCode(), BigDecimal.ZERO),
-                        s.slope7d(),
-                        s.slope30d()))
+                .map(s -> {
+                    // UNAVAILABLE 的來源不參與合成，不顯示它的數值；
+                    // 停用（enabled=false）但仍可用的來源照常顯示。
+                    boolean hideValues = "UNAVAILABLE".equals(s.availability());
+                    return new TrendKeywordDetailResponse.SourceDetail(
+                            s.sourceCode(),
+                            hideValues ? null : s.percentileWithinSource(),
+                            s.availability(),
+                            s.granularity(),
+                            "CATEGORY".equals(s.granularity()),
+                            appliedWeights.get(s.sourceCode()),
+                            hideValues ? null : s.slope7d(),
+                            hideValues ? null : s.slope30d(),
+                            s.enabled());
+                })
                 .toList());
 
         return response;

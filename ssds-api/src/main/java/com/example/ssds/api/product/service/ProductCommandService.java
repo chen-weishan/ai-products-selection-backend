@@ -1,5 +1,7 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.dto.AiTaskResponse;
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -41,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -57,9 +60,6 @@ public class ProductCommandService {
     private static final Set<String> EDIT_ROLES = Set.of(
             "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_DATA_ADMIN", "ROLE_SYS_ADMIN"
     );
-    private static final Set<String> DECISION_ROLES = Set.of(
-            "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
-    );
     private static final Set<String> REVIEW_ROLES = Set.of(
             "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
     );
@@ -73,6 +73,7 @@ public class ProductCommandService {
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
     private final ProductSourcingCandidateService sourcingCandidateService;
+    private final AiTaskService aiTaskService;
 
     public ProductCommandService(
             ProductRepository productRepository,
@@ -83,7 +84,8 @@ public class ProductCommandService {
             CategoryRepository categoryRepository,
             SupplierRepository supplierRepository,
             TrendKeywordRepository trendKeywordRepository,
-            ProductSourcingCandidateService sourcingCandidateService
+            ProductSourcingCandidateService sourcingCandidateService,
+            AiTaskService aiTaskService
     ) {
         this.productRepository = productRepository;
         this.productScoreRepository = productScoreRepository;
@@ -94,6 +96,7 @@ public class ProductCommandService {
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
         this.sourcingCandidateService = sourcingCandidateService;
+        this.aiTaskService = aiTaskService;
     }
 
     /** 新增品項，重複名稱僅回傳警告，不阻擋儲存。 */
@@ -158,9 +161,14 @@ public class ProductCommandService {
 
         Product savedProduct = productRepository.saveAndFlush(product);
         sourcingCandidateService.synchronize(savedProduct);
+        AiTaskResponse task = trackType == TrackType.A && !request.resolvedSaveAsDraft()
+                ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), actor, false)
+                : null;
         return new ProductCreateResponse(
                 toResponse(savedProduct),
-                warnings
+                warnings,
+                task == null ? null : task.taskId(),
+                task == null ? null : task.status()
         );
     }
 
@@ -172,6 +180,14 @@ public class ProductCommandService {
     public ProductUpdateResponse update(
             Long productId,
             ProductUpdateRequest request
+    ) {
+        return update(productId, request, null);
+    }
+
+    public ProductUpdateResponse update(
+            Long productId,
+            ProductUpdateRequest request,
+            String actorEmail
     ) {
         Product product = findProduct(productId);
         String name = request.name().trim();
@@ -189,6 +205,23 @@ public class ProductCommandService {
                 request.sourcingStatus()
         );
         boolean saveAsDraft = request.resolvedSaveAsDraft();
+        boolean submittedForScoring = product.getStatus() == ProductStatus.DRAFT
+                && !saveAsDraft
+                && trackType == TrackType.A;
+        boolean scoringInputsChanged = hasScoringInputChanges(
+                product,
+                category,
+                request.cost(),
+                request.suggestedPrice(),
+                request.moq(),
+                request.season() == null ? Season.ALL : request.season(),
+                trackType,
+                ProductLogisticsConditionMapper.encode(request.logisticsConditions()),
+                request.idealTempMin(),
+                request.idealTempMax(),
+                request.shelfLifeDays(),
+                keywords
+        );
         validateDraftOperation(product, saveAsDraft);
         validateSubmission(
                 trackType,
@@ -222,7 +255,6 @@ public class ProductCommandService {
         product.setShelfLifeDays(request.shelfLifeDays());
         product.getKeywords().clear();
         product.getKeywords().addAll(keywords);
-
         List<String> warnings = new ArrayList<>();
         if (productRepository.existsDuplicateName(
                 category.getId(),
@@ -233,13 +265,23 @@ public class ProductCommandService {
         }
 
         Product savedProduct = productRepository.saveAndFlush(product);
-        if (previousTrackType != trackType) {
+        if (scoringInputsChanged || previousTrackType != trackType) {
             productScoreRepository.deactivateAllCurrent(savedProduct.getId());
         }
         sourcingCandidateService.synchronize(savedProduct);
+        boolean enqueueAnalysis = submittedForScoring
+                || (scoringInputsChanged && eligibleForFullAnalysis(savedProduct));
+        AppUser taskActor = enqueueAnalysis && actorEmail != null
+                ? findActor(actorEmail)
+                : null;
+        AiTaskResponse task = enqueueAnalysis
+                ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), taskActor, false)
+                : null;
         return new ProductUpdateResponse(
                 toResponse(savedProduct),
-                warnings
+                warnings,
+                task == null ? null : task.taskId(),
+                task == null ? null : task.status()
         );
     }
 
@@ -271,6 +313,12 @@ public class ProductCommandService {
         products.stream()
                 .filter(product -> product.getTrackType() == TrackType.A)
                 .forEach(product -> productScoreRepository.deactivateAllCurrent(product.getId()));
+        List<Product> analysisTargets = products.stream()
+                .filter(this::eligibleForFullAnalysis)
+                .toList();
+        if (!analysisTargets.isEmpty()) {
+            aiTaskService.enqueueFullAnalysis(analysisTargets, null, false);
+        }
         products.stream()
                 .filter(product -> product.getTrackType() == TrackType.B)
                 .forEach(sourcingCandidateService::synchronize);
@@ -340,9 +388,12 @@ public class ProductCommandService {
         );
     }
 
-    /** 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。 */
-    // TODO FR-11：決策模組完成後，觀察／採納／淘汰應由共用決策服務
-    // 在同一交易建立 decision_record 並更新品項；目前僅更新狀態及 AuditLog。
+    /**
+     * 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。
+     *
+     * <p>觀察／採納／淘汰不走這裡：其事件是「建立決策」（權限列 11），由
+     * {@code DecisionCommandService#create} 在同一交易建立 decision_record 並更新品項。
+     */
     public ProductStatusUpdateResponse changeStatus(
             Long productId,
             ProductStatusUpdateRequest request,
@@ -357,22 +408,8 @@ public class ProductCommandService {
 
         validateStatusTransition(product, targetStatus, authorities);
 
-        if (targetStatus == ProductStatus.REJECTED) {
-            String reason = normalizeNullable(request.rejectReason());
-            if (reason == null || reason.length() < 10) {
-                throw new BusinessException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "商品資料驗證失敗",
-                        List.of(new FieldError(
-                                "rejectReason",
-                                "淘汰原因至少需要 10 個字"
-                        ))
-                );
-            }
-            product.setRejectReason(reason);
-        } else {
-            product.setRejectReason(null);
-        }
+        // 目標不可能是 REJECTED（只能由決策進入），離開 REJECTED 時清掉淘汰原因
+        product.setRejectReason(null);
 
         if (targetStatus == ProductStatus.LISTED) {
             product.setListedAt(LocalDate.now(BUSINESS_ZONE));
@@ -389,6 +426,11 @@ public class ProductCommandService {
                 .afterJson(statusJson(targetStatus))
                 .ip(sourceIp)
                 .build());
+
+        if (targetStatus == ProductStatus.EVALUATING
+                && product.getTrackType() == TrackType.A) {
+            aiTaskService.enqueueFullAnalysis(List.of(product), actor, false);
+        }
 
         return new ProductStatusUpdateResponse(
                 productId,
@@ -416,11 +458,15 @@ public class ProductCommandService {
     }
 
     private Category findCategory(Long categoryId) {
-        return categoryRepository.findById(categoryId)
+        Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的類別：" + categoryId
                 ));
+        if (category.isDeleted()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的類別：" + categoryId);
+        }
+        return category;
     }
 
     private Supplier findSupplier(Long supplierId) {
@@ -428,11 +474,15 @@ public class ProductCommandService {
             return null;
         }
 
-        return supplierRepository.findById(supplierId)
+        Supplier supplier = supplierRepository.findById(supplierId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的供應商：" + supplierId
                 ));
+        if (supplier.isDeleted()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的供應商：" + supplierId);
+        }
+        return supplier;
     }
 
     private Set<TrendKeyword> findKeywords(Set<Long> keywordIds) {
@@ -461,10 +511,13 @@ public class ProductCommandService {
         if (trackType == TrackType.A) {
             return null;
         }
-        if (sourcingStatus == null) {
-            return SourcingStatus.PENDING;
+        if (sourcingStatus != null && sourcingStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "B 軌品項建立時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
         }
-        return sourcingStatus;
+        return SourcingStatus.PENDING;
     }
 
     private SourcingStatus resolveSourcingStatusForUpdate(
@@ -475,14 +528,71 @@ public class ProductCommandService {
         if (targetTrackType == TrackType.A) {
             return null;
         }
-        if (requestedStatus != null) {
-            return requestedStatus;
-        }
         if (product.getTrackType() == TrackType.B
                 && product.getSourcingStatus() != null) {
+            if (requestedStatus != null
+                    && requestedStatus != product.getSourcingStatus()) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_STATE_TRANSITION,
+                        "一般品項更新不可變更尋源狀態；請使用存為觀察或加入尋源優先序操作"
+                );
+            }
             return product.getSourcingStatus();
         }
+        if (requestedStatus != null && requestedStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "轉為 B 軌時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
+        }
         return SourcingStatus.PENDING;
+    }
+
+    private boolean hasScoringInputChanges(
+            Product product,
+            Category category,
+            BigDecimal cost,
+            BigDecimal suggestedPrice,
+            Integer moq,
+            Season season,
+            TrackType trackType,
+            String logisticsCondition,
+            BigDecimal idealTempMin,
+            BigDecimal idealTempMax,
+            Integer shelfLifeDays,
+            Set<TrendKeyword> keywords
+    ) {
+        Set<Long> currentKeywordIds = product.getKeywords().stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toSet());
+        Set<Long> requestedKeywordIds = keywords.stream()
+                .map(TrendKeyword::getId)
+                .collect(Collectors.toSet());
+        return !Objects.equals(product.getCategory().getId(), category.getId())
+                || !sameDecimal(product.getCost(), cost)
+                || !sameDecimal(product.getSuggestedPrice(), suggestedPrice)
+                || !Objects.equals(product.getMoq(), moq)
+                || product.getSeason() != season
+                || product.getTrackType() != trackType
+                || !Objects.equals(product.getLogisticsCondition(), logisticsCondition)
+                || !sameDecimal(product.getIdealTempMin(), idealTempMin)
+                || !sameDecimal(product.getIdealTempMax(), idealTempMax)
+                || !Objects.equals(product.getShelfLifeDays(), shelfLifeDays)
+                || !currentKeywordIds.equals(requestedKeywordIds);
+    }
+
+    private boolean sameDecimal(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean eligibleForFullAnalysis(Product product) {
+        return product.getTrackType() == TrackType.A
+                && product.getDeletedAt() == null
+                && product.getStatus() != ProductStatus.DRAFT
+                && product.getStatus() != ProductStatus.REJECTED;
     }
 
     /**
@@ -612,13 +722,6 @@ public class ProductCommandService {
         );
     }
 
-    private String normalizeNullable(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
     private void validateDraftOperation(Product product, boolean saveAsDraft) {
         if (saveAsDraft && product.getStatus() != ProductStatus.DRAFT) {
             throw invalidTransition(product.getStatus(), ProductStatus.DRAFT);
@@ -628,10 +731,11 @@ public class ProductCommandService {
     private void validateTrackStatus(ProductStatus status, TrackType trackType) {
         if (trackType == TrackType.B
                 && status != ProductStatus.DRAFT
-                && status != ProductStatus.EVALUATING) {
+                && status != ProductStatus.EVALUATING
+                && status != ProductStatus.WATCHING) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "B 軌品項狀態固定為 EVALUATING，實際進度請使用 sourcingStatus"
+                    "B 軌品項狀態僅允許 DRAFT、EVALUATING 或 WATCHING，實際尋源進度請使用 sourcingStatus"
             );
         }
     }
@@ -667,17 +771,13 @@ public class ProductCommandService {
                     );
                 }
             }
-            case EVALUATING -> {
-                allowed = targetStatus == ProductStatus.WATCHING
-                        || targetStatus == ProductStatus.ADOPTED
-                        || targetStatus == ProductStatus.REJECTED;
-                requiredRoles = DECISION_ROLES;
-            }
-            case WATCHING -> {
-                allowed = targetStatus == ProductStatus.ADOPTED
-                        || targetStatus == ProductStatus.REJECTED;
-                requiredRoles = DECISION_ROLES;
-            }
+            // §7.4：這兩個狀態往後的事件都是「建立決策」，由 POST /products/{id}/decisions 獨佔。
+            // 放行的話會跳過 decision_record／快照，品項變 ADOPTED 後也再補不了決策
+            case EVALUATING, WATCHING -> throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "品項狀態為 " + sourceStatus
+                            + "，觀察／採納／淘汰請改用建立決策（POST /products/{id}/decisions）"
+            );
             case ADOPTED -> {
                 allowed = targetStatus == ProductStatus.LISTED;
                 requiredRoles = EDIT_ROLES;

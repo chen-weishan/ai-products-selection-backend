@@ -22,6 +22,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * LLM/外部因子尚未供應時的確定性評分路徑。
@@ -31,7 +32,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProductFallbackScoringService {
 
-    private static final SceneType SCENE = SceneType.REPLENISHMENT;
     private static final Set<FactorCode> BONUS_FACTORS = EnumSet.of(
             FactorCode.TREND, FactorCode.MARGIN, FactorCode.CVR,
             FactorCode.PRICE_FIT, FactorCode.FESTIVAL, FactorCode.CLIMATE
@@ -51,7 +51,29 @@ public class ProductFallbackScoringService {
         this.marginStatisticsDao = marginStatisticsDao;
     }
 
+    @Transactional
     public ProductScore score(Product product) {
+        return score(product, SceneType.REPLENISHMENT);
+    }
+
+    /**
+     * 不經過任何 Agent 的確定性評分入口。
+     * FR-09 匯入後重算會沿用最近一次情境；一般降級路徑仍可使用上面的預設情境方法。
+     */
+    @Transactional
+    public ProductScore score(Product product, SceneType scene) {
+        ProductScore score = buildScore(product, scene);
+        scoreRepository.deactivateCurrent(product.getId(), score.getPeriod(), score.getSceneType());
+        return scoreRepository.saveAndFlush(score);
+    }
+
+    /** 建立真實資料可得的降級快照，但不寫入資料庫，供正式評分先判斷資料是否足夠。 */
+    public ProductScore buildScore(Product product) {
+        return buildScore(product, SceneType.REPLENISHMENT);
+    }
+
+    /** 建立指定情境的降級快照但不寫入資料庫，供匯入重算及正式評分流程共用。 */
+    public ProductScore buildScore(Product product, SceneType scene) {
         WeightVersion version = weightVersionRepository.findByIsCurrentTrue()
                 .orElseThrow(() -> new IllegalStateException("目前沒有生效中的權重版本"));
         var margin = marginStatisticsDao.findPercentile(product.getId(), product.getCategory().getId())
@@ -65,7 +87,7 @@ public class ProductFallbackScoringService {
         BigDecimal finalScore = bonus.subtract(penalty).max(BigDecimal.ZERO)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        var threshold = marginStatisticsDao.findGradeThreshold(version.getId(), SCENE.name())
+        var threshold = marginStatisticsDao.findGradeThreshold(version.getId(), scene.name())
                 .orElse(new ProductMarginStatisticsDao.GradeThreshold(
                         BigDecimal.valueOf(80), BigDecimal.valueOf(65)
                 ));
@@ -73,12 +95,11 @@ public class ProductFallbackScoringService {
         int confidence = Math.max(0, 100 - 5 * 8 - (margin.imputed() ? 24 : 0));
         String period = isoWeek(LocalDate.now(ZoneId.of("Asia/Taipei")));
 
-        scoreRepository.deactivateCurrent(product.getId(), period, SCENE);
         ProductScore score = ProductScore.builder()
                 .product(product)
                 .weightVersion(version)
                 .period(period)
-                .sceneType(SCENE)
+                .sceneType(scene)
                 .primary(true)
                 .active(true)
                 .bonusSubtotal(bonus)
@@ -109,7 +130,7 @@ public class ProductFallbackScoringService {
                 product.getMoq() != null || product.getShelfLifeDays() != null
                         || product.getSeason() != Season.ALL));
         score.setFactors(factors);
-        return scoreRepository.saveAndFlush(score);
+        return score;
     }
 
     private ScoreFactor penaltyFactor(
