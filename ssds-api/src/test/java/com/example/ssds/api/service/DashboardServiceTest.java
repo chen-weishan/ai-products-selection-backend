@@ -21,7 +21,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,10 +42,32 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@TestPropertySource(properties = "spring.flyway.enabled=false")
-@SpringBootTest
+@Testcontainers
+@SpringBootTest(properties = {
+        "spring.profiles.active=test",
+        "spring.flyway.enabled=true",
+        "spring.flyway.locations=classpath:db/migration",
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "ai.external-llm-enabled=false",
+        "ai.trend.schedule-enabled=false",
+        "ai.sourcing.time-gap-schedule-enabled=false"
+})
 @Transactional
 class DashboardServiceTest {
+
+    @Container
+    private static final PostgreSQLContainer<?> POSTGRES =
+            new PostgreSQLContainer<>("postgres:17.6-alpine");
+
+    @DynamicPropertySource
+    static void databaseProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.flyway.user", POSTGRES::getUsername);
+        registry.add("spring.flyway.password", POSTGRES::getPassword);
+    }
 
     @Autowired
     private DashboardService dashboardService;
@@ -263,7 +289,7 @@ ProductScore score1 = createProductScore(testProductA, period, viral, gradeA, ne
         sc2 = sourcingCandidateRepository.save(sc2);
         sc3 = sourcingCandidateRepository.save(sc3);
 
-        DashboardSourcingSummaryResponseDto summary = dashboardService.getSourcingSummary(10); // limit large enough
+        DashboardSourcingSummaryResponseDto summary = dashboardService.getSourcingSummary(100);
         List<BtrackSummaryDto> allItems = summary.items();
         
         // Find the items corresponding to our three test products

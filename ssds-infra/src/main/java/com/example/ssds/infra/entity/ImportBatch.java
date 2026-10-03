@@ -44,6 +44,10 @@ public class ImportBatch {
     @Builder.Default
     private int failRows = 0;
 
+    @Column(name = "skipped_rows", nullable = false)
+    @Builder.Default
+    private int skippedRows = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default

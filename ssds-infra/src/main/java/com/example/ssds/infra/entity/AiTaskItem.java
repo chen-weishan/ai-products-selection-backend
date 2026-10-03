@@ -2,7 +2,10 @@ package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.TaskItemStatus;
 import jakarta.persistence.*;
+import java.time.Instant;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * AI 任務逐項結果（規格書 §7.2 ai_task_item）。
@@ -31,7 +34,7 @@ public class AiTaskItem {
     @JoinColumn(name = "task_id", nullable = false)
     private AiTask task;
 
-    /** 權重校準等非品項層級的任務為 null。 */
+    /** 非品項層級的任務為 null。 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")
     private Product product;
@@ -49,6 +52,39 @@ public class AiTaskItem {
     @JoinColumn(name = "keyword_id")
     private TrendKeyword keyword;
 
+    /** WEIGHT_CALIBRATION 任務的目標報告；與 product、keyword 擇一。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "calibration_report_id")
+    private CalibrationReport calibrationReport;
+
     @Column(name = "duration_ms")
     private Integer durationMs;
+
+    /** SOURCING_SCOUT 的正規化輸入；陌生字詞不需先建立 TrendKeyword。 */
+    @Column(name = "scout_keyword", length = 80)
+    private String scoutKeyword;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "scout_category_id")
+    private Category scoutCategory;
+
+    @Column(name = "scout_report", columnDefinition = "text")
+    private String scoutReport;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scout_opportunity_signals", columnDefinition = "jsonb")
+    private String scoutOpportunitySignals;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scout_risk_signals", columnDefinition = "jsonb")
+    private String scoutRiskSignals;
+
+    @Column(name = "scout_model", length = 80)
+    private String scoutModel;
+
+    @Column(name = "scout_prompt_version", length = 20)
+    private String scoutPromptVersion;
+
+    @Column(name = "scout_report_generated_at")
+    private Instant scoutReportGeneratedAt;
 }

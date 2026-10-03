@@ -1,0 +1,53 @@
+package com.example.ssds.api.imports.dto;
+
+import com.example.ssds.core.domain.ImportDataType;
+import com.example.ssds.core.domain.TaskStatus;
+import com.example.ssds.infra.entity.ImportBatch;
+import java.time.Instant;
+
+public record ImportBatchResponse(
+        Long batchId,
+        ImportDataType dataType,
+        String fileName,
+        Long fileSize,
+        int totalRows,
+        int successRows,
+        int failRows,
+        int processedRows,
+        int progressPercent,
+        TaskStatus status,
+        boolean async,
+        String createdBy,
+        Instant createdAt,
+        Instant finishedAt,
+        String failureReason,
+        boolean hasCorrectableErrors,
+        int skippedRows,
+        int unprocessedRows,
+        boolean canDownloadUnprocessed,
+        java.util.Map<String,Integer> recalculation
+) {
+    public static ImportBatchResponse from(ImportBatch batch) {
+        return from(batch, null, false);
+    }
+
+    public static ImportBatchResponse from(
+            ImportBatch batch, String failureReason, boolean hasCorrectableErrors) {
+        return from(batch,failureReason,hasCorrectableErrors,false,java.util.Map.of());
+    }
+
+    public static ImportBatchResponse from(ImportBatch batch,String failureReason,boolean hasCorrectableErrors,
+            boolean canDownloadUnprocessed,java.util.Map<String,Integer> recalculation) {
+        int processed = batch.getSuccessRows() + batch.getFailRows() + batch.getSkippedRows();
+        int progress = batch.getTotalRows() == 0
+                ? 0
+                : Math.min(100, (int) ((long) processed * 100 / batch.getTotalRows()));
+        return new ImportBatchResponse(
+                batch.getId(), batch.getDataType(), batch.getFileName(), batch.getFileSize(),
+                batch.getTotalRows(), batch.getSuccessRows(), batch.getFailRows(), processed,
+                progress, batch.getStatus(), batch.isAsync(),
+                batch.getCreatedBy() == null ? null : batch.getCreatedBy().getEmail(),
+                batch.getCreatedAt(), batch.getFinishedAt(), failureReason, hasCorrectableErrors,
+                batch.getSkippedRows(),Math.max(0,batch.getTotalRows()-processed),canDownloadUnprocessed,recalculation);
+    }
+}

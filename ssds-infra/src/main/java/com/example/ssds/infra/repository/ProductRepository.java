@@ -4,6 +4,7 @@ import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.infra.entity.Product;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -32,6 +33,11 @@ import org.springframework.stereotype.Repository;
 public interface ProductRepository
                 extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
+    /** FR-09 預覽品項匹配，一次帶出類別以避免逐列 lazy query。 */
+    @EntityGraph(attributePaths = {"category"})
+    @Query("select p from Product p")
+    List<Product> findAllWithCategory();
+
     /** 上傳圖片前鎖定品項列，避免並行請求突破最多五張限制。 */
     @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")
@@ -59,14 +65,71 @@ public interface ProductRepository
         @Query("""
                         select p from Product p
                         where p.trackType = :trackType
+                          and p.deletedAt is null
                           and p.status not in (com.example.ssds.core.domain.ProductStatus.DRAFT,
                                                com.example.ssds.core.domain.ProductStatus.REJECTED)
                         """)
+        @EntityGraph(attributePaths = {"category", "category.parent", "keywords"})
         List<Product> findScorable(@Param("trackType") TrackType trackType);
+
+        /** FULL_ANALYSIS 優先序：從未分析者優先，其餘依最近一次分析時間由舊到新。 */
+        @Query("""
+                        select p from Product p
+                        where p.trackType = com.example.ssds.core.domain.TrackType.A
+                          and p.deletedAt is null
+                          and p.status in :statuses
+                        order by
+                          case when (select count(l.id) from SceneClassificationLog l where l.product.id = p.id) = 0
+                               then 0 else 1 end,
+                          (select max(l2.createdAt) from SceneClassificationLog l2 where l2.product.id = p.id) asc,
+                          p.id asc
+                        """)
+        List<Product> findFullAnalysisCandidates(@Param("statuses") List<ProductStatus> statuses);
+
+        /**
+         * 週間補跑候選：目前仍符合 FULL_ANALYSIS 資格，且本週尚未成功產生資料的品項。
+         *
+         * <p>不限定任務建立方式，因此人工建立的 FULL_ANALYSIS 若已於本週成功或命中快取，
+         * 後續排程也會確實跳過同一品項。
+         */
+        @Query("""
+                        select p from Product p
+                        where p.trackType = com.example.ssds.core.domain.TrackType.A
+                          and p.deletedAt is null
+                          and p.status in :statuses
+                          and not exists (
+                              select i.id from AiTaskItem i
+                              where i.product.id = p.id
+                                and i.task.taskType = com.example.ssds.core.domain.AiTaskType.FULL_ANALYSIS
+                                and i.status in (
+                                    com.example.ssds.core.domain.TaskItemStatus.SUCCEEDED,
+                                    com.example.ssds.core.domain.TaskItemStatus.SKIPPED_CACHE
+                                )
+                                and i.task.finishedAt >= :weekStart
+                          )
+                        order by p.id
+                        """)
+        List<Product> findFullAnalysisCatchUpCandidates(
+                        @Param("statuses") List<ProductStatus> statuses,
+                        @Param("weekStart") Instant weekStart);
 
         /** B 軌尋源清單（FR-16-2）。 */
         @EntityGraph(attributePaths = { "category" })
         List<Product> findByTrackTypeAndSourcingStatus(TrackType trackType, SourcingStatus sourcingStatus);
+
+        /** FR-16-2：探索以（關鍵字、品類）冪等重用未刪除且尚未成案的 B 軌品項。 */
+        @EntityGraph(attributePaths = { "category", "keywords" })
+        @Query("""
+                        select distinct p from Product p join p.keywords k
+                        where k.id = :keywordId
+                          and p.category.id = :categoryId
+                          and p.trackType = com.example.ssds.core.domain.TrackType.B
+                          and p.sourcingStatus <> com.example.ssds.core.domain.SourcingStatus.PROMOTED
+                          and p.deletedAt is null
+                        """)
+        Optional<Product> findReusableSourcingProduct(
+                        @Param("keywordId") Long keywordId,
+                        @Param("categoryId") Long categoryId);
 
         /** §5.3.1 判斷同品類樣本數是否達 10 筆，未達則退回全品類百分位並降低信心度。 */
         long countByCategoryIdAndTrackType(Long categoryId, TrackType trackType);
@@ -100,6 +163,18 @@ public interface ProductRepository
         List<Long> findProductIdsByImportBatch(@Param("batchId") Long batchId);
 
         long countByTrackType(TrackType trackType);
+
+        long countByCategoryId(Long categoryId);
+
+        long countBySupplierId(Long supplierId);
+
+        /** S-07：停用關鍵字前列出所有會受影響的未刪除品項。 */
+        @Query("""
+                        select distinct p from Product p join p.keywords k
+                        where k.id = :keywordId
+                        order by p.name asc, p.id asc
+                        """)
+        List<Product> findAllByKeywordId(@Param("keywordId") Long keywordId);
 
         /**
          * FR-02 KPI 候選品項總數（軌別），不含軟刪除品項。

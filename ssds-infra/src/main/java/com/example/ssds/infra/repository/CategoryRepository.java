@@ -15,14 +15,20 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     List<Category> findByParentIdOrderBySortOrderAsc(Long parentId);
 
+    long countByParentIdAndDeletedAtIsNull(Long parentId);
+
     /** 依名稱查品類（不分大小寫），供 hashtag→品類名稱對照解析用。 */
     List<Category> findByNameIgnoreCase(String name);
+
+    List<Category> findByNameIgnoreCaseAndDeletedAtIsNull(String name);
+
+    List<Category> findAllByDeletedAtIsNull();
     
     /**
      * 一次撈完兩層，供前端下拉選單使用。
      * 用 join fetch 而不是讓呼叫端逐一觸發 children，避免 N+1。
      */
     @Query("select distinct c from Category c left join fetch c.children "
-            + "where c.parent is null order by c.sortOrder")
+            + "where c.parent is null and c.deletedAt is null order by c.sortOrder")
     List<Category> findTreeWithChildren();
 }

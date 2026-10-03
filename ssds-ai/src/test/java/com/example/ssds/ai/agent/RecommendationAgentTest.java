@@ -1,0 +1,164 @@
+package com.example.ssds.ai.agent;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.example.ssds.ai.access.tracka.AiClientResponse;
+import com.example.ssds.ai.access.tracka.AiPromptRequest;
+import com.example.ssds.ai.access.tracka.TrackAAiClient;
+import com.example.ssds.ai.budget.AiBudgetExceededException;
+import com.example.ssds.ai.model.FallbackReason;
+import com.example.ssds.ai.model.recommendation.*;
+import com.example.ssds.ai.prompt.recommendation.RecommendationPromptFactory;
+import com.example.ssds.ai.access.tracka.AiAccessRouter;
+import com.example.ssds.ai.schema.recommendation.RecommendationResponseParser;
+import com.example.ssds.ai.schema.recommendation.RecommendationResponseParserTest;
+import com.example.ssds.core.domain.DecisionType;
+import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.AiTaskType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
+
+class RecommendationAgentTest {
+    @Test
+    void successfulResponseUsesCacheAndCountsOnlyRealRequests() {
+        FakeClient client = new FakeClient(RecommendationResponseParserTest.validJson());
+        RecommendationAgent agent = agent(client);
+
+        RecommendationResult first = agent.recommend(RecommendationResponseParserTest.input(), false);
+        RecommendationResult cached = agent.recommend(RecommendationResponseParserTest.input(), false);
+
+        assertFalse(first.cacheHit());
+        assertEquals(1, first.requestCount());
+        assertTrue(cached.cacheHit());
+        assertNull(cached.promptTokens());
+        assertNull(cached.completionTokens());
+        assertEquals(0, cached.requestCount());
+        assertEquals(1, client.calls.get());
+    }
+
+    @Test
+    void schemaFailureChangesModelAndThenSucceeds() {
+        FakeClient client = new FakeClient("{\"invalid\":true}", RecommendationResponseParserTest.validJson());
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(2, result.requestCount());
+        assertEquals(List.of("fake/primary", "fake/primary"), client.models);
+        assertFalse(client.systemPrompts.get(0).contains("修正要求"));
+        assertTrue(client.systemPrompts.get(1).contains("Recommendation Schema"));
+        assertTrue(client.systemPrompts.get(1).contains("SHAPE_INVALID"));
+        assertEquals(List.of(false, true), client.retryAttempts);
+    }
+
+    @Test
+    void unavailableModelsReturnRuleBasedFallbackWithoutBlockingScore() {
+        FakeClient client = new FakeClient(new IllegalStateException("unavailable"));
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertTrue(result.fallbackApplied());
+        assertEquals(DecisionType.WATCH, result.output().action());
+        assertEquals(0, result.output().qtyMin());
+        assertEquals("暫不建議進貨", result.output().quantityText());
+        assertEquals(3, result.requestCount());
+    }
+
+    @Test
+    void fallbackActionDependsOnGradeAndPenaltyNotQuantityAvailability() {
+        RecommendationInput original = RecommendationResponseParserTest.input();
+        RecommendationInput gradeAWithoutQuantity = new RecommendationInput(
+                original.productId(),
+                original.factors(),
+                original.bonusSubtotal(),
+                original.penaltySubtotal(),
+                Grade.A,
+                original.sceneType(),
+                original.matchedPenaltyRules(),
+                original.festival(),
+                List.of(0));
+
+        RecommendationResult result = agent(new FakeClient(new IllegalStateException("unavailable")))
+                .recommend(gradeAWithoutQuantity, false);
+
+        assertEquals(DecisionType.ADOPT, result.output().action());
+        assertEquals(0, result.output().qtyMin());
+        assertEquals("建議採納，首批數量需人工確認", result.output().quantityText());
+        assertEquals(
+                "規則式預設建議：分級達採納條件且扣分未達風險抑制門檻，建議採納。",
+                result.output().reasoning());
+    }
+
+    @Test
+    void resourceAccessImmediatelySwitchesToFallback() {
+        FakeClient client = new FakeClient(
+                new ResourceAccessException("timeout"),
+                RecommendationResponseParserTest.validJson());
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertFalse(result.fallbackApplied());
+        assertEquals(2, result.requestCount());
+        assertEquals(List.of("fake/primary", "fake/fallback"), client.models);
+    }
+
+    @Test
+    void exhaustedBudgetReturnsPersistableRuleFallback() {
+        FakeClient client = new FakeClient(new AiBudgetExceededException(
+                AiTaskType.BudgetPool.TRACK_A, OffsetDateTime.parse("2026-09-22T00:00:00+08:00")));
+
+        RecommendationResult result = agent(client).recommend(
+                RecommendationResponseParserTest.input(), false);
+
+        assertTrue(result.fallbackApplied());
+        assertEquals(FallbackReason.AI_UNAVAILABLE, result.fallbackReason());
+        assertEquals("budget-exhausted", result.model());
+        assertEquals(0, result.requestCount());
+        assertEquals("規則式預設建議：分級尚未達採納條件且扣分未達淘汰條件，建議持續觀察。",
+                result.output().reasoning());
+    }
+
+    private static RecommendationAgent agent(TrackAAiClient client) {
+        ObjectMapper mapper = new ObjectMapper();
+        return new RecommendationAgent(
+                new AiAccessRouter(client),
+                new RecommendationPromptFactory(mapper),
+                new RecommendationResponseParser(mapper),
+                mapper,
+                "fake/primary",
+                "fake/fallback,fake/third",
+                3,
+                6,
+                millis -> {});
+    }
+
+    private static final class FakeClient implements TrackAAiClient {
+        private final List<Object> outcomes;
+        private final AtomicInteger calls = new AtomicInteger();
+        private final List<String> models = new ArrayList<>();
+        private final List<Boolean> retryAttempts = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
+
+        private FakeClient(Object... outcomes) {
+            this.outcomes = List.of(outcomes);
+        }
+
+        @Override
+        public AiClientResponse complete(AiPromptRequest request) {
+            int index = calls.getAndIncrement();
+            models.add(request.model());
+            retryAttempts.add(request.retryAttempt());
+            systemPrompts.add(request.systemPrompt());
+            Object outcome = outcomes.get(Math.min(index, outcomes.size() - 1));
+            if (outcome instanceof RuntimeException exception) throw exception;
+            return new AiClientResponse((String) outcome, request.model(), 100, 30);
+        }
+    }
+}

@@ -66,6 +66,8 @@ public class TrendQueryDao {
                            stage                   AS stage,
                            stage_weeks             AS stageWeeks,
                            estimated_lifespan_days AS estimatedLifespanDays,
+                           stage_source            AS stageSource,
+                           lifespan_source         AS lifespanSource,
                            applied_weights::text   AS appliedWeights,
                            divergence_flag         AS divergenceFlag
                     FROM heat_composite_daily
@@ -101,6 +103,11 @@ public class TrendQueryDao {
      * 分支）涵蓋；「單一來源默默停採超過其預期頻率」目前的 schema 沒有
      * 存「預期頻率」，抓不到這種半停擺狀態，是已知限制，之後如果要處理
      * 得先在 heat_source 加一個 expected_interval 之類的欄位。
+     * <p><b>停用的來源一律列出（enabled = false 不再被過濾掉）：</b>enabled 只控制採集，
+     * 停用來源當日已有讀值時仍會計入合成，明細若把它藏起來就會跟合成分數、
+     * applied_weights 對不上。回傳 {@code enabled} 讓前端標示「已停用」；
+     * 停用來源沒有當日讀值不是資料異常，所以 availability 維持資料庫的值，
+     * 不會被改成 DEGRADED（UNAVAILABLE 仍照舊優先）。
      */
 public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     return jdbcClient
@@ -153,26 +160,28 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                      WHERE rr.reading_date <= sol.own_asof - INTERVAL '30 days'
                      ORDER BY rr.source_id, rr.reading_date DESC
                  ),
-                 applicable_sources AS (
-                     SELECT hs.id, hs.source_code, hs.granularity, hs.availability
+                    applicable_sources AS (
+                     SELECT hs.id, hs.source_code, hs.granularity, hs.availability, hs.enabled
                      FROM heat_source hs
-                     WHERE hs.enabled = TRUE AND hs.granularity = 'KEYWORD'
+                     WHERE hs.granularity = 'KEYWORD'
 
                      UNION ALL
 
-                     SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability
+                     SELECT DISTINCT hs.id, hs.source_code, hs.granularity, hs.availability, hs.enabled
                      FROM heat_source hs
                      JOIN heat_reading hr ON hr.source_id = hs.id
                      JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                     WHERE hs.enabled = TRUE AND hs.granularity = 'CATEGORY'
+                     WHERE hs.granularity = 'CATEGORY'
                  )
                  SELECT a.source_code AS sourceCode,
                         a.granularity AS granularity,
                         CASE
                             WHEN a.availability = 'UNAVAILABLE' THEN 'UNAVAILABLE'
+                            WHEN a.enabled = FALSE THEN a.availability
                             WHEN t.today_pct IS NULL THEN 'DEGRADED'
                             ELSE a.availability
                         END AS availability,
+                        a.enabled AS enabled,
                         t.today_pct AS percentileWithinSource,
                         CASE WHEN t.today_pct IS NULL OR d7.pct_7d IS NULL THEN NULL ELSE
                             ROUND((t.today_pct - d7.pct_7d)
@@ -203,10 +212,10 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                             d.slope_7d         AS slope7d,
                             d.slope_30d        AS slope30d,
                             d.stage            AS stage,
-                            d.divergence_flag  AS divergenceFlag
+                            d.divergence_flag  AS divergenceFlag,
+                            k.enabled          AS enabled
                      FROM heat_composite_daily d
                      JOIN trend_keyword k ON k.id = d.keyword_id
-                     WHERE k.enabled = TRUE
                      ORDER BY d.keyword_id, d.stat_date DESC
                      """)
                 .query(TrendSignalRow.class)
@@ -214,45 +223,43 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     }
 
     /**
-     * §5.3.3 斜率計算所需的三個觀測點：t、t−7、t−30。
+     * §5.3.3 斜率計算所需的原始日序列。
      *
-     * <pre>
-     *   slope_7d  = (heat_t − heat_{t-7})  / max(heat_{t-7}, ε)
-     *   slope_30d = (heat_t − heat_{t-30}) / max(heat_{t-30}, ε)
-     * </pre>
-     *
-     * <p>刻意只回傳原始觀測值、不在 SQL 算斜率：ε 的取值與「兩者背離時標記
-     * 可能見頂」的判斷屬於評分規則，該由 ssds-core 的計分引擎決定，
-     * 散在 SQL 裡日後沒人找得到。
+     * <p><b>2026-09-18 修正：不再用「精確等於 t-7／t-30 那一天」去撈觀測點</b>
+     * ——像 Threads 這種資料源常常整天沒有任何 keyword_match 貼文（實測 8 月
+     * 就有 21 天完全空缺），精確比對會讓 slope7d／slope30d 動不動就是 null。
+     * 改成一次撈出涵蓋 t／t-7／t-30 三個觀測點「前後各 3 天」容錯窗所需的
+     * 完整區間原始序列，交給 {@link com.example.ssds.core.domain.HeatTrendCalculator#resolveAnchor}
+     * 逐一判斷「該窗口內有沒有足夠天數的資料可信、可信的話取哪一天」——
+     * 判斷規則屬於評分邏輯，不寫在 SQL 裡（理由同舊版註解：散在 SQL 裡以後
+     * 沒人找得到）。這裡只負責把「可能用得到的原始資料」全部撈出來。
      *
      * <p>註：{@code heat_composite_daily} 本身也有 slope_7d／slope_30d 兩欄，
-     * 那是批次寫入時算好的結果值。本方法給的是「現在重算一次」用的觀測點，
+     * 那是批次寫入時算好的結果值。本方法給的是「現在重算一次」用的觀測序列，
      * 兩者用途不同——要顯示既有結果就直接讀那兩欄，不必呼叫這裡。
      *
-     * @return key 為 {@code "t"} / {@code "t7"} / {@code "t30"}，缺該日資料時不含該 key
+     * @param from 序列起始日（含），呼叫端需自行涵蓋最遠觀測點（t-30）再往前
+     *             減掉容錯窗半徑
+     * @param to   序列結束日（含），呼叫端需自行涵蓋最近觀測點（t）再往後
+     *             加上容錯窗半徑
+     * @return key 為日期，value 為當天 composite_value；沒有資料的日期不含該 key
      */
-    public Map<String, BigDecimal> findSlopeAnchors(Long keywordId, LocalDate asOf) {
+    public Map<LocalDate, BigDecimal> findCompositeSeries(Long keywordId, LocalDate from, LocalDate to) {
         return jdbcClient
                 .sql("""
-                     SELECT CASE stat_date
-                                WHEN :t   THEN 't'
-                                WHEN :t7  THEN 't7'
-                                ELSE 't30'
-                            END AS anchor,
-                            composite_value
+                     SELECT stat_date, composite_value
                      FROM heat_composite_daily
                      WHERE keyword_id = :keywordId
-                       AND stat_date IN (:t, :t7, :t30)
+                       AND stat_date BETWEEN :from AND :to
                      """)
                 .param("keywordId", keywordId)
-                .param("t", asOf)
-                .param("t7", asOf.minusDays(7))
-                .param("t30", asOf.minusDays(30))
+                .param("from", from)
+                .param("to", to)
                 .query()
                 .listOfRows()
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        row -> (String) row.get("anchor"),
+                        row -> ((java.sql.Date) row.get("stat_date")).toLocalDate(),
                         row -> (BigDecimal) row.get("composite_value")));
     }
 
@@ -263,6 +270,11 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
      * 權重的重新正規化（分母只算可用來源）也一併在 SQL 內完成，
      * 因此任一來源不可用時其餘來源會自動按比例補上（§5.7 優雅降級）。
      *
+     * <p>關鍵字級來源仍只採用指定日期的讀值；Instagram 是週頻品類級來源，
+     * 因此採用「指定日期所在週、截至指定日期的最新一筆」。這讓週一採集的
+     * Instagram 資料可供同週每日規則合成與後續 Agent 5 共用，同時不跨週沿用、
+     * 也不會讀到指定日期之後的資料。
+     *
      * <p>回傳 null 表示該關鍵字當日沒有任何可用來源的讀值 ——
      * 呼叫端要當成「無資料」而非 0（§5.7 資料不足不懲罰）。
      *
@@ -270,7 +282,16 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
      * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
      * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
      * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
-     * 的定義（enabled 且非 UNAVAILABLE）不一致，以那兩處為準改過來。
+          * <p><b>2026-09-07 修正：「可用」的判定改成 {@code availability <> 'UNAVAILABLE'}</b>，
+     * 原本寫的是 {@code = 'AVAILABLE'}，會把 DEGRADED 的來源整個排除、而不是
+     * 「該來源那天沒有讀值時自然被 UNION 排除」。這跟 {@link com.example.ssds.infra.entity.HeatSource#contributesToComposite()}
+     * 與 {@code HeatSourceRepository#findContributingSources()} 兩處對「可計入合成」
+     * 的定義不一致，以那兩處為準改過來。
+     *
+     * <p><b>enabled 只管採集、不參與合成：</b>這裡刻意不看 {@code heat_source.enabled}。
+     * 來源被停用後不會再抓新資料，但只要該日（Instagram 為當週）已有讀值就照常計入；
+     * 當日沒有讀值則自然被 UNION 排除，權重在剩下的來源間重新正規化。
+     * 要讓舊讀值退出評分，請走 availability = UNAVAILABLE。
      */
     public Double findCompositeHeat(Long keywordId, LocalDate readingDate) {
         return jdbcClient
@@ -280,6 +301,20 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                         FROM product_keyword pk
                         JOIN product p ON p.id = pk.product_id
                         WHERE pk.keyword_id = :keywordId
+                    ),
+                    instagram_latest AS (
+                        SELECT DISTINCT ON (hr.source_id, hr.category_id)
+                               hr.source_id, hr.category_id, hr.percentile_within_source
+                        FROM heat_reading hr
+                        JOIN heat_source hs ON hs.id = hr.source_id
+                        JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                        WHERE hs.source_code = 'INSTAGRAM'
+                          AND hs.granularity = 'CATEGORY'
+                          AND hr.reading_date BETWEEN
+                              date_trunc('week', CAST(:readingDate AS date))::date
+                              AND :readingDate
+                          AND hr.percentile_within_source IS NOT NULL
+                        ORDER BY hr.source_id, hr.category_id, hr.reading_date DESC, hr.id DESC
                     ),
                     matched_readings AS (
                         SELECT hr.source_id, hr.percentile_within_source
@@ -292,14 +327,9 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
 
                         UNION ALL
 
-                        SELECT hr.source_id, AVG(hr.percentile_within_source)
-                        FROM heat_reading hr
-                        JOIN heat_source hs ON hs.id = hr.source_id
-                        JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                        WHERE hs.granularity = 'CATEGORY'
-                          AND hr.reading_date = :readingDate
-                          AND hr.percentile_within_source IS NOT NULL
-                        GROUP BY hr.source_id
+                        SELECT source_id, AVG(percentile_within_source)
+                        FROM instagram_latest
+                        GROUP BY source_id
                     )
                     SELECT CASE WHEN SUM(hs.composite_weight
                                     * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END) = 0 THEN NULL
@@ -310,8 +340,7 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
                            END AS composite
                     FROM matched_readings mr
                     JOIN heat_source hs ON hs.id = mr.source_id
-                    WHERE hs.enabled = TRUE
-                      AND hs.availability <> 'UNAVAILABLE'
+                    WHERE hs.availability <> 'UNAVAILABLE'
                     """)
                 .param("keywordId", keywordId)
                 .param("readingDate", readingDate)
@@ -323,13 +352,27 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
     public Map<String, BigDecimal> findAppliedWeights(Long keywordId, LocalDate readingDate) {
         List<Map<String, Object>> rows = jdbcClient
                 .sql("""
-                     WITH keyword_categories AS (
-                         SELECT DISTINCT p.category_id
-                         FROM product_keyword pk
-                         JOIN product p ON p.id = pk.product_id
-                         WHERE pk.keyword_id = :keywordId
-                     ),
-                     matched_readings AS (
+                      WITH keyword_categories AS (
+                          SELECT DISTINCT p.category_id
+                          FROM product_keyword pk
+                          JOIN product p ON p.id = pk.product_id
+                          WHERE pk.keyword_id = :keywordId
+                      ),
+                      instagram_latest AS (
+                          SELECT DISTINCT ON (hr.source_id, hr.category_id)
+                                 hr.source_id, hr.category_id
+                          FROM heat_reading hr
+                          JOIN heat_source hs ON hs.id = hr.source_id
+                          JOIN keyword_categories kc ON kc.category_id = hr.category_id
+                          WHERE hs.source_code = 'INSTAGRAM'
+                            AND hs.granularity = 'CATEGORY'
+                            AND hr.reading_date BETWEEN
+                                date_trunc('week', CAST(:readingDate AS date))::date
+                                AND :readingDate
+                            AND hr.percentile_within_source IS NOT NULL
+                          ORDER BY hr.source_id, hr.category_id, hr.reading_date DESC, hr.id DESC
+                      ),
+                      matched_readings AS (
                          SELECT hr.source_id
                          FROM heat_reading hr
                          JOIN heat_source hs ON hs.id = hr.source_id
@@ -340,27 +383,34 @@ public List<SourceBreakdownRow> findSourceBreakdown(Long keywordId) {
 
                          UNION
 
-                         SELECT hr.source_id
-                         FROM heat_reading hr
-                         JOIN heat_source hs ON hs.id = hr.source_id
-                         JOIN keyword_categories kc ON kc.category_id = hr.category_id
-                         WHERE hs.granularity = 'CATEGORY'
-                           AND hr.reading_date = :readingDate
-                           AND hr.percentile_within_source IS NOT NULL
+                          SELECT source_id
+                          FROM instagram_latest
                      )
                      SELECT hs.source_code AS sourceCode,
                             hs.composite_weight
                                 * CASE WHEN hs.granularity = 'CATEGORY' THEN 0.5 ELSE 1.0 END AS effectiveWeight
                      FROM matched_readings mr
                      JOIN heat_source hs ON hs.id = mr.source_id
-                     WHERE hs.enabled = TRUE
-                       AND hs.availability <> 'UNAVAILABLE'
+                     WHERE hs.availability <> 'UNAVAILABLE'
                      """)
                 .param("keywordId", keywordId)
                 .param("readingDate", readingDate)
                 .query()
                 .listOfRows();
 
+        return normalizeWeights(rows);
+    }
+
+    /**
+     * AC-14-4：把「有讀值且可用來源」的有效權重（品類級已在 SQL 乘上 0.5 粒度折扣）
+     * 重新正規化為總和 1，四位小數。這就是 {@code heat_composite_daily.applied_weights}
+     * 與畫面「本次合成比例」記錄的實際比例。
+     *
+     * <p>抽成獨立靜態方法只為了能不連資料庫就驗證除法與邊界；SQL 端的來源篩選
+     * （enabled 且非 UNAVAILABLE）仍在 {@link #findAppliedWeights}。
+     * 空清單或權重總和為 0 時回傳空 Map。
+     */
+    static Map<String, BigDecimal> normalizeWeights(List<Map<String, Object>> rows) {
         BigDecimal total = rows.stream()
                 .map(r -> (BigDecimal) r.get("effectiveWeight"))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

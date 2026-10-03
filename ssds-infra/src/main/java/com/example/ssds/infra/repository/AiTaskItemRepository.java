@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -16,9 +17,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport", "scoutCategory"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
     List<AiTaskItem> findByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
     @Query("select i.id from AiTaskItem i where i.task.id = :taskId and i.status = :status order by i.id")
@@ -30,6 +33,15 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
     @EntityGraph(attributePaths = {"task", "product", "product.category"})
     @Query("select i from AiTaskItem i where i.id = :id")
     java.util.Optional<AiTaskItem> findForProcessing(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"task", "product", "product.category", "scoutCategory"})
+    @Query("select i from AiTaskItem i where i.id = :id")
+    java.util.Optional<AiTaskItem> findSourcingResultById(@Param("id") Long id);
+
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"task", "product", "product.category", "product.keywords", "scoutCategory"})
+    @Query("select i from AiTaskItem i where i.id = :id")
+    java.util.Optional<AiTaskItem> findSourcingResultByIdForUpdate(@Param("id") Long id);
 
     long countByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 
@@ -45,4 +57,18 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
             @Param("taskType") AiTaskType taskType,
             @Param("statuses") Set<TaskStatus> statuses
     );
+
+    @Query("""
+            select distinct i.keyword.id
+            from AiTaskItem i
+            where i.keyword.id in :keywordIds
+              and i.task.taskType = :taskType
+              and i.task.status in :statuses
+            """)
+    Set<Long> findKeywordIdsInActiveTasks(
+            @Param("keywordIds") Set<Long> keywordIds,
+            @Param("taskType") AiTaskType taskType,
+            @Param("statuses") Set<TaskStatus> statuses
+    );
+
 }

@@ -31,6 +31,11 @@ public class AiTask {
     private AiTaskType taskType;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "budget_pool", nullable = false, length = 16)
+    @Builder.Default
+    private AiTaskType.BudgetPool budgetPool = AiTaskType.BudgetPool.TRACK_A;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
     private TaskStatus status = TaskStatus.PENDING;
@@ -46,6 +51,18 @@ public class AiTask {
     @Column(name = "fail_count", nullable = false)
     @Builder.Default
     private int failCount = 0;
+
+    @Column(name = "cache_hit_count", nullable = false)
+    @Builder.Default
+    private int cacheHitCount = 0;
+
+    @Column(name = "request_count", nullable = false)
+    @Builder.Default
+    private int requestCount = 0;
+
+    @Column(name = "retry_pool_request_count", nullable = false)
+    @Builder.Default
+    private int retryPoolRequestCount = 0;
 
     @Column(name = "total_cost_usd", nullable = false, precision = 10, scale = 5)
     @Builder.Default
@@ -70,6 +87,6 @@ public class AiTask {
     }
 
     public AiTaskType.BudgetPool budgetPool() {
-        return taskType.budgetPool();
+        return budgetPool;
     }
 }

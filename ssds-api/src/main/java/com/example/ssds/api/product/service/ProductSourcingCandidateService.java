@@ -1,18 +1,20 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.sourcing.SourcingDrivingHeatSelector;
+import com.example.ssds.core.domain.SourcingStatus;
 import com.example.ssds.core.domain.TrackType;
-import com.example.ssds.infra.dao.SourcingHeatSignalDao;
-import com.example.ssds.infra.dao.projection.SourcingHeatSignal;
 import com.example.ssds.infra.entity.CategoryLeadTime;
+import com.example.ssds.infra.entity.HeatCompositeDaily;
 import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.entity.SourcingCandidate;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.CategoryLeadTimeRepository;
+import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
 import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,20 +26,27 @@ public class ProductSourcingCandidateService {
 
     private final SourcingCandidateRepository candidateRepository;
     private final CategoryLeadTimeRepository leadTimeRepository;
-    private final SourcingHeatSignalDao heatSignalDao;
+    private final HeatCompositeDailyRepository heatComposites;
 
     public ProductSourcingCandidateService(
             SourcingCandidateRepository candidateRepository,
             CategoryLeadTimeRepository leadTimeRepository,
-            SourcingHeatSignalDao heatSignalDao
+            HeatCompositeDailyRepository heatComposites
     ) {
         this.candidateRepository = candidateRepository;
         this.leadTimeRepository = leadTimeRepository;
-        this.heatSignalDao = heatSignalDao;
+        this.heatComposites = heatComposites;
     }
 
     public void synchronize(Product product) {
         if (product.getTrackType() != TrackType.B) {
+            return;
+        }
+
+        Optional<SourcingCandidate> existingCandidate =
+                candidateRepository.findByProductId(product.getId());
+        if (existingCandidate.isPresent()
+                && product.getSourcingStatus() == SourcingStatus.PROMOTED) {
             return;
         }
 
@@ -50,13 +59,11 @@ public class ProductSourcingCandidateService {
              * 前置天數屬於 FR-17 的參照資料；尚未維護時仍允許品項
              * 建檔，清單以「—」顯示時效落差，待參照資料齊全後再同步。
              */
-            candidateRepository.findByProductId(product.getId())
-                    .ifPresent(candidateRepository::delete);
+            existingCandidate.ifPresent(candidateRepository::delete);
             return;
         }
 
-        SourcingCandidate candidate = candidateRepository
-                .findByProductId(product.getId())
+        SourcingCandidate candidate = existingCandidate
                 .orElseGet(() -> SourcingCandidate.builder()
                         .product(product)
                         .leadTimeDays(categoryLeadTime.getLeadTimeDays())
@@ -71,28 +78,31 @@ public class ProductSourcingCandidateService {
         Set<Long> keywordIds = product.getKeywords().stream()
                 .map(TrendKeyword::getId)
                 .collect(Collectors.toSet());
-        Map<Long, TrendKeyword> keywordsById = product.getKeywords().stream()
-                .collect(Collectors.toMap(TrendKeyword::getId, Function.identity()));
-
-        heatSignalDao.findLatest(keywordIds).ifPresentOrElse(
-                signal -> applySignal(candidate, signal, keywordsById),
-                () -> clearSignal(candidate, product)
-        );
+        Map<Long, HeatCompositeDaily> latestByKeyword = keywordIds.isEmpty()
+                ? Map.of()
+                : heatComposites.findLatestEligibleForDrivingKeyword(keywordIds).stream()
+                        .collect(Collectors.toMap(value -> value.getKeyword().getId(), value -> value));
+        HeatCompositeDaily signal = SourcingDrivingHeatSelector.select(
+                product.getKeywords(), latestByKeyword);
+        if (signal != null) {
+            applySignal(candidate, signal);
+        } else {
+            clearSignal(candidate, product);
+        }
 
         candidateRepository.saveAndFlush(candidate);
     }
 
     private void applySignal(
             SourcingCandidate candidate,
-            SourcingHeatSignal signal,
-            Map<Long, TrendKeyword> keywordsById
+            HeatCompositeDaily signal
     ) {
-        TrendKeyword drivingKeyword = keywordsById.get(signal.keywordId());
+        TrendKeyword drivingKeyword = signal.getKeyword();
         candidate.setDrivingKeyword(drivingKeyword);
         if (candidate.getKeyword() == null) {
             candidate.setKeyword(drivingKeyword);
         }
-        candidate.recalculateTimeGap(signal.estimatedLifespanDays());
+        candidate.recalculateTimeGap(signal.getEstimatedLifespanDays());
     }
 
     private void clearSignal(SourcingCandidate candidate, Product product) {
@@ -101,7 +111,6 @@ public class ProductSourcingCandidateService {
                     .min(Comparator.comparing(TrendKeyword::getId))
                     .orElse(null));
         }
-        candidate.setDrivingKeyword(null);
-        candidate.recalculateTimeGap(null);
+        // 沒有新的合格訊號時保留最後一次快照；未知資料不得讓已加入優先序者退回 PENDING。
     }
 }

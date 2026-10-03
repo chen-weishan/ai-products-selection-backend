@@ -75,6 +75,28 @@ class MigrationVerificationTest {
         assertAllApplied(flyway);
     }
 
+    @Test
+    @DisplayName("V28：類別與供應商軟刪除後，既有品項關聯仍完整保留")
+    void masterDataSoftDeletePreservesProductReferences() {
+        flyway("classpath:db/migration").migrate();
+
+        execute("INSERT INTO category (id, name, sort_order) VALUES (90001, '待刪類別', 0)");
+        execute("INSERT INTO supplier (id, name) VALUES (90001, '待刪供應商')");
+        execute("INSERT INTO product (id, name, category_id, supplier_id) "
+                + "VALUES (90001, '歷史品項', 90001, 90001)");
+        execute("UPDATE category SET deleted_at = now() WHERE id = 90001");
+        execute("UPDATE supplier SET deleted_at = now() WHERE id = 90001");
+
+        List<String> rows = queryStrings("""
+                SELECT p.name || '/' || c.name || '/' || s.name
+                FROM product p
+                JOIN category c ON c.id = p.category_id
+                JOIN supplier s ON s.id = p.supplier_id
+                WHERE p.id = 90001
+                """);
+        assertEquals(List.of("歷史品項/待刪類別/待刪供應商"), rows);
+    }
+
     /**
      * V12 之後的約定：public 底下每一張表都必須啟用 RLS。
      *
