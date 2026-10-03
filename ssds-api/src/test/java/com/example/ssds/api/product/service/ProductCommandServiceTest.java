@@ -46,6 +46,7 @@ import com.example.ssds.infra.repository.SourcingCandidateRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -739,26 +740,37 @@ class ProductCommandServiceTest {
         verify(auditLogRepository, never()).saveAll(anyList());
     }
 
+    /** §7.4：觀察／採納／淘汰的事件是「建立決策」，PATCH 狀態不可繞過決策模組。 */
     @Test
-    void decisionRoleCanRejectEvaluatingProductWithReason() {
-        Product product = existingProduct(TrackType.A, null);
-        AppUser actor = mockActor(product);
-
-        ProductStatusUpdateResponse response = service.changeStatus(
-                product.getId(),
-                new ProductStatusUpdateRequest(
-                        ProductStatus.REJECTED,
-                        "市場需求不足，暫不導入"
-                ),
-                actor.getEmail(),
-                Set.of("ROLE_BUYER"),
-                "127.0.0.1"
+    void decisionTransitionsMustGoThroughDecisionEndpoint() {
+        Map<ProductStatus, List<ProductStatus>> decisionTransitions = Map.of(
+                ProductStatus.EVALUATING,
+                List.of(ProductStatus.WATCHING, ProductStatus.ADOPTED, ProductStatus.REJECTED),
+                ProductStatus.WATCHING,
+                List.of(ProductStatus.ADOPTED, ProductStatus.REJECTED)
         );
+        decisionTransitions.forEach((source, targets) -> targets.forEach(target -> {
+            Product product = existingProduct(TrackType.A, null);
+            product.setStatus(source);
+            AppUser actor = mockActor(product);
 
-        assertEquals(ProductStatus.EVALUATING, response.previousStatus());
-        assertEquals(ProductStatus.REJECTED, response.currentStatus());
-        assertEquals("市場需求不足，暫不導入", product.getRejectReason());
-        verify(auditLogRepository).save(any(AuditLog.class));
+            BusinessException exception = assertThrows(
+                    BusinessException.class,
+                    () -> service.changeStatus(
+                            product.getId(),
+                            new ProductStatusUpdateRequest(target, "市場需求不足，暫不導入"),
+                            actor.getEmail(),
+                            Set.of("ROLE_SYS_ADMIN"),
+                            "127.0.0.1"
+                    ),
+                    source + " → " + target
+            );
+
+            assertEquals(ErrorCode.INVALID_STATE_TRANSITION, exception.getErrorCode());
+            assertEquals(source, product.getStatus());
+        }));
+        verify(productRepository, never()).saveAndFlush(any());
+        verify(auditLogRepository, never()).save(any(AuditLog.class));
     }
 
     @Test
