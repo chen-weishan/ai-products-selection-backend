@@ -9,10 +9,12 @@ package com.example.ssds.core.domain;
 public enum PostNoteCode {
     /** 爆得比預期快 */
     FASTER_THAN_EXPECTED,
-    /** 熱度已過 */
-    HEAT_FADED,
+    /** 熱度已過。V17 已將資料庫舊值 HEAT_FADED 改名為規格書的 HEAT_PASSED，此處同步。 */
+    HEAT_PASSED,
     /** 品質問題 */
     QUALITY_ISSUE,
     /** 物流出狀況 */
-    LOGISTICS_ISSUE
+    LOGISTICS_ISSUE,
+    /** 其他（搭配 post_note_text 說明） */
+    OTHER
 }

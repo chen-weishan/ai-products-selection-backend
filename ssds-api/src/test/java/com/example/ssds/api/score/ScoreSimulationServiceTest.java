@@ -73,6 +73,9 @@ class ScoreSimulationServiceTest {
     @Mock
     private SceneOverrideLookup sceneOverrideLookup;
 
+    @Mock
+    private DrivingTargetLookup drivingTargetLookup;
+
     @InjectMocks
     private ScoreSimulationService service;
 
@@ -89,6 +92,7 @@ class ScoreSimulationServiceTest {
                 .thenReturn(new PageImpl<>(scores, PageRequest.of(0, 20), scores.size()));
         when(scoreFactorRepository.findByScoreIdIn(any())).thenReturn(factors);
         when(sceneOverrideLookup.overriddenProductIds(anyString(), any())).thenReturn(Set.of());
+        when(drivingTargetLookup.resolve(any())).thenReturn(DrivingTargetLookup.DrivingTargets.EMPTY);
     }
 
     private SimulateRequest request(

@@ -357,6 +357,7 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
            });
            assertTrue(dtoOpt.isPresent(), "Should find an overdue campaign for our product");
            OverdueCampaignDto dto = dtoOpt.get();
+           assertEquals(dr.getId(), dto.getDecisionId());
            // overdueDays = (today - campaignEndDate) - 7 = (10) - 7 = 3
            assertEquals(3, dto.getOverdueDays());
     }
