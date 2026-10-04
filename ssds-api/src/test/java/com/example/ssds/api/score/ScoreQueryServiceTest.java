@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -35,6 +36,7 @@ import org.springframework.data.domain.PageRequest;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.score.dto.ScoreDeductionsResponse;
+import com.example.ssds.api.score.dto.ScoreFactorBarResponse;
 import com.example.ssds.api.score.dto.ScoreRankingRowResponse;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.Grade;
@@ -60,13 +62,20 @@ class ScoreQueryServiceTest {
     @Mock
     private SceneOverrideLookup sceneOverrideLookup;
 
+    @Mock
+    private DrivingTargetLookup drivingTargetLookup;
+
     @InjectMocks
     private ScoreQueryService service;
 
-    /** 預設「沒有任何品項被人工覆寫」；需要覆寫標記的測試各自重新 stub。 */
+    /**
+     * 預設「沒有任何品項被人工覆寫」、「沒有生效關鍵字／節慶」；
+     * 需要的測試各自重新 stub。
+     */
     @BeforeEach
     void noSceneOverrides() {
         when(sceneOverrideLookup.overriddenProductIds(anyString(), any())).thenReturn(Set.of());
+        when(drivingTargetLookup.resolve(any())).thenReturn(DrivingTargetLookup.DrivingTargets.EMPTY);
     }
 
     /**
@@ -176,6 +185,39 @@ class ScoreQueryServiceTest {
                 .containsExactly(true, false);
     }
 
+    /** AC-17-6、§5.3.3（v3.0.1 E-01／E-02）：長條帶出生效節慶與生效關鍵字的名稱。 */
+    @Test
+    @DisplayName("AC-17-6 FESTIVAL 長條帶生效節慶、TREND 長條帶生效關鍵字，其餘為 null")
+    void rankingBarsCarryDrivingTargets() {
+        ProductScore score = score(1L, new BigDecimal("4.00"));
+        ScoreFactor trend = ScoreTestFixtures.bonusFactor(score, FactorCode.TREND, new BigDecimal("90"), true);
+        trend.setDrivingKeywordId(9L);
+        ScoreFactor festival = ScoreTestFixtures.bonusFactor(score, FactorCode.FESTIVAL, new BigDecimal("85"), true);
+        festival.setDrivingFestivalId(7L);
+        ScoreFactor margin = ScoreTestFixtures.bonusFactor(score, FactorCode.MARGIN, new BigDecimal("60"), true);
+        List<ScoreFactor> factors = List.of(trend, festival, margin);
+
+        when(productScoreRepository.findRanking(anyString(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(score), PageRequest.of(0, 20), 1));
+        when(scoreFactorRepository.findByScoreIdIn(any())).thenReturn(factors);
+        when(drivingTargetLookup.resolve(factors)).thenReturn(new DrivingTargetLookup.DrivingTargets(
+                Map.of(9L, "露營"), Map.of(7L, "中秋節")));
+
+        List<ScoreFactorBarResponse> bars =
+                service.ranking("2026W30", SceneType.VIRAL, null, PageRequest.of(0, 20))
+                        .getContent().get(0).factors();
+
+        assertThat(bars).extracting(ScoreFactorBarResponse::factorCode)
+                .containsExactly(FactorCode.TREND, FactorCode.MARGIN, FactorCode.FESTIVAL);
+        assertThat(bars.get(0).drivingKeywordId()).isEqualTo(9L);
+        assertThat(bars.get(0).drivingKeyword()).isEqualTo("露營");
+        assertThat(bars.get(0).drivingFestivalName()).isNull();
+        assertThat(bars.get(1).drivingKeyword()).isNull();
+        assertThat(bars.get(1).drivingFestivalName()).isNull();
+        assertThat(bars.get(2).drivingFestivalId()).isEqualTo(7L);
+        assertThat(bars.get(2).drivingFestivalName()).isEqualTo("中秋節");
+    }
+
     /** AC-04-1：總分等於加分小計減扣分小計。 */
     @Test
     @DisplayName("AC-04-1 排行列的加分、扣分、總分三欄取資料庫既有值")
@@ -272,6 +314,8 @@ class ScoreQueryServiceTest {
         when(productScoreRepository.findSnapshot(1L, "2026W30", null))
                 .thenReturn(Optional.of(s));
         when(scoreFactorRepository.findByScoreId(1L)).thenReturn(List.of(trend));
+        when(drivingTargetLookup.resolve(List.of(trend))).thenReturn(new DrivingTargetLookup.DrivingTargets(
+                Map.of(301L, "露營"), Map.of()));
 
         var detail = service.snapshot(1L, "2026W30", null);
 
@@ -281,6 +325,9 @@ class ScoreQueryServiceTest {
             assertThat(factor.weight()).isEqualByComparingTo("0.500");
             assertThat(factor.contribution()).isEqualByComparingTo("40.00000");
             assertThat(factor.drivingKeywordId()).isEqualTo(301L);
+            // AC-17-6：詳情頁同樣帶生效標的名稱
+            assertThat(factor.drivingKeyword()).isEqualTo("露營");
+            assertThat(factor.drivingFestivalName()).isNull();
         });
     }
 

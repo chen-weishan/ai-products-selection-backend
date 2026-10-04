@@ -16,11 +16,20 @@ import com.example.ssds.core.domain.FactorCode;
  * <p>
  * 扣分因子的 {@code normalizedValue} 與 {@code weight} 恆為 null
  * （§5.2.2 扣分固定生效、不參與權重，也不做百分位換算），前端不能當 0 畫。
+ *
+ * <p>
+ * {@code driving*} 四欄：多對一取最大值時實際生效的標的（v3.0.1 E-01／E-02）。
+ * 只有 {@code TREND} 會有生效關鍵字（§5.3.3）、只有 {@code FESTIVAL} 會有生效節慶
+ * （AC-17-6「於 UI 標示生效節慶」）；其餘因子、或評分引擎未寫入時皆為 null。
  */
 public record ScoreFactorBarResponse(
         FactorCode factorCode,
         BigDecimal normalizedValue,
         BigDecimal weight,
         boolean dataAvailable,
-        boolean imputed) {
+        boolean imputed,
+        Long drivingKeywordId,
+        String drivingKeyword,
+        Long drivingFestivalId,
+        String drivingFestivalName) {
 }
