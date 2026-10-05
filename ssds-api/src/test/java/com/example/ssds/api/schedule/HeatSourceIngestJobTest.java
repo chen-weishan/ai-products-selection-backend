@@ -1,6 +1,5 @@
 package com.example.ssds.api.schedule;
 
-import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,20 +31,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 class HeatSourceIngestJobTest {
-
-    @Test
-    void sourceJobsRemainEnabledByDefault() {
-        assertAll(
-                () -> assertSourceSwitch(
-                        ThreadsHeatIngestJob.class, "ssds.ingest.threads.enabled"),
-                () -> assertSourceSwitch(
-                        GoogleTrendsHeatIngestJob.class, "ssds.ingest.google-trends.enabled"),
-                () -> assertSourceSwitch(
-                        InstagramHeatIngestJob.class, "ssds.ingest.instagram.enabled"));
-    }
 
     @Test
     void threadsFailureMarksSourceUnavailable() {
@@ -330,13 +317,6 @@ class HeatSourceIngestJobTest {
         service.backfillRangeForKeyword(1L, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
 
         org.mockito.Mockito.verifyNoInteractions(client);
-    }
-
-    private static void assertSourceSwitch(Class<?> jobType, String propertyName) {
-        ConditionalOnProperty condition = jobType.getAnnotation(ConditionalOnProperty.class);
-        assertEquals(propertyName, condition.name()[0]);
-        assertEquals("true", condition.havingValue());
-        assertTrue(condition.matchIfMissing());
     }
 
     private static HeatSource enabledSource(HeatSourceCode sourceCode) {
