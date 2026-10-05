@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
 /**
  * 校準模組的操作者驗證與稽核。
  *
- * <p>角色在 service 層以資料庫中的角色再驗一次：全專案未啟用 {@code @EnableMethodSecurity}，
- * controller 上的 {@code @PreAuthorize} 目前不生效，只靠它的話任何登入者都能核准校準（違反 AC-15-3）。
+ * <p>第一道把關是 controller 的 {@code @PreAuthorize}（看 JWT 內的角色）；這裡以資料庫中的角色再驗一次，
+ * 擋下 token 簽發後才被撤銷角色的使用者，並取得寫入 {@code reviewed_by}／稽核所需的 {@link AppUser}。
  * 與 {@code ProductCommandService} 在 service 層自行擋角色的做法一致。
  */
 @Component

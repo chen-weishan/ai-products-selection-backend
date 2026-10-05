@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 public class WeightCalibrationController {
     private final AiTaskService taskService;
     public WeightCalibrationController(AiTaskService taskService){this.taskService=taskService;}
+    // 會消耗 AI 預算並覆寫報告的 AI 欄位；比照產生報告限 BUYER_LEAD、SYS_ADMIN（設計決定，§2.1 未列）
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('BUYER_LEAD', 'SYS_ADMIN')")
     @PostMapping("/{reportId}/interpretation")
     public ResponseEntity<ApiResponse<AiTaskResponse>> interpret(
             @PathVariable("reportId") Long reportId,

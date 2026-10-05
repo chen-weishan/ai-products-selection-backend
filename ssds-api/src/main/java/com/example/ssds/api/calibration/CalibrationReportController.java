@@ -80,7 +80,7 @@ public class CalibrationReportController {
         return ApiResponse.success(reportService.generate(quarter, actorOf(authentication), httpRequest.getRemoteAddr()));
     }
 
-    /** 全專案未啟用方法層安全，{@code @PreAuthorize} 目前不生效；角色由 service 層的 CalibrationActors 實際把關。 */
+    /** 匿名請求已先被 {@code @PreAuthorize} 擋下（403）；service 層的 CalibrationActors 再以資料庫角色複驗。 */
     private static String actorOf(Authentication authentication) {
         return authentication == null ? null : authentication.getName();
     }
