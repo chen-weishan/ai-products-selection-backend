@@ -58,6 +58,17 @@ public interface SceneClassificationLogRepository
     /** 分母。 */
     long countByCreatedAtBetween(Instant from, Instant to);
 
+    /**
+     * FR-08 {@code scene-stats}：某權重版本生效區間 {@code [from, to)} 內的全部判定紀錄。
+     * 本表沒有 {@code weight_version_id}，只能以版本生效區間對應。
+     * 依 createdAt 遞減，由呼叫端取每個品項的第一筆（同 {@link #findByPeriodAndProductIdInOrderByCreatedAtDesc}）。
+     */
+    List<SceneClassificationLog> findByCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+            Instant from, Instant to);
+
+    /** 同上，但區間沒有終點（生效中版本，至今）。 */
+    List<SceneClassificationLog> findByCreatedAtGreaterThanEqualOrderByCreatedAtDesc(Instant from);
+
     @EntityGraph(attributePaths = {"product", "product.category"})
     List<SceneClassificationLog> findByCreatedAtBetween(Instant from, Instant to);
 }
