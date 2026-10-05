@@ -306,6 +306,7 @@ class HeatCompositeCatchUpTest {
         ObjectProvider<ThreadsHeatIngestJob> threadsProvider = provider(null);
         ObjectProvider<GoogleTrendsHeatIngestJob> trendsProvider = provider(null);
         ObjectProvider<InstagramHeatIngestJob> instagramProvider = provider(null);
+        ObjectProvider<ManualHeatReadingJob> manualProvider = provider(null);
         TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository composites = mock(HeatCompositeDailyRepository.class);
         HeatReadingRepository readings = mock(HeatReadingRepository.class);
@@ -317,6 +318,7 @@ class HeatCompositeCatchUpTest {
                 threadsProvider,
                 trendsProvider,
                 instagramProvider,
+                manualProvider,
                 keywords,
                 composites,
                 readings,
@@ -324,6 +326,7 @@ class HeatCompositeCatchUpTest {
                 CronExpression.parse("0 15 3 * * *"),
                 CronExpression.parse("0 0 6 * * *"),
                 CronExpression.parse("0 30 3 * * MON"),
+                CronExpression.parse("0 45 3 * * *"),
                 fixedClock("2026-09-20T23:01:00Z"));
 
         catchUp.catchUp(ZonedDateTime.now(fixedClock("2026-09-20T23:01:00Z")));
@@ -332,7 +335,106 @@ class HeatCompositeCatchUpTest {
         verify(threadsProvider).getIfAvailable();
         verify(trendsProvider).getIfAvailable();
         verify(instagramProvider).getIfAvailable();
+        verify(manualProvider).getIfAvailable();
         verifyNoInteractions(readings);
+    }
+
+    @Test
+    void reconcilesManualReadingAfterItsScheduleWithoutComposingBeforeSix() {
+        String instant = "2026-09-20T20:00:00Z"; // Asia/Taipei 04:00
+        HeatCompositeCalibrationJob job = mock(HeatCompositeCalibrationJob.class);
+        ManualHeatReadingJob manualJob = mock(ManualHeatReadingJob.class);
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository composites = mock(HeatCompositeDailyRepository.class);
+        HeatCompositeCatchUp catchUp = new HeatCompositeCatchUp(
+                job,
+                provider(null),
+                provider(null),
+                provider(null),
+                provider(manualJob),
+                keywords,
+                composites,
+                mock(HeatReadingRepository.class),
+                CronExpression.parse("0 0 3 * * *"),
+                CronExpression.parse("0 15 3 * * *"),
+                CronExpression.parse("0 0 6 * * *"),
+                CronExpression.parse("0 30 3 * * MON"),
+                CronExpression.parse("0 45 3 * * *"),
+                fixedClock(instant));
+
+        catchUp.catchUp(ZonedDateTime.now(fixedClock(instant)));
+
+        verify(manualJob).reconcile(
+                org.mockito.ArgumentMatchers.eq(BUSINESS_DATE), org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(job);
+    }
+
+    @Test
+    void manualReadingChangeAfterSixRecomposesAllKeywords() {
+        String instant = "2026-09-20T23:01:00Z"; // Asia/Taipei 07:01
+        HeatCompositeCalibrationJob job = mock(HeatCompositeCalibrationJob.class);
+        ManualHeatReadingJob manualJob = mock(ManualHeatReadingJob.class);
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository composites = mock(HeatCompositeDailyRepository.class);
+        when(manualJob.reconcile(
+                        org.mockito.ArgumentMatchers.eq(BUSINESS_DATE), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ManualHeatReadingJob.ReconcileResult(true, false, java.util.Set.of(7L)));
+        when(keywords.countByEnabledTrue()).thenReturn(3L);
+        when(composites.findEnabledKeywordIdsMissingStatDate(BUSINESS_DATE)).thenReturn(java.util.List.of());
+        HeatCompositeCatchUp catchUp = new HeatCompositeCatchUp(
+                job,
+                provider(null),
+                provider(null),
+                provider(null),
+                provider(manualJob),
+                keywords,
+                composites,
+                mock(HeatReadingRepository.class),
+                CronExpression.parse("0 0 3 * * *"),
+                CronExpression.parse("0 15 3 * * *"),
+                CronExpression.parse("0 0 6 * * *"),
+                CronExpression.parse("0 30 3 * * MON"),
+                CronExpression.parse("0 45 3 * * *"),
+                fixedClock(instant));
+
+        catchUp.catchUp(ZonedDateTime.now(fixedClock(instant)));
+
+        verify(job).runCatchUpAll(BUSINESS_DATE);
+        verify(job, never()).runCatchUp(BUSINESS_DATE, java.util.List.of());
+    }
+
+    @Test
+    void existingCompositeMissingManualWeightIsRecomposedAfterSix() {
+        String instant = "2026-09-20T23:01:00Z"; // Asia/Taipei 07:01
+        HeatCompositeCalibrationJob job = mock(HeatCompositeCalibrationJob.class);
+        ManualHeatReadingJob manualJob = mock(ManualHeatReadingJob.class);
+        TrendKeywordRepository keywords = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository composites = mock(HeatCompositeDailyRepository.class);
+        when(manualJob.reconcile(
+                        org.mockito.ArgumentMatchers.eq(BUSINESS_DATE), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(ManualHeatReadingJob.ReconcileResult.noChange());
+        when(keywords.countByEnabledTrue()).thenReturn(3L);
+        when(composites.findEnabledKeywordIdsMissingStatDate(BUSINESS_DATE)).thenReturn(java.util.List.of());
+        when(composites.existsEnabledManualReadingMissingFromComposite(BUSINESS_DATE)).thenReturn(true);
+        HeatCompositeCatchUp catchUp = new HeatCompositeCatchUp(
+                job,
+                provider(null),
+                provider(null),
+                provider(null),
+                provider(manualJob),
+                keywords,
+                composites,
+                mock(HeatReadingRepository.class),
+                CronExpression.parse("0 0 3 * * *"),
+                CronExpression.parse("0 15 3 * * *"),
+                CronExpression.parse("0 0 6 * * *"),
+                CronExpression.parse("0 30 3 * * MON"),
+                CronExpression.parse("0 45 3 * * *"),
+                fixedClock(instant));
+
+        catchUp.catchUp(ZonedDateTime.now(fixedClock(instant)));
+
+        verify(job).runCatchUpAll(BUSINESS_DATE);
     }
 
     private static HeatCompositeCatchUp catchUpAt(
@@ -349,6 +451,7 @@ class HeatCompositeCatchUpTest {
                 provider(threadsJob),
                 provider(trendsJob),
                 provider(instagramJob),
+                provider(null),
                 keywords,
                 composites,
                 readings,
@@ -356,6 +459,7 @@ class HeatCompositeCatchUpTest {
                 CronExpression.parse("0 15 3 * * *"),
                 CronExpression.parse("0 0 6 * * *"),
                 CronExpression.parse("0 30 3 * * MON"),
+                CronExpression.parse("0 45 3 * * *"),
                 fixedClock(instant));
     }
 

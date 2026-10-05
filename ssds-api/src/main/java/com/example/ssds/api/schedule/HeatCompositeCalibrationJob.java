@@ -10,6 +10,7 @@ import com.example.ssds.infra.repository.HeatReadingRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
 import com.example.ssds.infra.service.HeatCompositeCalibrationService;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
@@ -35,7 +36,7 @@ import org.springframework.stereotype.Component;
  * <p>執行順序必須是：①先重算當天所有來源的 percentile_within_source，
  * ②再逐一關鍵字合成——順序反了的話，合成會讀到「今天」的百分位是舊值或 NULL。
  *
- * <p>Threads、Google Trends 與 Instagram 各自先完成採集；本任務於台北 06:00
+ * <p>Threads、Google Trends、Instagram 與 MANUAL 各自先完成採集；本任務於台北 06:00
  * 先補查仍缺漏的來源讀值，再執行合成，接著依序呼叫已啟用的 B 軌時效重算與
  * Agent 5 enqueue。下游不再各自依賴固定分鐘差的 cron，因此只會處理本次主流程
  * 已完成的營業日資料。
@@ -54,6 +55,7 @@ public class HeatCompositeCalibrationJob {
     private final ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider;
     private final ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider;
     private final ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider;
+    private final ObjectProvider<ManualHeatReadingJob> manualHeatReadingJobProvider;
     private final ObjectProvider<SourcingTimeGapRecalculationJob> timeGapJobProvider;
     private final ObjectProvider<TrendInterpretationJob> trendInterpretationJobProvider;
 
@@ -66,6 +68,7 @@ public class HeatCompositeCalibrationJob {
             ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider,
             ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider,
             ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider,
+            ObjectProvider<ManualHeatReadingJob> manualHeatReadingJobProvider,
             ObjectProvider<SourcingTimeGapRecalculationJob> timeGapJobProvider,
             ObjectProvider<TrendInterpretationJob> trendInterpretationJobProvider) {
         this.percentileDao = percentileDao;
@@ -76,6 +79,7 @@ public class HeatCompositeCalibrationJob {
         this.threadsIngestJobProvider = threadsIngestJobProvider;
         this.googleTrendsIngestJobProvider = googleTrendsIngestJobProvider;
         this.instagramIngestJobProvider = instagramIngestJobProvider;
+        this.manualHeatReadingJobProvider = manualHeatReadingJobProvider;
         this.timeGapJobProvider = timeGapJobProvider;
         this.trendInterpretationJobProvider = trendInterpretationJobProvider;
     }
@@ -110,6 +114,11 @@ public class HeatCompositeCalibrationJob {
             if (!instagramDataAdded && instagramReadingExists) {
                 instagramIngestJob.restoreAvailabilityFromCurrentWeek(businessDate);
             }
+        }
+
+        ManualHeatReadingJob manualHeatReadingJob = manualHeatReadingJobProvider.getIfAvailable();
+        if (manualHeatReadingJob != null) {
+            manualHeatReadingJob.reconcile(businessDate, Instant.now());
         }
 
         run(businessDate);

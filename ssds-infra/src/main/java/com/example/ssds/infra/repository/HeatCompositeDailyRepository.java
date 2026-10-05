@@ -40,6 +40,30 @@ public interface HeatCompositeDailyRepository
             """, nativeQuery = true)
     List<Long> findEnabledKeywordIdsMissingStatDate(@Param("statDate") LocalDate statDate);
 
+    /**
+     * 今日已有可用 MANUAL reading，但既有合成尚未記錄 MANUAL 權重的啟用關鍵字是否存在。
+     * 供啟動補跑修復「合成列已存在，因此一般缺漏檢查看不出來源缺失」的情況。
+     */
+    @Query(value = """
+            select exists (
+                select 1
+                from heat_reading reading
+                join heat_source source on source.id = reading.source_id
+                join trend_keyword keyword on keyword.id = reading.keyword_id
+                left join heat_composite_daily composite
+                  on composite.keyword_id = reading.keyword_id
+                 and composite.stat_date = reading.reading_date
+                where reading.reading_date = :statDate
+                  and source.source_code = 'MANUAL'
+                  and source.availability <> 'UNAVAILABLE'
+                  and reading.percentile_within_source is not null
+                  and keyword.enabled = true
+                  and (composite.keyword_id is null
+                       or not jsonb_exists(composite.applied_weights, 'MANUAL'))
+            )
+            """, nativeQuery = true)
+    boolean existsEnabledManualReadingMissingFromComposite(@Param("statDate") LocalDate statDate);
+
     List<HeatCompositeDaily> findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
             Long keywordId, LocalDate from, LocalDate to);
 

@@ -1,5 +1,6 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.schedule.ManualHeatReadingJob.ReconcileResult;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
 import com.example.ssds.infra.repository.HeatReadingRepository;
@@ -36,6 +37,7 @@ public class HeatCompositeCatchUp {
     private final ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider;
     private final ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider;
     private final ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider;
+    private final ObjectProvider<ManualHeatReadingJob> manualHeatReadingJobProvider;
     private final TrendKeywordRepository keywordRepository;
     private final HeatCompositeDailyRepository compositeRepository;
     private final HeatReadingRepository heatReadingRepository;
@@ -43,6 +45,7 @@ public class HeatCompositeCatchUp {
     private final CronExpression googleTrendsSchedule;
     private final CronExpression dailySchedule;
     private final CronExpression instagramSchedule;
+    private final CronExpression manualSchedule;
     private final Clock clock;
 
     @Autowired
@@ -51,18 +54,21 @@ public class HeatCompositeCatchUp {
             ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider,
             ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider,
             ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider,
+            ObjectProvider<ManualHeatReadingJob> manualHeatReadingJobProvider,
             TrendKeywordRepository keywordRepository,
             HeatCompositeDailyRepository compositeRepository,
             HeatReadingRepository heatReadingRepository,
             @Value("${ssds.ingest.threads.cron:0 0 3 * * *}") String threadsCron,
             @Value("${ssds.ingest.google-trends.cron:0 15 3 * * *}") String googleTrendsCron,
             @Value("${ssds.calibration.heat-composite.cron:0 0 6 * * *}") String dailyCron,
-            @Value("${ssds.ingest.instagram.cron:0 30 3 * * MON}") String instagramCron) {
+            @Value("${ssds.ingest.instagram.cron:0 30 3 * * MON}") String instagramCron,
+            @Value("${ssds.schedule.manual-heat.cron:0 45 3 * * *}") String manualCron) {
         this(
                 calibrationJob,
                 threadsIngestJobProvider,
                 googleTrendsIngestJobProvider,
                 instagramIngestJobProvider,
+                manualHeatReadingJobProvider,
                 keywordRepository,
                 compositeRepository,
                 heatReadingRepository,
@@ -70,6 +76,7 @@ public class HeatCompositeCatchUp {
                 CronExpression.parse(googleTrendsCron),
                 CronExpression.parse(dailyCron),
                 CronExpression.parse(instagramCron),
+                CronExpression.parse(manualCron),
                 Clock.system(BUSINESS_ZONE));
     }
 
@@ -78,6 +85,7 @@ public class HeatCompositeCatchUp {
             ObjectProvider<ThreadsHeatIngestJob> threadsIngestJobProvider,
             ObjectProvider<GoogleTrendsHeatIngestJob> googleTrendsIngestJobProvider,
             ObjectProvider<InstagramHeatIngestJob> instagramIngestJobProvider,
+            ObjectProvider<ManualHeatReadingJob> manualHeatReadingJobProvider,
             TrendKeywordRepository keywordRepository,
             HeatCompositeDailyRepository compositeRepository,
             HeatReadingRepository heatReadingRepository,
@@ -85,11 +93,13 @@ public class HeatCompositeCatchUp {
             CronExpression googleTrendsSchedule,
             CronExpression dailySchedule,
             CronExpression instagramSchedule,
+            CronExpression manualSchedule,
             Clock clock) {
         this.calibrationJob = calibrationJob;
         this.threadsIngestJobProvider = threadsIngestJobProvider;
         this.googleTrendsIngestJobProvider = googleTrendsIngestJobProvider;
         this.instagramIngestJobProvider = instagramIngestJobProvider;
+        this.manualHeatReadingJobProvider = manualHeatReadingJobProvider;
         this.keywordRepository = keywordRepository;
         this.compositeRepository = compositeRepository;
         this.heatReadingRepository = heatReadingRepository;
@@ -97,6 +107,7 @@ public class HeatCompositeCatchUp {
         this.googleTrendsSchedule = googleTrendsSchedule;
         this.dailySchedule = dailySchedule;
         this.instagramSchedule = instagramSchedule;
+        this.manualSchedule = manualSchedule;
         this.clock = clock;
     }
 
@@ -116,6 +127,16 @@ public class HeatCompositeCatchUp {
         boolean threadsSchedulePassed = schedulePassed(now, businessDate, threadsScheduledAt);
         boolean googleTrendsSchedulePassed = schedulePassed(now, businessDate, googleTrendsScheduledAt);
         boolean dailySchedulePassed = schedulePassed(now, businessDate, dailyScheduledAt);
+        ZonedDateTime manualScheduledAt = manualSchedule.next(startOfDay.minusNanos(1));
+        boolean manualSchedulePassed = schedulePassed(now, businessDate, manualScheduledAt);
+
+        ReconcileResult manualResult = ReconcileResult.noChange();
+        if (manualSchedulePassed) {
+            ManualHeatReadingJob manualJob = manualHeatReadingJobProvider.getIfAvailable();
+            if (manualJob != null) {
+                manualResult = manualJob.reconcile(businessDate, now.toInstant());
+            }
+        }
 
         InstagramHeatIngestJob instagramIngestJob = instagramIngestJobProvider.getIfAvailable();
         ZonedDateTime instagramScheduledAt = instagramSchedule.next(
@@ -142,7 +163,10 @@ public class HeatCompositeCatchUp {
             }
         }
 
-        if (!threadsSchedulePassed && !googleTrendsSchedulePassed && !dailySchedulePassed) {
+        if (!threadsSchedulePassed
+                && !googleTrendsSchedulePassed
+                && !manualSchedulePassed
+                && !dailySchedulePassed) {
             return;
         }
         long enabledKeywords = keywordRepository.countByEnabledTrue();
@@ -173,7 +197,14 @@ public class HeatCompositeCatchUp {
 
         long completedKeywords = enabledKeywords - missingKeywordIds.size();
         boolean dailyCatchUpDue = !missingKeywordIds.isEmpty();
-        if (!dailyCatchUpDue && !instagramDataAdded && !instagramAvailabilityRestored) {
+        boolean manualMissingFromExistingComposite =
+                compositeRepository.existsEnabledManualReadingMissingFromComposite(businessDate);
+        boolean manualRecompositionDue =
+                manualResult.requiresRecomposition() || manualMissingFromExistingComposite;
+        if (!dailyCatchUpDue
+                && !instagramDataAdded
+                && !instagramAvailabilityRestored
+                && !manualRecompositionDue) {
             log.info(
                     "每日熱度主流程今日已完成，不需補跑：date={}, completed={}/{}",
                     businessDate,
@@ -189,7 +220,7 @@ public class HeatCompositeCatchUp {
                     completedKeywords,
                     enabledKeywords);
         }
-        if (instagramDataAdded || instagramAvailabilityRestored) {
+        if (instagramDataAdded || instagramAvailabilityRestored || manualRecompositionDue) {
             calibrationJob.runCatchUpAll(businessDate);
         } else {
             calibrationJob.runCatchUp(businessDate, missingKeywordIds);
