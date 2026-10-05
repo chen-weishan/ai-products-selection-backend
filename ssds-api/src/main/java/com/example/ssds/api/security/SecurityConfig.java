@@ -122,7 +122,8 @@ public class SecurityConfig {
 
 		config.setAllowedOrigins(Arrays.asList("http://localhost:4200", "http://localhost:64567")); // 前端網址
 
-		config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+		// PATCH 必須列入：§8.2 的品項狀態、風險確認、關鍵字啟停都是 PATCH，漏列時瀏覽器請求一律 403 Invalid CORS request
+		config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
 		config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
 

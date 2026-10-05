@@ -28,8 +28,16 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
         @EntityGraph(attributePaths = { "factors", "weightVersion" })
         Optional<ProductScore> findFirstByProductIdOrderByCalculatedAtDesc(Long productId);
 
-        /** Agent 輸入只採用最新的主情境現行分數，避免把次要情境扣分重複送出。 */
-        @EntityGraph(attributePaths = { "factors" })
+        /**
+         * 最新的主情境現行分數，兩個用途共用：
+         * <ul>
+         * <li>Agent 輸入只採用這筆，避免把次要情境扣分重複送出（需要 {@code factors}）。</li>
+         * <li>FR-11-1 決策綁定的評分：次要情境與被重算取代的舊列都不可綁（AC-11-1）。
+         * 全量評分每週一次、重複評分以 calculated_at 最新者為有效（§5.10），故最新一筆即當前 period；
+         * 決策是對「現在」的判斷，不接受由呼叫端指定舊 period（需要 {@code weightVersion}）。</li>
+         * </ul>
+         */
+        @EntityGraph(attributePaths = { "factors", "weightVersion" })
         Optional<ProductScore> findFirstByProductIdAndPrimaryTrueAndActiveTrueOrderByCalculatedAtDesc(
                         Long productId);
 

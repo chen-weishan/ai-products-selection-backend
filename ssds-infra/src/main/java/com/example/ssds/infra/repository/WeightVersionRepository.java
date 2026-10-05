@@ -3,6 +3,7 @@ package com.example.ssds.infra.repository;
 import com.example.ssds.core.domain.WeightVersionStatus;
 import com.example.ssds.infra.entity.WeightVersion;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
@@ -51,6 +52,14 @@ public interface WeightVersionRepository extends JpaRepository<WeightVersion, Lo
     Optional<WeightVersion> findByVersionNo(String versionNo);
 
     List<WeightVersion> findAllByOrderByCreatedAtDesc();
+
+    /**
+     * 生效日晚於 {@code effectiveFrom} 的最早一版＝取代該版本的下一版，
+     * 其生效日即該版本生效區間的終點（FR-08 {@code scene-stats}）。
+     * 草稿的 effectiveFrom 為 NULL，SQL 的 {@code >} 不會選到。
+     */
+    Optional<WeightVersion> findFirstByEffectiveFromGreaterThanOrderByEffectiveFromAsc(
+            LocalDate effectiveFrom);
 
     /** 評分時要連權重明細一起取，否則每個因子都會多一次查詢。 */
     @EntityGraph(attributePaths = {"profiles"})
