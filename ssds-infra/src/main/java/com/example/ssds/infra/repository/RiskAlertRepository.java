@@ -33,6 +33,54 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
     @EntityGraph(attributePaths = { "product", "product.category" })
     Page<RiskAlert> findByStatusAndSeverity(AlertStatus status, Severity severity, Pageable pageable);
 
+     /** 篩選示警；未指定狀態時排除 IGNORED，並固定依嚴重度、偵測時間排序。 */
+    @EntityGraph(attributePaths = { "product", "product.category" })
+    @Query(value = """
+            select r from RiskAlert r
+            where ((:status is not null and r.status = :status)
+               or (:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED))
+            order by case r.severity
+                         when com.example.ssds.core.domain.Severity.HIGH then 0
+                         when com.example.ssds.core.domain.Severity.MEDIUM then 1
+                         else 2 end,
+                     r.detectedAt desc
+            """,
+            countQuery = """
+            select count(r) from RiskAlert r
+            where ((:status is not null and r.status = :status)
+               or (:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED))
+            """)
+    Page<RiskAlert> findVisible(@Param("status") AlertStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = { "product", "product.category" })
+    @Query(value = """
+            select r from RiskAlert r
+            where ((:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED)
+                 or (:status is not null and r.status = :status))
+              and (:severity is null or r.severity = :severity)
+              and (:riskType is null or r.riskType = :riskType)
+              and (:categoryId is null or r.product.category.id = :categoryId)
+            order by case r.severity
+                         when com.example.ssds.core.domain.Severity.HIGH then 0
+                         when com.example.ssds.core.domain.Severity.MEDIUM then 1
+                         else 2 end,
+                     r.detectedAt desc
+            """,
+            countQuery = """
+            select count(r) from RiskAlert r
+            where ((:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED)
+                 or (:status is not null and r.status = :status))
+              and (:severity is null or r.severity = :severity)
+              and (:riskType is null or r.riskType = :riskType)
+              and (:categoryId is null or r.product.category.id = :categoryId)
+            """)
+    Page<RiskAlert> search(
+            @Param("status") AlertStatus status,
+            @Param("severity") Severity severity,
+            @Param("riskType") String riskType,
+            @Param("categoryId") Long categoryId,
+            Pageable pageable);
+
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);
 
     /** 儀表板的高風險計數（排除 IGNORED）。 */
@@ -80,4 +128,24 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
      */
     Optional<RiskAlert> findFirstByProductIdAndRiskTypeAndStatusAndDetectedAtAfterOrderByDetectedAtDesc(
             Long productId, String riskType, AlertStatus status, Instant since);
+            
+    /**
+     * 去重窗：OPEN 以 detected_at 起算；ACKNOWLEDGED／IGNORED 以 handled_at 起算，
+     * 舊資料 handled_at 為空時回退 detected_at。OPEN 優先，避免較新的已處理列遮住仍有效的 OPEN。
+     */
+    @Query("""
+            select r from RiskAlert r
+            where r.product.id = :productId
+              and r.riskType = :riskType
+              and ((r.status = com.example.ssds.core.domain.AlertStatus.OPEN and r.detectedAt > :since)
+                or (r.status <> com.example.ssds.core.domain.AlertStatus.OPEN
+                    and coalesce(r.handledAt, r.detectedAt) > :since))
+            order by case when r.status = com.example.ssds.core.domain.AlertStatus.OPEN then 0 else 1 end,
+                     case when r.status = com.example.ssds.core.domain.AlertStatus.OPEN then r.detectedAt else coalesce(r.handledAt, r.detectedAt) end desc
+            """)
+    List<RiskAlert> findWithinDedupWindow(
+            @Param("productId") Long productId,
+            @Param("riskType") String riskType,
+            @Param("since") Instant since,
+            Pageable pageable);
 }

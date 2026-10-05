@@ -42,7 +42,7 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
                         Long productId);
 
         /** FULL_ANALYSIS 下游 Agent 以本次明確 scoreId 取值，避免併發重評時讀到別次快照。 */
-        @EntityGraph(attributePaths = { "factors" })
+        @EntityGraph(attributePaths = { "factors", "product", "product.category" })
         @Query("select s from ProductScore s where s.id = :scoreId")
         Optional<ProductScore> findWithFactorsById(@Param("scoreId") Long scoreId);
 

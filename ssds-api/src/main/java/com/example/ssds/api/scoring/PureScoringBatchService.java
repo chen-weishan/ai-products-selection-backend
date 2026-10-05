@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -47,11 +48,16 @@ public class PureScoringBatchService {
     }
 
     public BatchResult evaluateAll(Instant attemptedAt) {
-        return evaluate(null, attemptedAt);
+        return evaluate(null, attemptedAt, (completed, total) -> {});
+    }
+
+    /** 純計算全量重評，可提供完成數回呼給管理畫面的進度狀態。 */
+    public BatchResult evaluateAll(Instant attemptedAt, BiConsumer<Integer, Integer> progress) {
+        return evaluate(null, attemptedAt, progress);
     }
 
     public BatchResult evaluateProductIds(Collection<Long> productIds, Instant attemptedAt) {
-        return evaluate(new LinkedHashSet<>(productIds), attemptedAt);
+        return evaluate(new LinkedHashSet<>(productIds), attemptedAt, (completed, total) -> {});
     }
 
     /** 銷售匯入完成後只重算該批次實際影響的品項，不建立 AI task。 */
@@ -60,12 +66,13 @@ public class PureScoringBatchService {
                 productRepository.findProductIdsByImportBatch(importBatchId), attemptedAt);
     }
 
-    private BatchResult evaluate(Set<Long> requestedIds, Instant attemptedAt) {
+    private BatchResult evaluate(Set<Long> requestedIds, Instant attemptedAt, BiConsumer<Integer, Integer> progress) {
         List<Product> population = productRepository.findScorable(TrackType.A);
         List<Product> targets = requestedIds == null
                 ? population
                 : population.stream().filter(product -> requestedIds.contains(product.getId())).toList();
         if (targets.isEmpty()) {
+            progress.accept(0, 0);
             return new BatchResult(0, 0, 0, List.of(), List.of());
         }
 
@@ -85,6 +92,7 @@ public class PureScoringBatchService {
         int insufficient = 0;
         List<ItemResult> results = new java.util.ArrayList<>();
         List<ItemFailure> failures = new java.util.ArrayList<>();
+        int completed = 0;
         for (Product product : targets) {
             try {
                 Map<FactorCode, FactorInput> factors = factorsByProduct.get(product.getId());
@@ -103,6 +111,8 @@ public class PureScoringBatchService {
                 }
             } catch (RuntimeException exception) {
                 failures.add(new ItemFailure(product.getId(), safeMessage(exception)));
+            } finally {
+                progress.accept(++completed, targets.size());
             }
         }
         return new BatchResult(
