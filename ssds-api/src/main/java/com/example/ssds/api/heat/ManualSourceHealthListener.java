@@ -10,6 +10,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -54,6 +55,12 @@ public class ManualSourceHealthListener {
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
+    /**
+     * {@code @Order(1)}：必須先於 {@link ManualHeatReadingSyncListener}（Order 2）執行。
+     * 同步 listener 會立刻重算合成，合成 SQL 只採 {@code availability <> 'UNAVAILABLE'} 的來源；
+     * 若 MANUAL 還停在「最近 30 日無標記 → UNAVAILABLE」，第一筆標記的讀值會被排除在合成之外。
+     */
+    @Order(1)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTagSubmitted(ManualHeatTagSubmittedEvent event) {
         try {
@@ -64,6 +71,7 @@ public class ManualSourceHealthListener {
     }
 
     /** 刪除標記後重新探測：只重判「最近 30 日是否還有標記」，不動 lastFetchedAt（刪除不是新資料）。 */
+    @Order(1)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTagDeleted(ManualHeatTagDeletedEvent event) {
         try {

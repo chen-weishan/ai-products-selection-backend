@@ -235,7 +235,7 @@ public class MistralSourcingClient {
     }
     static boolean isConnectorQuotaError(RestClientResponseException exception) {
         if (exception.getStatusCode() != HttpStatus.BAD_REQUEST
-                && exception.getStatusCode() != HttpStatus.UNPROCESSABLE_ENTITY
+                && exception.getStatusCode() != HttpStatus.UNPROCESSABLE_CONTENT
                 && exception.getStatusCode() != HttpStatus.TOO_MANY_REQUESTS) return false;
         String body = exception.getResponseBodyAsString().toLowerCase(Locale.ROOT);
         return body.contains("custom connector rate limit")

@@ -89,6 +89,8 @@ public class ManualHeatTagCommandService {
         }
         tag.setNote(request.note());
 
+        // 等級或觀察時間可能變了，交易提交後同步重算該標的的熱度讀值（見 ManualHeatReadingSyncListener）。
+        eventPublisher.publishEvent(new ManualHeatTagUpdatedEvent(id));
         return ManualHeatTagMapper.toResponse(tag);
     }
 
@@ -97,9 +99,12 @@ public class ManualHeatTagCommandService {
         ManualHeatTag tag = manualHeatTagRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到人工熱度標記 id=" + id));
         requireOwnerOrAdmin(tag);
+        // 刪除後就查不到標的了，先記下來隨事件帶出去。
+        Long productId = tag.getProduct() != null ? tag.getProduct().getId() : null;
+        Long keywordId = tag.getKeyword() != null ? tag.getKeyword().getId() : null;
         manualHeatTagRepository.delete(tag);
-        // 刪除後交易提交才重新探測 MANUAL 來源（最近 30 日是否還有標記）。
-        eventPublisher.publishEvent(new ManualHeatTagDeletedEvent(id));
+        // 刪除後交易提交才重新探測 MANUAL 來源（最近 30 日是否還有標記），並重算該標的的熱度讀值。
+        eventPublisher.publishEvent(new ManualHeatTagDeletedEvent(id, productId, keywordId));
     }
 
     private Product loadProduct(Long productId) {
