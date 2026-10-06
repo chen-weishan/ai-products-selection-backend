@@ -35,11 +35,42 @@ class TrendInterpretationJobTest {
         when(interpretationRepository.findByKeywordIdAndCurrentTrue(30L))
                 .thenReturn(Optional.empty());
 
-        new TrendInterpretationJob(keywordRepository, compositeRepository,
+        Set<Long> deferred = new TrendInterpretationJob(keywordRepository, compositeRepository,
                 interpretationRepository, taskService, new ObjectMapper())
                 .enqueueSignificantKeywords(businessDate);
 
+        assertEquals(Set.of(30L), deferred);
         verify(taskService).createScheduledTrendInterpretation(List.of(30L));
+    }
+
+    @Test
+    void enqueueFailureDoesNotDeferRuleBaselineDecision() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        TrendInterpretationRepository interpretationRepository = mock(TrendInterpretationRepository.class);
+        AiTaskService taskService = mock(AiTaskService.class);
+        TrendKeyword keyword = TrendKeyword.builder().id(30L).keyword("排程失敗").build();
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        when(keywordRepository.findByEnabledTrue()).thenReturn(List.of(keyword));
+        when(compositeRepository.findFirstByKeywordIdOrderByStatDateDesc(30L))
+                .thenReturn(Optional.of(HeatCompositeDaily.builder()
+                        .keyword(keyword).stage(HeatStage.DECLINING)
+                        .statDate(businessDate)
+                        .slope30d(new BigDecimal("-0.20")).build()));
+        when(interpretationRepository.findByKeywordIdAndCurrentTrue(30L))
+                .thenReturn(Optional.empty());
+        when(taskService.createScheduledTrendInterpretation(List.of(30L)))
+                .thenThrow(new IllegalStateException("task storage unavailable"));
+
+        Set<Long> deferred = new TrendInterpretationJob(
+                keywordRepository,
+                compositeRepository,
+                interpretationRepository,
+                taskService,
+                new ObjectMapper())
+                .enqueueSignificantKeywords(businessDate);
+
+        assertEquals(Set.of(), deferred);
     }
 
     @Test

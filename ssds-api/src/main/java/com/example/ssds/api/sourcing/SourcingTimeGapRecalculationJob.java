@@ -1,5 +1,7 @@
 package com.example.ssds.api.sourcing;
 
+import java.util.Collection;
+import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +18,10 @@ public class SourcingTimeGapRecalculationJob {
     }
 
     public void recalculateAfterDailyHeatComposition() {
-        service.recalculateAll();
+        recalculateAfterDailyHeatComposition(List.of());
+    }
+
+    public void recalculateAfterDailyHeatComposition(Collection<Long> deferredKeywordIds) {
+        service.recalculateAllExceptDrivingKeywords(deferredKeywordIds);
     }
 }

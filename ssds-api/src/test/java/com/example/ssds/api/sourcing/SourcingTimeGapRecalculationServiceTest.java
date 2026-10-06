@@ -163,6 +163,84 @@ class SourcingTimeGapRecalculationServiceTest {
                 () -> assertEquals(-3, unaffected.getTimeGapDays()));
     }
 
+    @Test
+    void defersBaselineStatusDecisionUntilDrivingKeywordAgentResultArrives() {
+        TrendKeyword keyword = TrendKeyword.builder()
+                .id(31L).keyword("日本和牛").enabled(true).build();
+        Product product = product(601L, keyword);
+        product.setSourcingStatus(SourcingStatus.SOURCING);
+        SourcingCandidate candidate = SourcingCandidate.builder()
+                .product(product).drivingKeyword(keyword).leadTimeDays(21)
+                .timeGapDays(35).build();
+        when(candidates.findEligibleForTimeGapRecalculation()).thenReturn(List.of(candidate));
+        when(candidates.findEligibleForTimeGapRecalculationByKeywordId(31L))
+                .thenReturn(List.of(candidate));
+        when(composites.findLatestEligibleForDrivingKeyword(anyList()))
+                .thenReturn(
+                        List.of(composite(keyword, "-0.45", "-0.24", 17)),
+                        List.of(composite(keyword, "-0.45", "-0.24", 42)));
+
+        int baselineCount = service.recalculateAllExceptDrivingKeywords(Set.of(31L));
+
+        assertAll(
+                () -> assertEquals(0, baselineCount),
+                () -> assertEquals(35, candidate.getTimeGapDays()),
+                () -> assertEquals(SourcingStatus.SOURCING, product.getSourcingStatus()));
+
+        int agentCount = service.recalculateAffectedByKeyword(31L);
+
+        assertAll(
+                () -> assertEquals(1, agentCount),
+                () -> assertEquals(21, candidate.getTimeGapDays()),
+                () -> assertEquals(SourcingStatus.SOURCING, product.getSourcingStatus()));
+    }
+
+    @Test
+    void nonDrivingKeywordAgentCompletionCannotApplyDrivingKeywordBaselineEarly() {
+        TrendKeyword nonDriving = TrendKeyword.builder()
+                .id(31L).keyword("一般詞").enabled(true).build();
+        TrendKeyword driving = TrendKeyword.builder()
+                .id(32L).keyword("生效詞").enabled(true).build();
+        Product product = product(601L, nonDriving, driving);
+        product.setSourcingStatus(SourcingStatus.URGENT);
+        SourcingCandidate candidate = SourcingCandidate.builder()
+                .product(product).drivingKeyword(driving).leadTimeDays(20)
+                .timeGapDays(5).build();
+        when(candidates.findEligibleForTimeGapRecalculationByKeywordId(31L))
+                .thenReturn(List.of(candidate));
+        when(composites.findLatestEligibleForDrivingKeyword(anyList())).thenReturn(List.of(
+                composite(nonDriving, "0.10", "0.10", 42),
+                composite(driving, "0.80", "0.80", 17)));
+
+        int count = service.recalculateAffectedByKeyword(31L);
+
+        assertAll(
+                () -> assertEquals(0, count),
+                () -> assertEquals(5, candidate.getTimeGapDays()),
+                () -> assertEquals(SourcingStatus.URGENT, product.getSourcingStatus()));
+    }
+
+    @Test
+    void priorRejectedCandidateStillDoesNotReviveFromPositiveAgentResult() {
+        TrendKeyword keyword = TrendKeyword.builder()
+                .id(31L).keyword("既有淘汰").enabled(true).build();
+        Product product = product(601L, keyword);
+        product.setSourcingStatus(SourcingStatus.REJECTED);
+        SourcingCandidate candidate = SourcingCandidate.builder()
+                .product(product).drivingKeyword(keyword).leadTimeDays(20)
+                .timeGapDays(-3).build();
+        when(candidates.findEligibleForTimeGapRecalculationByKeywordId(31L))
+                .thenReturn(List.of(candidate));
+        when(composites.findLatestEligibleForDrivingKeyword(anyList()))
+                .thenReturn(List.of(composite(keyword, "0.30", "0.20", 56)));
+
+        service.recalculateAffectedByKeyword(31L);
+
+        assertAll(
+                () -> assertEquals(36, candidate.getTimeGapDays()),
+                () -> assertEquals(SourcingStatus.REJECTED, product.getSourcingStatus()));
+    }
+
     private static Product product(Long id, TrendKeyword... keywords) {
         return Product.builder()
                 .id(id).name("候選").category(Category.builder().id(10L).name("零食").build())

@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
@@ -68,7 +69,7 @@ class HeatCompositeCalibrationJobTest {
     }
 
     @Test
-    void runsPercentilesCompositionTimeGapAndAgentEnqueueInOrder() {
+    void enqueuesAgentBeforeSkippingItsDrivingKeywordInBaselineTimeGapPass() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeCalibrationService calibrationService = mock(HeatCompositeCalibrationService.class);
@@ -85,6 +86,7 @@ class HeatCompositeCalibrationJobTest {
                 .thenReturn(Optional.of(HeatCompositeDaily.builder().build()));
         when(timeGapProvider.getIfAvailable()).thenReturn(timeGapJob);
         when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        when(trendJob.enqueueSignificantKeywords(businessDate)).thenReturn(Set.of(7L));
         HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
                 percentileDao,
                 keywordRepository,
@@ -104,8 +106,8 @@ class HeatCompositeCalibrationJobTest {
         order.verify(percentileDao).applyPercentiles(businessDate);
         order.verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
         order.verify(calibrationService).computeAndPersist(7L, businessDate);
-        order.verify(timeGapJob).recalculateAfterDailyHeatComposition();
         order.verify(trendJob).enqueueSignificantKeywords(businessDate);
+        order.verify(timeGapJob).recalculateAfterDailyHeatComposition(Set.of(7L));
     }
 
     @Test
@@ -129,6 +131,7 @@ class HeatCompositeCalibrationJobTest {
                 .thenReturn(Optional.of(HeatCompositeDaily.builder().build()));
         when(timeGapProvider.getIfAvailable()).thenReturn(timeGapJob);
         when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        when(trendJob.enqueueSignificantKeywords(businessDate)).thenReturn(Set.of(8L));
         HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
                 percentileDao,
                 keywordRepository,
@@ -145,8 +148,8 @@ class HeatCompositeCalibrationJobTest {
         job.run(businessDate);
 
         verify(calibrationService).computeAndPersist(8L, businessDate);
-        verify(timeGapJob).recalculateAfterDailyHeatComposition();
         verify(trendJob).enqueueSignificantKeywords(businessDate);
+        verify(timeGapJob).recalculateAfterDailyHeatComposition(Set.of(8L));
     }
 
     @Test

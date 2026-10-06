@@ -170,17 +170,19 @@ public class HeatCompositeCalibrationJob {
         }
         log.info("熱度合成完成：{} 個關鍵字，成功 {} 筆、無資料略過 {} 筆。", keywords.size(), computed, skipped);
 
-        SourcingTimeGapRecalculationJob timeGapJob = timeGapJobProvider.getIfAvailable();
-        if (timeGapJob != null) {
-            timeGapJob.recalculateAfterDailyHeatComposition();
-        }
+        Set<Long> deferredTimeGapKeywordIds = Set.of();
         TrendInterpretationJob trendJob = trendInterpretationJobProvider.getIfAvailable();
         if (trendJob != null) {
             if (agentKeywordIds == null) {
-                trendJob.enqueueSignificantKeywords(businessDate);
+                deferredTimeGapKeywordIds = trendJob.enqueueSignificantKeywords(businessDate);
             } else {
-                trendJob.enqueueSignificantKeywords(businessDate, agentKeywordIds);
+                deferredTimeGapKeywordIds =
+                        trendJob.enqueueSignificantKeywords(businessDate, agentKeywordIds);
             }
+        }
+        SourcingTimeGapRecalculationJob timeGapJob = timeGapJobProvider.getIfAvailable();
+        if (timeGapJob != null) {
+            timeGapJob.recalculateAfterDailyHeatComposition(deferredTimeGapKeywordIds);
         }
     }
 }
