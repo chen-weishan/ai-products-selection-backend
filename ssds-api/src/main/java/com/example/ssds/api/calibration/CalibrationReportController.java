@@ -3,6 +3,7 @@ package com.example.ssds.api.calibration;
 import com.example.ssds.api.calibration.dto.BacktestRequest;
 import com.example.ssds.api.calibration.dto.BacktestResponse;
 import com.example.ssds.api.calibration.dto.CalibrationReportResponse;
+import com.example.ssds.api.calibration.dto.GenerateCalibrationReportResponse;
 import com.example.ssds.api.calibration.dto.ReviewCalibrationRequest;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.common.response.PageResponse;
@@ -34,6 +35,7 @@ public class CalibrationReportController {
     private final CalibrationReportService reportService;
     private final CalibrationReviewService reviewService;
     private final CalibrationBacktestService backtestService;
+    private final CalibrationInterpretations interpretations;
 
     // §2.1 權限列 2：五個角色皆可讀
     @PreAuthorize("isAuthenticated()")
@@ -72,12 +74,18 @@ public class CalibrationReportController {
     /**
      * 立即產生（或重算待審核的）季度報告。規格 §8 未列此端點，屬設計決定：
      * 正式流程由 {@link CalibrationStatisticsJob} 每季執行，此端點供 demo 與補跑。
+     *
+     * <p>重算會清空 AI 解讀，因此和排程一樣自動建立 Agent 7 解讀任務（§FR-15 步驟 2）。
+     * 建任務放在 controller：此時產生報告的交易已提交，建任務失敗不會連帶回滾報告。
      */
     @PreAuthorize("hasAnyRole('BUYER_LEAD', 'SYS_ADMIN')")
     @PostMapping("/calibration/reports")
-    public ApiResponse<CalibrationReportResponse> generate(
+    public ApiResponse<GenerateCalibrationReportResponse> generate(
             @RequestParam String quarter, Authentication authentication, HttpServletRequest httpRequest) {
-        return ApiResponse.success(reportService.generate(quarter, actorOf(authentication), httpRequest.getRemoteAddr()));
+        CalibrationReportResponse report =
+                reportService.generate(quarter, actorOf(authentication), httpRequest.getRemoteAddr());
+        Long taskId = interpretations.request(report.id(), report.quarter());
+        return ApiResponse.success(new GenerateCalibrationReportResponse(report, taskId));
     }
 
     /** 匿名請求已先被 {@code @PreAuthorize} 擋下（403）；service 層的 CalibrationActors 再以資料庫角色複驗。 */

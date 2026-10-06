@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
 
 /**
  * 歷史回測（§FR-15「回測驗證」、AC-15-4）：用同一批已回填樣本，以指定權重規則重算分數，
@@ -22,7 +23,9 @@ import java.util.Map;
  *
  * <p>兩個指標：
  * <ul>
- * <li>相關係數：重算分數與實際銷量的 Spearman 等級相關（理由見 {@link RankCorrelation}）</li>
+ * <li>相關係數：重算分數與實際銷量的 Spearman 等級相關（理由見 {@link RankCorrelation}）。
+ *     另附 Pearson 供與 S-12 對照；但 S-12 用的是評分當時存下的分數，回測是以指定版本重算，
+ *     只有樣本都由該版本評分時兩者才會一致（差異上限即上段的 0.0x 分捨入）</li>
  * <li>A 級達標率：重算後為 A 級者中，售罄狀況為 EARLY_SELLOUT／ON_TIME 的比例（§FR-11-3 定義）</li>
  * </ul>
  */
@@ -57,8 +60,21 @@ public final class Backtester {
         RankCorrelation.Result correlation = RankCorrelation.of(scores, sales);
         return new Outcome(scheme.code(), scheme.label(), scheme.versionId(), samples.size(),
                 correlation == null ? null : correlation.correlation(),
+                pearson(scores, sales),
                 gradeA, gradeAHit,
                 gradeA == 0 ? null : (double) gradeAHit / gradeA);
+    }
+
+    /**
+     * 皮爾森相關，定義與 S-12 準確度（{@code DecisionAccuracyService#pearson}）相同：
+     * 少於 2 筆或任一變數無變異時為 null。
+     */
+    static Double pearson(double[] x, double[] y) {
+        if (x.length < 2) {
+            return null;
+        }
+        double r = new PearsonsCorrelation().correlation(x, y);
+        return Double.isNaN(r) ? null : r;
     }
 
     /** 選品分數，四捨五入到小數兩位（與 {@code product_score.final_score} DECIMAL(5,2) 一致）。 */
@@ -84,7 +100,8 @@ public final class Backtester {
     }
 
     /**
-     * @param correlation 樣本不足 3 筆或分數無變異時為 null
+     * @param correlation Spearman；樣本不足 3 筆或分數無變異時為 null
+     * @param pearson 供與 S-12 對照（§FR-11-3 用 Pearson）；樣本不足 2 筆或無變異時為 null
      * @param gradeAHitRate 重算後沒有任何 A 級時為 null
      */
     public record Outcome(
@@ -93,6 +110,7 @@ public final class Backtester {
             Long versionId,
             int sampleSize,
             Double correlation,
+            Double pearson,
             int gradeACount,
             int gradeAHitCount,
             Double gradeAHitRate) {

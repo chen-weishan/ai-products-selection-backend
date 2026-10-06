@@ -17,11 +17,13 @@ import com.example.ssds.infra.repository.DecisionRecordRepository;
 import com.example.ssds.infra.repository.GradeThresholdRepository;
 import com.example.ssds.infra.repository.ScoreFactorRepository;
 import com.example.ssds.infra.repository.WeightVersionRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +47,7 @@ class CalibrationDataLoader {
     private final ScoreFactorRepository scoreFactorRepository;
     private final WeightVersionRepository weightVersionRepository;
     private final GradeThresholdRepository gradeThresholdRepository;
+    private final EntityManager entityManager;
 
     List<CalibrationSample> samples(Instant cutoff) {
         Specification<DecisionRecord> spec = (root, query, cb) -> cb.and(
@@ -78,6 +81,22 @@ class CalibrationDataLoader {
                 decision.getScore().getPenaltySubtotal().doubleValue(),
                 result.getActualQty(),
                 HIT.contains(result.getSelloutStatus()));
+    }
+
+    /** 樣本中最早的回填時間（S-19 顯示樣本期間）；尚無樣本時為 null。條件與 {@link #samples} 相同。 */
+    Instant earliestFilledAt(Instant cutoff) {
+        return entityManager.createQuery(
+                        "select min(r.filledAt) from CampaignResult r"
+                                + " where r.filledAt < :cutoff and r.decision.product.deletedAt is null",
+                        Instant.class)
+                .setParameter("cutoff", cutoff)
+                .getSingleResult();
+    }
+
+    /** 只取 id：判斷報告的基準版本是否已被取代，不需要載入權重。 */
+    Optional<Long> currentVersionId() {
+        return entityManager.createQuery("select v.id from WeightVersion v where v.isCurrent = true", Long.class)
+                .getResultStream().findFirst();
     }
 
     WeightVersion currentVersion() {

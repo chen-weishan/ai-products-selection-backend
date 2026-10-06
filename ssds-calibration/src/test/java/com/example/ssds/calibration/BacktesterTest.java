@@ -74,6 +74,8 @@ class BacktesterTest {
 
         assertThat(outcome.sampleSize()).isEqualTo(4);
         assertThat(outcome.correlation()).isCloseTo(1.0, within(1e-9));
+        // 手算：cov 21000、varX 1225、varY 400000 → 21000 / √(1225·400000) = 3/√10；排序完全一致但非線性，故 < Spearman
+        assertThat(outcome.pearson()).isCloseTo(3 / Math.sqrt(10), within(1e-9));
         assertThat(outcome.gradeACount()).isEqualTo(2);
         assertThat(outcome.gradeAHitCount()).isEqualTo(1);
         assertThat(outcome.gradeAHitRate()).isEqualTo(0.5);
@@ -89,6 +91,7 @@ class BacktesterTest {
 
         assertThat(outcome.gradeAHitRate()).isNull();
         assertThat(outcome.correlation()).isNull();
+        assertThat(outcome.pearson()).isNull();
     }
 
     private static CalibrationSample uniform(long id, double value, double qty, boolean hit) {

@@ -49,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>{@code regression_result} JSON</b>
  * <pre>
  * method, label, sampleSize, minSample, minFactorSample, shrinkage, meanCorrelation,
- * baseVersionId, baseVersionNo, cutoff（樣本截止點）, generatedAt（實際產生時間；重算時更新，created_at 不會）, note,
+ * baseVersionId, baseVersionNo, sampleFrom（樣本最早回填時間，無樣本為 null）, cutoff（樣本截止點）, generatedAt（實際產生時間；重算時更新，created_at 不會）, note,
  * factors[]    樣本充足的因子（Agent 7 輸入，欄位與 WeightCalibrationService 的 parser 對齊：其 requiredText／decimal 不接受 null，數值皆非 null）
  *              { code, correlation, pValue, n, sceneType, currentWeight, suggestedWeight }
  * factorRows[] 六因子全列（S-19 因子預測力表；樣本不足者 correlation／pValue 為 null）
@@ -163,7 +163,7 @@ public class CalibrationReportService {
                         CalibrationDataLoader.toDouble(regression.suggestedWeights()), thresholds)));
 
         report.setSampleSize(samples.size());
-        report.setRegressionResult(write(regressionJson(regression, current, cutoff, now)));
+        report.setRegressionResult(write(regressionJson(regression, current, loader.earliestFilledAt(cutoff), cutoff, now)));
         report.setBacktestResult(write(backtestJson(samples.size(), outcomes)));
         report.setStatus(CalibrationStatus.PENDING);
         report.setAiInterpretation(null);
@@ -200,6 +200,7 @@ public class CalibrationReportService {
         // 只在核准／部分採納後顯示：dev seed 的 v3 也指向 2026Q3 報告，但該報告仍待審核
         boolean reviewed = report.getStatus() == CalibrationStatus.APPROVED || report.getStatus() == CalibrationStatus.PARTIAL;
         WeightVersion created = reviewed ? createdVersion(report.getId()) : null;
+        JsonNode regression = read(report.getRegressionResult());
         return new CalibrationReportResponse(
                 report.getId(),
                 report.getQuarter(),
@@ -208,7 +209,8 @@ public class CalibrationReportService {
                 below,
                 below ? VALIDITY_WARNING.formatted(minSample) : null,
                 report.getStatus(),
-                plain(report.getRegressionResult()),
+                baseVersionStale(report, regression),
+                regression == null ? null : JSON.convertValue(regression, Object.class),
                 plain(report.getBacktestResult()),
                 report.getAiInterpretation(),
                 plain(report.getAdjustmentAdvice()),
@@ -221,6 +223,18 @@ public class CalibrationReportService {
                 created == null ? null : created.getId(),
                 created == null ? null : created.getVersionNo(),
                 report.getCreatedAt());
+    }
+
+    /**
+     * 只對待審核報告判斷：已審核的報告不會再建版本；舊格式報告沒有 {@code baseVersionId}，本來就不能核准。
+     * 沒有生效版本時也回 false——那時連重新產生都會失敗，提示重算沒有意義。
+     */
+    private boolean baseVersionStale(CalibrationReport report, JsonNode regression) {
+        if (report.getStatus() != CalibrationStatus.PENDING || regression == null || !regression.hasNonNull("baseVersionId")) {
+            return false;
+        }
+        long baseVersionId = regression.get("baseVersionId").asLong();
+        return loader.currentVersionId().map(currentId -> currentId != baseVersionId).orElse(false);
     }
 
     /**
@@ -246,7 +260,8 @@ public class CalibrationReportService {
         return codes;
     }
 
-    private ObjectNode regressionJson(FactorStatistics.Result result, WeightVersion base, Instant cutoff, Instant now) {
+    private ObjectNode regressionJson(
+            FactorStatistics.Result result, WeightVersion base, Instant sampleFrom, Instant cutoff, Instant now) {
         ObjectNode root = JSON.createObjectNode();
         root.put("method", result.method());
         root.put("label", "campaign_result.actual_qty");
@@ -257,6 +272,8 @@ public class CalibrationReportService {
         root.put("meanCorrelation", round(result.meanCorrelation()));
         root.put("baseVersionId", base.getId());
         root.put("baseVersionNo", base.getVersionNo());
+        // 樣本是累積的：記下最早回填時間，S-19 顯示樣本期間，日後才判斷得了是否改為滑動視窗
+        root.put("sampleFrom", sampleFrom == null ? null : sampleFrom.toString());
         root.put("cutoff", cutoff.toString());
         root.put("generatedAt", now.toString());
 
@@ -321,6 +338,7 @@ public class CalibrationReportService {
         for (Backtester.Outcome outcome : outcomes) {
             ObjectNode node = JSON.valueToTree(outcome);
             putNullable(node, "correlation", outcome.correlation());
+            putNullable(node, "pearson", outcome.pearson());
             putNullable(node, "gradeAHitRate", outcome.gradeAHitRate());
             all.add(node);
             if (outcome.correlation() != null && outcome.gradeAHitRate() != null) {

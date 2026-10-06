@@ -57,6 +57,8 @@ class CalibrationReportControllerTest {
     @MockitoBean
     private CalibrationBacktestService backtestService;
     @MockitoBean
+    private CalibrationInterpretations interpretations;
+    @MockitoBean
     private AiTaskService aiTaskService;
     // JwtAuthFilter 是 @Component Filter，@WebMvcTest 會載入它，其相依須補上
     @MockitoBean
@@ -69,7 +71,7 @@ class CalibrationReportControllerTest {
     }
 
     private static CalibrationReportResponse report(long id, CalibrationStatus status) {
-        return new CalibrationReportResponse(id, "2026Q3", 8, 200, true, "樣本數不足", status,
+        return new CalibrationReportResponse(id, "2026Q3", 8, 200, true, "樣本數不足", status, false,
                 null, null, null, List.of(), List.of(), null, null, List.of(), null, null, null, null, null);
     }
 
@@ -158,16 +160,34 @@ class CalibrationReportControllerTest {
     @DisplayName("POST /calibration/reports?quarter=（設計決定：BUYER_LEAD、SYS_ADMIN）")
     class Generate {
 
-        @ParameterizedTest(name = "{0} 可產生")
+        @ParameterizedTest(name = "{0} 可產生，並自動建立解讀任務")
         @ValueSource(strings = { "BUYER_LEAD", "SYS_ADMIN" })
         void allowedRolesGenerate(String role) throws Exception {
             when(reportService.generate(eq("2026Q3"), anyString(), any()))
                     .thenReturn(report(5L, CalibrationStatus.PENDING));
+            when(interpretations.request(5L, "2026Q3")).thenReturn(42L);
 
             mockMvc.perform(post("/calibration/reports").param("quarter", "2026Q3")
                             .with(user(EMAIL).roles(role)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.id").value(5));
+                    .andExpect(jsonPath("$.data.report.id").value(5))
+                    .andExpect(jsonPath("$.data.interpretationTaskId").value(42));
+
+            verify(interpretations).request(5L, "2026Q3");
+        }
+
+        @Test
+        @DisplayName("解讀任務建立失敗時報告照常回傳，interpretationTaskId 為 null")
+        void interpretationFailureStillReturnsReport() throws Exception {
+            when(reportService.generate(eq("2026Q3"), anyString(), any()))
+                    .thenReturn(report(5L, CalibrationStatus.PENDING));
+            when(interpretations.request(5L, "2026Q3")).thenReturn(null);
+
+            mockMvc.perform(post("/calibration/reports").param("quarter", "2026Q3")
+                            .with(user(EMAIL).roles("BUYER_LEAD")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.report.id").value(5))
+                    .andExpect(jsonPath("$.data.interpretationTaskId").doesNotExist());
         }
 
         @ParameterizedTest(name = "{0} 回 403")
@@ -178,7 +198,7 @@ class CalibrationReportControllerTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 
-            verifyNoInteractions(reportService);
+            verifyNoInteractions(reportService, interpretations);
         }
 
         @Test

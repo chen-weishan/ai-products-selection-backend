@@ -178,6 +178,45 @@ class CalibrationReportServiceTest {
         verify(actors).audit(any(), org.mockito.ArgumentMatchers.eq("GENERATE"), anyString(), anyLong(), any(), any(), any());
     }
 
+    @Test
+    void regressionRecordsSamplePeriod() throws Exception {
+        when(loader.earliestFilledAt(any())).thenReturn(Instant.parse("2026-03-01T04:00:00Z"));
+
+        service.generate("2026Q4");
+
+        ArgumentCaptor<CalibrationReport> saved = ArgumentCaptor.forClass(CalibrationReport.class);
+        verify(reportRepository).saveAndFlush(saved.capture());
+        JsonNode regression = CalibrationReportService.JSON.readTree(saved.getValue().getRegressionResult());
+        assertThat(regression.path("sampleFrom").asText()).isEqualTo("2026-03-01T04:00:00Z");
+    }
+
+    @Test
+    void pendingReportWhoseBaseVersionWasSupersededIsStale() {
+        when(loader.currentVersionId()).thenReturn(java.util.Optional.of(2L));
+        CalibrationReportResponse fresh = service.generate("2026Q4");
+        assertThat(fresh.baseVersionStale()).isFalse();
+
+        // 報告產生後 FR-08 又核准了 v3
+        when(loader.currentVersionId()).thenReturn(java.util.Optional.of(3L));
+        ArgumentCaptor<CalibrationReport> saved = ArgumentCaptor.forClass(CalibrationReport.class);
+        verify(reportRepository).saveAndFlush(saved.capture());
+        assertThat(service.toResponse(saved.getValue()).baseVersionStale()).isTrue();
+
+        // 已審核的報告不再建版本，不提示
+        saved.getValue().setStatus(CalibrationStatus.REJECTED);
+        assertThat(service.toResponse(saved.getValue()).baseVersionStale()).isFalse();
+    }
+
+    @Test
+    void legacyReportWithoutBaseVersionIsNeverStale() {
+        when(loader.currentVersionId()).thenReturn(java.util.Optional.of(3L));
+        CalibrationReport legacy = CalibrationReport.builder().id(1L).quarter("2026Q3")
+                .status(CalibrationStatus.PENDING).sampleSize(8)
+                .regressionResult("{\"method\":\"pearson\",\"factors\":[]}").build();
+
+        assertThat(service.toResponse(legacy).baseVersionStale()).isFalse();
+    }
+
     private static WeightVersion currentVersion() {
         WeightVersion version = WeightVersion.builder().id(2L).versionNo("v2").name("現行").profiles(new ArrayList<>()).build();
         String[] weights = {"0.500", "0.100", "0.080", "0.070", "0.150", "0.100"};
