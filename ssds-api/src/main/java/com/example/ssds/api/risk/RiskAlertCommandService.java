@@ -50,10 +50,10 @@ public class RiskAlertCommandService {
 
     @Transactional(readOnly = true)
     public PageResponse<RiskAlertResponse> search(
-            AlertStatus status, Severity severity, String type, Long categoryId, Pageable pageable) {
-        Page<RiskAlert> page = status == null && severity == null && type == null && categoryId == null
+            AlertStatus status, Severity severity, String type, Long categoryId, String keyword, Pageable pageable) {
+        Page<RiskAlert> page = status == null && severity == null && type == null && categoryId == null && (keyword == null || keyword.isBlank())
                 ? alerts.findVisible(null, pageable)
-                : alerts.search(status, severity, type, categoryId, pageable);
+                : alerts.search(status, severity, type, categoryId, keyword == null || keyword.isBlank() ? null : keyword.trim(), pageable);
         Map<Long, String> impactByAlert = impacts.describe(page.getContent());
         return PageResponse.from(page.map(alert ->
                 RiskAlertResponse.from(alert, impactByAlert.get(alert.getId()))));
@@ -90,7 +90,7 @@ public class RiskAlertCommandService {
     }
 
     private RiskAlert find(Long id) {
-        return alerts.findById(id).orElseThrow(() ->
+        return alerts.findForUpdate(id).orElseThrow(() ->
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到風險示警 id=" + id));
     }
 

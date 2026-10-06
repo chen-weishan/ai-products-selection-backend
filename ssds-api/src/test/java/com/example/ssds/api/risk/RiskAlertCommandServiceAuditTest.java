@@ -71,7 +71,7 @@ class RiskAlertCommandServiceAuditTest {
                 .riskType(RiskTypes.REVIEW_RISK)
                 .severity(Severity.MEDIUM)
                 .build();
-        when(alerts.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+        when(alerts.findForUpdate(ALERT_ID)).thenReturn(Optional.of(alert));
     }
 
     @AfterEach
@@ -97,6 +97,15 @@ class RiskAlertCommandServiceAuditTest {
         JsonNode after = capturedAfterJson();
         assertThat(after.get("status").asText()).isEqualTo(AlertStatus.ACKNOWLEDGED.name());
         assertThat(after.has("reason")).isFalse();
+    }
+
+    @Test
+    void secondHandlerCannotOverwriteHandledAlert() {
+        service.acknowledge(ALERT_ID);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ignore(ALERT_ID, "duplicate"))
+                .isInstanceOf(com.example.ssds.api.common.error.BusinessException.class);
+        verify(alerts, org.mockito.Mockito.times(2)).findForUpdate(ALERT_ID);
+        verify(audits, org.mockito.Mockito.times(1)).save(any());
     }
 
     private JsonNode capturedAfterJson() throws Exception {

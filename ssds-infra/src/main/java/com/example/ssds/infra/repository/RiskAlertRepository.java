@@ -25,16 +25,20 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from RiskAlert r where r.id = :id")
+    Optional<RiskAlert> findForUpdate(@Param("id") Long id);
+
 
     /** 預設清單：未忽略者。 */
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     Page<RiskAlert> findByStatusNot(AlertStatus status, Pageable pageable);
 
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     Page<RiskAlert> findByStatusAndSeverity(AlertStatus status, Severity severity, Pageable pageable);
 
      /** 篩選示警；未指定狀態時排除 IGNORED，並固定依嚴重度、偵測時間排序。 */
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     @Query(value = """
             select r from RiskAlert r
             where ((:status is not null and r.status = :status)
@@ -53,7 +57,7 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
             """)
     Page<RiskAlert> findVisible(@Param("status") AlertStatus status, Pageable pageable);
 
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     @Query(value = """
             select r from RiskAlert r
             where ((:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED)
@@ -61,6 +65,7 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
               and (:severity is null or r.severity = :severity)
               and (:riskType is null or r.riskType = :riskType)
               and (:categoryId is null or r.product.category.id = :categoryId)
+              and (:keyword is null or locate(lower(:keyword), lower(r.product.name)) > 0)
             order by case r.severity
                          when com.example.ssds.core.domain.Severity.HIGH then 0
                          when com.example.ssds.core.domain.Severity.MEDIUM then 1
@@ -75,12 +80,14 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
               and (:severity is null or r.severity = :severity)
               and (:riskType is null or r.riskType = :riskType)
               and (:categoryId is null or r.product.category.id = :categoryId)
+              and (:keyword is null or locate(lower(:keyword), lower(r.product.name)) > 0)
             """)
     Page<RiskAlert> search(
             @Param("status") AlertStatus status,
             @Param("severity") Severity severity,
             @Param("riskType") String riskType,
             @Param("categoryId") Long categoryId,
+            @Param("keyword") String keyword,
             Pageable pageable);
 
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);

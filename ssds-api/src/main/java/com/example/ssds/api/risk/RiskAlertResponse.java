@@ -19,7 +19,8 @@ public record RiskAlertResponse(
         String status,
         String ignoreReason,
         OffsetDateTime handledAt,
-        Long handledBy) {
+        Long handledBy,
+        String handledByName) {
 
     public static RiskAlertResponse from(RiskAlert alert, String impact) {
         return new RiskAlertResponse(
@@ -36,6 +37,7 @@ public record RiskAlertResponse(
                 alert.getStatus().name(),
                 alert.getIgnoreReason(),
                 alert.getHandledAt() == null ? null : alert.getHandledAt().atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime(),
-                alert.getHandledBy() == null ? null : alert.getHandledBy().getId());
+                alert.getHandledBy() == null ? null : alert.getHandledBy().getId(),
+                alert.getHandledBy() == null ? null : alert.getHandledBy().getDisplayName());
     }
 }

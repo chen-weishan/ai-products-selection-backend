@@ -99,6 +99,9 @@ public class RiskRuleRecalculationService {
             detection.run();
         } catch (RuntimeException exception) {
             log.error("風險門檻變更後的{}示警補掃失敗", label, exception);
+            synchronized (this) {
+                lastError = (lastError == null ? "" : lastError + "; ") + label + ": " + exception.getClass().getSimpleName();
+            }
         }
     }
 

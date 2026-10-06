@@ -47,8 +47,9 @@ public class RiskAlertController {
             @RequestParam(required = false) Severity severity,
             @RequestParam(name = "type", required = false) String type,
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String keyword,
             Pageable pageable) {
-        return ApiResponse.success(alerts.search(status, severity, type, categoryId, pageable));
+        return ApiResponse.success(alerts.search(status, severity, type, categoryId, keyword, pageable));
     }
 
     /** S-11 頂部 KPI 卡與「最後偵測」時間。 */
