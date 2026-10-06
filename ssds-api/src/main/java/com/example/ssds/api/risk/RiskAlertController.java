@@ -27,14 +27,17 @@ public class RiskAlertController {
     private final RiskAlertCommandService alerts;
     private final RiskAlertRuleCommandService rules;
     private final RiskRuleRecalculationService recalculation;
+    private final RiskAlertSummaryService summary;
 
     public RiskAlertController(
             RiskAlertCommandService alerts,
             RiskAlertRuleCommandService rules,
-            RiskRuleRecalculationService recalculation) {
+            RiskRuleRecalculationService recalculation,
+            RiskAlertSummaryService summary) {
         this.alerts = alerts;
         this.rules = rules;
         this.recalculation = recalculation;
+        this.summary = summary;
     }
 
     @GetMapping
@@ -46,6 +49,13 @@ public class RiskAlertController {
             @RequestParam(required = false) Long categoryId,
             Pageable pageable) {
         return ApiResponse.success(alerts.search(status, severity, type, categoryId, pageable));
+    }
+
+    /** S-11 頂部 KPI 卡與「最後偵測」時間。 */
+    @GetMapping("/summary")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<RiskAlertSummaryService.Summary> summary() {
+        return ApiResponse.success(summary.summary());
     }
 
     @PatchMapping("/{id}/acknowledge")

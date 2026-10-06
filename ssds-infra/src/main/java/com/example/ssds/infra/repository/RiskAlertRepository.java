@@ -43,7 +43,8 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
                          when com.example.ssds.core.domain.Severity.HIGH then 0
                          when com.example.ssds.core.domain.Severity.MEDIUM then 1
                          else 2 end,
-                     r.detectedAt desc
+                     r.detectedAt desc,
+                     r.id desc
             """,
             countQuery = """
             select count(r) from RiskAlert r
@@ -64,7 +65,8 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
                          when com.example.ssds.core.domain.Severity.HIGH then 0
                          when com.example.ssds.core.domain.Severity.MEDIUM then 1
                          else 2 end,
-                     r.detectedAt desc
+                     r.detectedAt desc,
+                     r.id desc
             """,
             countQuery = """
             select count(r) from RiskAlert r
@@ -148,4 +150,24 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
             @Param("riskType") String riskType,
             @Param("since") Instant since,
             Pageable pageable);
+
+    /** S-11 KPI：各嚴重度的未處理（OPEN）示警數。回傳 [Severity, Long]。 */
+    @Query("""
+            SELECT r.severity, COUNT(r) FROM RiskAlert r
+            WHERE r.status = com.example.ssds.core.domain.AlertStatus.OPEN
+            GROUP BY r.severity
+            """)
+    List<Object[]> countOpenGroupedBySeverity();
+
+    /** S-11 KPI：自 {@code since} 起已處理（確認或忽略）的示警數。 */
+    @Query("""
+            SELECT COUNT(r) FROM RiskAlert r
+            WHERE r.status <> com.example.ssds.core.domain.AlertStatus.OPEN
+              AND r.handledAt >= :since
+            """)
+    long countHandledSince(@Param("since") Instant since);
+
+    /** S-11「最後偵測」：全部示警中最近一次的偵測時間（去重更新也會推進 detected_at）。 */
+    @Query("SELECT MAX(r.detectedAt) FROM RiskAlert r")
+    Instant findLastDetectedAt();
 }

@@ -14,13 +14,14 @@ public record RiskAlertResponse(
         String riskType,
         String severity,
         String triggerValue,
+        String impact,
         OffsetDateTime detectedAt,
         String status,
         String ignoreReason,
         OffsetDateTime handledAt,
         Long handledBy) {
 
-    public static RiskAlertResponse from(RiskAlert alert) {
+    public static RiskAlertResponse from(RiskAlert alert, String impact) {
         return new RiskAlertResponse(
                 alert.getId(),
                 alert.getProduct().getId(),
@@ -30,6 +31,7 @@ public record RiskAlertResponse(
                 alert.getRiskType(),
                 alert.getSeverity().name(),
                 alert.getTriggerValue(),
+                impact,
                 alert.getDetectedAt().atZone(ZoneId.of("Asia/Taipei")).toOffsetDateTime(),
                 alert.getStatus().name(),
                 alert.getIgnoreReason(),

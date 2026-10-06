@@ -219,4 +219,22 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
   void deleteByPeriodAndSceneTypeAndTrackType(@Param("period") String period,
                                               @Param("sceneType") SceneType sceneType,
                                               @Param("trackType") TrackType trackType);
+
+    /**
+     * S-11「影響」欄：每個品項最新的主情境現行分數（含各因子扣分）。
+     * 只在畫面這一頁的品項上呼叫，不做全表掃描。
+     */
+    @Query("""
+            select distinct s from ProductScore s
+            join fetch s.factors
+            where s.product.id in :productIds
+              and s.primary = true
+              and s.active = true
+              and s.calculatedAt = (
+                    select max(s2.calculatedAt) from ProductScore s2
+                    where s2.product.id = s.product.id
+                      and s2.primary = true and s2.active = true)
+            """)
+    List<ProductScore> findLatestPrimaryActiveWithFactors(
+            @Param("productIds") java.util.Collection<Long> productIds);
 }

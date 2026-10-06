@@ -2,6 +2,7 @@ package com.example.ssds.api.risk;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
@@ -32,16 +33,19 @@ public class RiskAlertCommandService {
     private final AppUserRepository users;
     private final AuditLogRepository audits;
     private final ObjectMapper objectMapper;
+    private final RiskImpactService impacts;
 
     public RiskAlertCommandService(
             RiskAlertRepository alerts,
             AppUserRepository users,
             AuditLogRepository audits,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RiskImpactService impacts) {
         this.alerts = alerts;
         this.users = users;
         this.audits = audits;
         this.objectMapper = objectMapper;
+        this.impacts = impacts;
     }
 
     @Transactional(readOnly = true)
@@ -50,7 +54,9 @@ public class RiskAlertCommandService {
         Page<RiskAlert> page = status == null && severity == null && type == null && categoryId == null
                 ? alerts.findVisible(null, pageable)
                 : alerts.search(status, severity, type, categoryId, pageable);
-        return PageResponse.from(page.map(RiskAlertResponse::from));
+        Map<Long, String> impactByAlert = impacts.describe(page.getContent());
+        return PageResponse.from(page.map(alert ->
+                RiskAlertResponse.from(alert, impactByAlert.get(alert.getId()))));
     }
 
     @Transactional
@@ -63,7 +69,7 @@ public class RiskAlertCommandService {
         alert.setHandledBy(users.getReferenceById(userId));
         alerts.save(alert);
         audit("ACKNOWLEDGE", alert, null);
-        return RiskAlertResponse.from(alert);
+        return respond(alert);
     }
 
     @Transactional
@@ -80,7 +86,7 @@ public class RiskAlertCommandService {
         alert.setHandledBy(users.getReferenceById(userId));
         alerts.save(alert);
         audit("IGNORE", alert, reason.trim());
-        return RiskAlertResponse.from(alert);
+        return respond(alert);
     }
 
     private RiskAlert find(Long id) {
@@ -116,5 +122,9 @@ public class RiskAlertCommandService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("無法建立示警處理稽核內容", exception);
         }
+    }
+
+    private RiskAlertResponse respond(RiskAlert alert) {
+        return RiskAlertResponse.from(alert, impacts.describe(List.of(alert)).get(alert.getId()));
     }
 }
