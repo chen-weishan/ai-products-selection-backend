@@ -83,5 +83,7 @@ subprojects {
 		// 預設值；只靠 application.properties 的 ${SSDS_FLYWAY_ENABLED:false} 擋不住。
 		// migration 要驗證請跑 :ssds-infra:test（Testcontainers，隔離的容器）。
 		environment 'SSDS_FLYWAY_ENABLED', 'false'
+		// Spring context 測試不可續跑共用資料庫中的既有報表任務。
+		environment 'REPORT_RESUME_ON_STARTUP', 'false'
 	}
 }

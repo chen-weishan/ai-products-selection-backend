@@ -18,6 +18,17 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ProductScoreRepository extends JpaRepository<ProductScore, Long> {
 
+    /** FR-12 評分期別選單：只列出目前仍有可報表化評分快照的週期。 */
+    @Query("""
+            select distinct s.period
+            from ProductScore s
+            join s.product p
+            where s.active = true
+              and p.deletedAt is null
+            order by s.period desc
+            """)
+    List<String> findDistinctActivePeriodsOrderByPeriodDesc();
+
         @EntityGraph(attributePaths = { "product", "product.category" })
         Page<ProductScore> findByPeriodAndGradeOrderByFinalScoreDesc(
                         String period, Grade grade, Pageable pageable);

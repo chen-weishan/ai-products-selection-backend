@@ -2,6 +2,7 @@ package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.DecisionType;
 import com.example.ssds.core.domain.TrackType;
+import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.DecisionRecord;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,6 +23,13 @@ public interface DecisionRecordRepository extends JpaRepository<DecisionRecord, 
   Page<DecisionRecord> findByDecidedAtBetween(Instant from, Instant to, Pageable pageable);
 
   List<DecisionRecord> findByProductIdOrderByDecidedAtDesc(Long productId);
+
+  /** FR-12 報表篩選只列出實際建立過決策的人員。 */
+  @Query("""
+          SELECT DISTINCT dr.decidedBy FROM DecisionRecord dr
+          ORDER BY dr.decidedBy.displayName, dr.decidedBy.email
+          """)
+  List<AppUser> findDistinctDecisionMakers();
 
   @EntityGraph(attributePaths = { "product" })
   Page<DecisionRecord> findByDecision(DecisionType decision, Pageable pageable);

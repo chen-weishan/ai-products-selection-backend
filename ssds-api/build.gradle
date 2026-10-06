@@ -18,6 +18,8 @@ dependencies {
 	implementation libs.springdoc.openapi
     implementation 'com.auth0:java-jwt:4.4.0'
 	implementation libs.commons.csv
+	implementation libs.apache.poi.ooxml
+	implementation libs.openpdf
     implementation libs.jjwt.api
 
 	developmentOnly libs.spring.boot.devtools
