@@ -4,21 +4,36 @@ import com.example.ssds.api.aitask.dto.AiTaskResponse;
 import com.example.ssds.api.common.response.ApiResponse;
 import com.example.ssds.api.sourcing.dto.*;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/sourcing")
+@Validated
 public class SourcingScoutController {
     private final SourcingScoutService service;
     private final SourcingPriorityCommandService priorityCommands;
+    private final SourcingQueueService queueService;
     public SourcingScoutController(
             SourcingScoutService service,
-            SourcingPriorityCommandService priorityCommands) {
+            SourcingPriorityCommandService priorityCommands,
+            SourcingQueueService queueService) {
         this.service = service;
         this.priorityCommands = priorityCommands;
+        this.queueService = queueService;
+    }
+
+    @GetMapping("/queue")
+    public ApiResponse<SourcingQueueResponse> queue(
+            @RequestParam(defaultValue = "ALL") SourcingQueueFilter status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
+        return ApiResponse.success(queueService.getQueue(status, page, size));
     }
     @PostMapping("/scout")
     public ResponseEntity<ApiResponse<AiTaskResponse>> scout(@Valid @RequestBody SourcingScoutRequest request) {
