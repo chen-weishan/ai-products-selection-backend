@@ -65,7 +65,7 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
               and (:severity is null or r.severity = :severity)
               and (:riskType is null or r.riskType = :riskType)
               and (:categoryId is null or r.product.category.id = :categoryId)
-              and (:keyword is null or locate(lower(:keyword), lower(r.product.name)) > 0)
+              and (:keyword = '' or locate(lower(:keyword), lower(r.product.name)) > 0)
             order by case r.severity
                          when com.example.ssds.core.domain.Severity.HIGH then 0
                          when com.example.ssds.core.domain.Severity.MEDIUM then 1
@@ -80,8 +80,9 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
               and (:severity is null or r.severity = :severity)
               and (:riskType is null or r.riskType = :riskType)
               and (:categoryId is null or r.product.category.id = :categoryId)
-              and (:keyword is null or locate(lower(:keyword), lower(r.product.name)) > 0)
+              and (:keyword = '' or locate(lower(:keyword), lower(r.product.name)) > 0)
             """)
+    // keyword 不可為 null：無關鍵字請傳空字串（避免 PostgreSQL 對 null 參數無法判斷型別）
     Page<RiskAlert> search(
             @Param("status") AlertStatus status,
             @Param("severity") Severity severity,
@@ -141,7 +142,12 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
     /**
      * 去重窗：OPEN 以 detected_at 起算；ACKNOWLEDGED／IGNORED 以 handled_at 起算，
      * 舊資料 handled_at 為空時回退 detected_at。OPEN 優先，避免較新的已處理列遮住仍有效的 OPEN。
+     *
+     * <p>命中的那一列會加上資料列寫入鎖（SELECT ... FOR UPDATE）：Writer 隨後會改寫它，
+     * 若此時使用者剛好確認／忽略同一筆，沒有列鎖就會用讀到的舊 OPEN 狀態整列覆寫回去。
+     * 有鎖時，後到的一方會等前一個交易提交，再讀到最新狀態。
      */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select r from RiskAlert r
             where r.product.id = :productId

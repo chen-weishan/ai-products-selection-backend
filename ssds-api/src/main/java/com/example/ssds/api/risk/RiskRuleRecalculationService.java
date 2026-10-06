@@ -66,6 +66,8 @@ public class RiskRuleRecalculationService {
                 currentGeneration = generation;
                 completed = 0;
                 total = 0;
+                // 每一輪重新計錯：上一輪的失敗已被這一輪的結果取代，否則成功的輪次仍會帶著舊錯誤
+                lastError = null;
             }
             Instant detectedAt = Instant.now();
             LocalDate today = LocalDate.now(TAIPEI);

@@ -29,6 +29,9 @@ import com.example.ssds.infra.repository.RiskAlertRepository;
 @Service
 public class RiskAlertCommandService {
 
+    /** 商品名稱搜尋關鍵字上限。 */
+    static final int MAX_KEYWORD_LENGTH = 100;
+
     private final RiskAlertRepository alerts;
     private final AppUserRepository users;
     private final AuditLogRepository audits;
@@ -51,9 +54,14 @@ public class RiskAlertCommandService {
     @Transactional(readOnly = true)
     public PageResponse<RiskAlertResponse> search(
             AlertStatus status, Severity severity, String type, Long categoryId, String keyword, Pageable pageable) {
-        Page<RiskAlert> page = status == null && severity == null && type == null && categoryId == null && (keyword == null || keyword.isBlank())
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        if (normalizedKeyword.length() > MAX_KEYWORD_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "搜尋關鍵字不得超過 " + MAX_KEYWORD_LENGTH + " 字");
+        }
+        Page<RiskAlert> page = status == null && severity == null && type == null && categoryId == null
+                && normalizedKeyword.isEmpty()
                 ? alerts.findVisible(null, pageable)
-                : alerts.search(status, severity, type, categoryId, keyword == null || keyword.isBlank() ? null : keyword.trim(), pageable);
+                : alerts.search(status, severity, type, categoryId, normalizedKeyword, pageable);
         Map<Long, String> impactByAlert = impacts.describe(page.getContent());
         return PageResponse.from(page.map(alert ->
                 RiskAlertResponse.from(alert, impactByAlert.get(alert.getId()))));
