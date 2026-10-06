@@ -62,4 +62,40 @@ public class HeatReadingPercentileDao {
                 .param("readingDate", readingDate)
                 .update();
     }
+
+    /**
+     * 重新計算 Instagram 當週截至指定日期、各品類最新讀值的來源內百分位。
+     * 缺漏品類在稍後日期補到時，仍須和本週較早完成的品類一起排名。
+     */
+    public int applyInstagramWeeklyPercentiles(LocalDate asOfDate) {
+        return jdbcClient
+                .sql("""
+                     WITH latest AS (
+                         SELECT DISTINCT ON (hr.category_id)
+                                hr.id, hr.source_id, hr.raw_value
+                         FROM heat_reading hr
+                         JOIN heat_source hs ON hs.id = hr.source_id
+                         WHERE hs.source_code = 'INSTAGRAM'
+                           AND hr.category_id IS NOT NULL
+                           AND hr.reading_date BETWEEN
+                               date_trunc('week', CAST(:asOfDate AS date))::date
+                               AND :asOfDate
+                         ORDER BY hr.category_id, hr.reading_date DESC, hr.id DESC
+                     ),
+                     ranked AS (
+                         SELECT id,
+                                CUME_DIST() OVER (
+                                    PARTITION BY source_id
+                                    ORDER BY raw_value
+                                ) * 100 AS pct
+                         FROM latest
+                     )
+                     UPDATE heat_reading hr
+                     SET percentile_within_source = ROUND(ranked.pct::numeric, 2)
+                     FROM ranked
+                     WHERE hr.id = ranked.id
+                     """)
+                .param("asOfDate", asOfDate)
+                .update();
+    }
 }

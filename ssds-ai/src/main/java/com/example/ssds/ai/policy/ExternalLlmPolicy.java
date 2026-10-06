@@ -3,7 +3,6 @@ package com.example.ssds.ai.policy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -53,9 +52,7 @@ public class ExternalLlmPolicy {
     private static void inspect(JsonNode node, String path) {
         if (node == null) return;
         if (node.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 String normalized = field.getKey().replace("_", "").replace("-", "")
                         .toLowerCase(Locale.ROOT);
                 if (FORBIDDEN_KEYS.contains(normalized)) {

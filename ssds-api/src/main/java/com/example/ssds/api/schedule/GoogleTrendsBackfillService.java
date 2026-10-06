@@ -1,5 +1,6 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.heat.HeatSourceQuota;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.infra.entity.HeatReading;
 import com.example.ssds.infra.entity.HeatSource;
@@ -15,11 +16,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class GoogleTrendsBackfillService {
+
+    private static final Logger log = LoggerFactory.getLogger(GoogleTrendsBackfillService.class);
 
     private final GoogleTrendsClient client;
     private final HeatSourceRepository heatSourceRepository;
@@ -48,6 +53,16 @@ public class GoogleTrendsBackfillService {
         TrendKeyword keyword = trendKeywordRepository.getReferenceById(keywordId);
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.GOOGLE_TRENDS)
                 .orElseThrow();
+        // 回補不經過 ingest job，要自己擋：來源被停用或本月額度已用完時不打 Apify（只看資料庫記的用量，不連網）
+        if (!source.isEnabled()) {
+            log.info("GOOGLE_TRENDS 來源已停用（enabled=false），略過回補。");
+            return;
+        }
+        if (HeatSourceQuota.isExhausted(source)) {
+            log.warn("GOOGLE_TRENDS 本月 Apify 額度已用完（{}/{} 美分），略過回補。",
+                    source.getQuotaUsed(), source.getQuotaLimit());
+            return;
+        }
 
         List<GoogleTrendsClient.DailyInterest> series =
                 client.fetchInterestOverTime(keyword.getKeyword(), timeframe);

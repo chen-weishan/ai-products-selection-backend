@@ -1,5 +1,6 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.heat.HeatSourceQuota;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.core.domain.SourceAvailability;
 import com.example.ssds.infra.entity.HeatReading;
@@ -17,7 +18,6 @@ import java.util.Collection;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,10 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
  * HeatCompositeCalibrationJob 另外處理。
  */
 @Component
-@ConditionalOnProperty(
-        name = "ssds.ingest.threads.enabled",
-        havingValue = "true",
-        matchIfMissing = true)
 public class ThreadsHeatIngestJob {
 
     private static final Logger log = LoggerFactory.getLogger(ThreadsHeatIngestJob.class);
@@ -89,6 +85,16 @@ public class ThreadsHeatIngestJob {
             return;
         }
 
+        // 採集前先讀 Apify 最新用量：本月額度已用完就不再呼叫（enabled 仍保持使用者設定，月初重置後自動恢復）
+        if (!HeatSourceQuota.hasRoom(source, threadsAdapter)) {
+            log.warn("THREADS 本月 Apify 額度已用完（{}/{} 美分），略過採集。",
+                    source.getQuotaUsed(), source.getQuotaLimit());
+            // 略過本次採集：標 UNAVAILABLE（不動 enabled），並保存剛讀到的最新用量；下月額度重置後自動恢復
+            source.markQuotaExhausted();
+            heatSourceRepository.save(source);
+            return;
+        }
+
         List<String> keywordTexts = keywords.stream().map(TrendKeyword::getKeyword).toList();
 
         List<HeatDataPoint> points;
@@ -108,9 +114,11 @@ public class ThreadsHeatIngestJob {
                     .ifPresent(k -> upsert(source, k, today, point));
         }
 
-        source.setAvailability(points.isEmpty() ? SourceAvailability.DEGRADED : SourceAvailability.AVAILABLE);
         source.setLastFetchedAt(Instant.now());
-        source.setQuotaUsed(source.getQuotaUsed() + keywordTexts.size());
+        // 額度改讀 Apify 後台的本月用量（不再自行累加關鍵字數，單位不同）
+        HeatSourceQuota.refresh(source, threadsAdapter);
+        // 狀態統一走 HeatSource 的判定（額度 ≥80% 降級、100% 不可用），不再只看有沒有資料
+        source.applyIngestResult(!points.isEmpty(), today);
         heatSourceRepository.save(source);
 
         log.info("Threads 熱度採集完成：查詢 {} 個關鍵字，取得 {} 筆讀值。", keywordTexts.size(), points.size());

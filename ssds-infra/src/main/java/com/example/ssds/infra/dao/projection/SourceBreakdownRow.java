@@ -8,5 +8,6 @@ public record SourceBreakdownRow(
         String availability,
         BigDecimal percentileWithinSource,
         BigDecimal slope7d,
-        BigDecimal slope30d) {
+        BigDecimal slope30d,
+        boolean enabled) {
         }

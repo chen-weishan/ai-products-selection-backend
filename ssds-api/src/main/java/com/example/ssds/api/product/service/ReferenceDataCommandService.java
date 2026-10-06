@@ -6,15 +6,19 @@ import com.example.ssds.api.product.dto.CategoryResponse;
 import com.example.ssds.api.product.dto.CategoryUpsertRequest;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.SupplierUpsertRequest;
+import com.example.ssds.api.product.dto.TrendKeywordEnabledUpdateRequest;
+import com.example.ssds.api.product.dto.TrendKeywordResponse;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Supplier;
+import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
+import com.example.ssds.infra.repository.TrendKeywordRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
@@ -33,6 +37,7 @@ public class ReferenceDataCommandService {
     private final ProductRepository productRepository;
     private final AppUserRepository appUserRepository;
     private final AuditLogRepository auditLogRepository;
+    private final TrendKeywordRepository trendKeywordRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ReferenceDataCommandService(
@@ -40,13 +45,15 @@ public class ReferenceDataCommandService {
             SupplierRepository supplierRepository,
             ProductRepository productRepository,
             AppUserRepository appUserRepository,
-            AuditLogRepository auditLogRepository
+            AuditLogRepository auditLogRepository,
+            TrendKeywordRepository trendKeywordRepository
     ) {
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
         this.productRepository = productRepository;
         this.appUserRepository = appUserRepository;
         this.auditLogRepository = auditLogRepository;
+        this.trendKeywordRepository = trendKeywordRepository;
     }
 
     public CategoryResponse createCategory(
@@ -166,6 +173,34 @@ public class ReferenceDataCommandService {
         audit(actor, "DELETE", "Supplier", id, before, supplierJson(supplier), sourceIp);
     }
 
+    public TrendKeywordResponse updateTrendKeywordEnabled(
+            Long id,
+            TrendKeywordEnabledUpdateRequest request,
+            String actorEmail,
+            String sourceIp
+    ) {
+        TrendKeyword keyword = trendKeywordRepository.findById(id)
+                .orElseThrow(() -> notFound("趨勢關鍵字", id));
+        AppUser actor = findActor(actorEmail);
+        if (keyword.isEnabled() == request.enabled()) {
+            return toTrendKeywordResponse(keyword);
+        }
+
+        String before = trendKeywordJson(keyword);
+        keyword.setEnabled(request.enabled());
+        TrendKeyword saved = trendKeywordRepository.saveAndFlush(keyword);
+        audit(
+                actor,
+                request.enabled() ? "ENABLE" : "DISABLE",
+                "TrendKeyword",
+                id,
+                before,
+                trendKeywordJson(saved),
+                sourceIp
+        );
+        return toTrendKeywordResponse(saved);
+    }
+
     private Category findCategory(Long id) {
         return id == null ? null : requiredActiveCategory(id);
     }
@@ -276,6 +311,16 @@ public class ReferenceDataCommandService {
         );
     }
 
+    private TrendKeywordResponse toTrendKeywordResponse(TrendKeyword keyword) {
+        return new TrendKeywordResponse(
+                keyword.getId(),
+                keyword.getKeyword(),
+                keyword.getGeo(),
+                keyword.isEnabled(),
+                keyword.getLastFetchedAt()
+        );
+    }
+
     private String categoryJson(Category category) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", category.getName());
@@ -292,6 +337,17 @@ public class ReferenceDataCommandService {
         values.put("phone", supplier.getPhone());
         values.put("note", supplier.getNote());
         values.put("deleted", supplier.isDeleted());
+        return json(values);
+    }
+
+    private String trendKeywordJson(TrendKeyword keyword) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("keyword", keyword.getKeyword());
+        values.put("geo", keyword.getGeo());
+        values.put("enabled", keyword.isEnabled());
+        values.put("lastFetchedAt", keyword.getLastFetchedAt() == null
+                ? null
+                : keyword.getLastFetchedAt().toString());
         return json(values);
     }
 

@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
@@ -68,7 +69,7 @@ class HeatCompositeCalibrationJobTest {
     }
 
     @Test
-    void runsPercentilesCompositionTimeGapAndAgentEnqueueInOrder() {
+    void enqueuesAgentBeforeSkippingItsDrivingKeywordInBaselineTimeGapPass() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeCalibrationService calibrationService = mock(HeatCompositeCalibrationService.class);
@@ -85,12 +86,14 @@ class HeatCompositeCalibrationJobTest {
                 .thenReturn(Optional.of(HeatCompositeDaily.builder().build()));
         when(timeGapProvider.getIfAvailable()).thenReturn(timeGapJob);
         when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        when(trendJob.enqueueSignificantKeywords(businessDate)).thenReturn(Set.of(7L));
         HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
                 percentileDao,
                 keywordRepository,
                 mock(HeatCompositeDailyRepository.class),
                 mock(HeatReadingRepository.class),
                 calibrationService,
+                provider(null),
                 provider(null),
                 provider(null),
                 provider(null),
@@ -101,9 +104,10 @@ class HeatCompositeCalibrationJobTest {
 
         InOrder order = inOrder(percentileDao, calibrationService, timeGapJob, trendJob);
         order.verify(percentileDao).applyPercentiles(businessDate);
+        order.verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
         order.verify(calibrationService).computeAndPersist(7L, businessDate);
-        order.verify(timeGapJob).recalculateAfterDailyHeatComposition();
         order.verify(trendJob).enqueueSignificantKeywords(businessDate);
+        order.verify(timeGapJob).recalculateAfterDailyHeatComposition(Set.of(7L));
     }
 
     @Test
@@ -127,6 +131,7 @@ class HeatCompositeCalibrationJobTest {
                 .thenReturn(Optional.of(HeatCompositeDaily.builder().build()));
         when(timeGapProvider.getIfAvailable()).thenReturn(timeGapJob);
         when(trendProvider.getIfAvailable()).thenReturn(trendJob);
+        when(trendJob.enqueueSignificantKeywords(businessDate)).thenReturn(Set.of(8L));
         HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
                 percentileDao,
                 keywordRepository,
@@ -136,14 +141,15 @@ class HeatCompositeCalibrationJobTest {
                 provider(null),
                 provider(null),
                 provider(null),
+                provider(null),
                 timeGapProvider,
                 trendProvider);
 
         job.run(businessDate);
 
         verify(calibrationService).computeAndPersist(8L, businessDate);
-        verify(timeGapJob).recalculateAfterDailyHeatComposition();
         verify(trendJob).enqueueSignificantKeywords(businessDate);
+        verify(timeGapJob).recalculateAfterDailyHeatComposition(Set.of(8L));
     }
 
     @Test
@@ -167,6 +173,7 @@ class HeatCompositeCalibrationJobTest {
                 mock(HeatCompositeDailyRepository.class),
                 mock(HeatReadingRepository.class),
                 calibrationService,
+                provider(null),
                 provider(null),
                 provider(null),
                 provider(null),
@@ -205,6 +212,7 @@ class HeatCompositeCalibrationJobTest {
                 provider(null),
                 provider(null),
                 provider(null),
+                provider(null),
                 timeGapProvider,
                 trendProvider);
 
@@ -226,6 +234,7 @@ class HeatCompositeCalibrationJobTest {
         ThreadsHeatIngestJob threadsJob = mock(ThreadsHeatIngestJob.class);
         GoogleTrendsHeatIngestJob googleTrendsJob = mock(GoogleTrendsHeatIngestJob.class);
         InstagramHeatIngestJob instagramJob = mock(InstagramHeatIngestJob.class);
+        ManualHeatReadingJob manualJob = mock(ManualHeatReadingJob.class);
         LocalDate businessDate = LocalDate.of(2026, 9, 22);
         TrendKeyword keyword = TrendKeyword.builder().id(7L).keyword("合成前補採").build();
         when(compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate))
@@ -245,21 +254,25 @@ class HeatCompositeCalibrationJobTest {
                 provider(threadsJob),
                 provider(googleTrendsJob),
                 provider(instagramJob),
+                provider(manualJob),
                 provider(null),
                 provider(null));
 
         job.runScheduled(businessDate);
 
-        InOrder order = inOrder(threadsJob, googleTrendsJob, instagramJob, percentileDao, calibrationService);
+        InOrder order = inOrder(
+                threadsJob, googleTrendsJob, instagramJob, manualJob, percentileDao, calibrationService);
         order.verify(threadsJob).runForKeywordIds(List.of(7L), businessDate);
         order.verify(googleTrendsJob).runForKeywordIds(List.of(7L), businessDate);
-        order.verify(instagramJob).run();
+        order.verify(instagramJob).runMissingForWeek(businessDate);
+        order.verify(manualJob).reconcile(org.mockito.ArgumentMatchers.eq(businessDate), org.mockito.ArgumentMatchers.any());
         order.verify(percentileDao).applyPercentiles(businessDate);
+        order.verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
         order.verify(calibrationService).computeAndPersist(7L, businessDate);
     }
 
     @Test
-    void scheduledRerunDoesNotRepeatCompletedSourceCollection() {
+    void scheduledRerunOnlyReconcilesExistingInstagramWithoutRepeatingCollection() {
         HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
@@ -285,12 +298,53 @@ class HeatCompositeCalibrationJobTest {
                 provider(googleTrendsJob),
                 provider(instagramJob),
                 provider(null),
+                provider(null),
                 provider(null));
 
         job.runScheduled(businessDate);
 
-        verifyNoInteractions(threadsJob, googleTrendsJob, instagramJob);
+        verifyNoInteractions(threadsJob, googleTrendsJob);
+        verify(instagramJob).runMissingForWeek(businessDate);
+        verify(instagramJob).restoreAvailabilityFromCurrentWeek(businessDate);
         verify(percentileDao).applyPercentiles(businessDate);
+        verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
+    }
+
+    @Test
+    void scheduledRunStillFillsMissingInstagramCategoriesWhenWeekHasPartialData() {
+        HeatReadingPercentileDao percentileDao = mock(HeatReadingPercentileDao.class);
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        HeatReadingRepository heatReadingRepository = mock(HeatReadingRepository.class);
+        InstagramHeatIngestJob instagramJob = mock(InstagramHeatIngestJob.class);
+        LocalDate businessDate = LocalDate.of(2026, 9, 22);
+        when(compositeRepository.findEnabledKeywordIdsMissingStatDate(businessDate))
+                .thenReturn(List.of());
+        when(heatReadingRepository.existsBySourceSourceCodeAndReadingDateBetween(
+                HeatSourceCode.INSTAGRAM,
+                LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 27)))
+                .thenReturn(true);
+        when(instagramJob.runMissingForWeek(businessDate)).thenReturn(true);
+        HeatCompositeCalibrationJob job = new HeatCompositeCalibrationJob(
+                percentileDao,
+                keywordRepository,
+                compositeRepository,
+                heatReadingRepository,
+                mock(HeatCompositeCalibrationService.class),
+                provider(null),
+                provider(null),
+                provider(instagramJob),
+                provider(null),
+                provider(null),
+                provider(null));
+
+        job.runScheduled(businessDate);
+
+        verify(instagramJob).runMissingForWeek(businessDate);
+        verify(instagramJob, never()).restoreAvailabilityFromCurrentWeek(businessDate);
+        verify(percentileDao).applyPercentiles(businessDate);
+        verify(percentileDao).applyInstagramWeeklyPercentiles(businessDate);
     }
 
     @SuppressWarnings("unchecked")

@@ -2,7 +2,10 @@ package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.TaskItemStatus;
 import jakarta.persistence.*;
+import java.time.Instant;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * AI 任務逐項結果（規格書 §7.2 ai_task_item）。
@@ -56,4 +59,32 @@ public class AiTaskItem {
 
     @Column(name = "duration_ms")
     private Integer durationMs;
+
+    /** SOURCING_SCOUT 的正規化輸入；陌生字詞不需先建立 TrendKeyword。 */
+    @Column(name = "scout_keyword", length = 80)
+    private String scoutKeyword;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "scout_category_id")
+    private Category scoutCategory;
+
+    @Column(name = "scout_report", columnDefinition = "text")
+    private String scoutReport;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scout_opportunity_signals", columnDefinition = "jsonb")
+    private String scoutOpportunitySignals;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scout_risk_signals", columnDefinition = "jsonb")
+    private String scoutRiskSignals;
+
+    @Column(name = "scout_model", length = 80)
+    private String scoutModel;
+
+    @Column(name = "scout_prompt_version", length = 20)
+    private String scoutPromptVersion;
+
+    @Column(name = "scout_report_generated_at")
+    private Instant scoutReportGeneratedAt;
 }

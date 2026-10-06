@@ -8,13 +8,16 @@ import static org.mockito.Mockito.when;
 import com.example.ssds.api.product.dto.CategoryTreeResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
+import com.example.ssds.api.product.dto.TrendKeywordUsageResponse;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
+import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
 import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
+import com.example.ssds.infra.repository.ProductRepository;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,7 @@ class ProductReferenceQueryServiceTest {
     private ProductMarginStatisticsDao marginStatisticsDao;
     private SupplierRepository supplierRepository;
     private TrendKeywordRepository trendKeywordRepository;
+    private ProductRepository productRepository;
     private ProductReferenceQueryService service;
 
     @BeforeEach
@@ -33,11 +37,13 @@ class ProductReferenceQueryServiceTest {
         marginStatisticsDao = mock(ProductMarginStatisticsDao.class);
         supplierRepository = mock(SupplierRepository.class);
         trendKeywordRepository = mock(TrendKeywordRepository.class);
+        productRepository = mock(ProductRepository.class);
         service = new ProductReferenceQueryService(
                 categoryRepository,
                 marginStatisticsDao,
                 supplierRepository,
-                trendKeywordRepository
+                trendKeywordRepository,
+                productRepository
         );
     }
 
@@ -126,6 +132,27 @@ class ProductReferenceQueryServiceTest {
         service.getTrendKeywords(null, null);
 
         verify(trendKeywordRepository).findAllByOrderByKeywordAsc();
+    }
+
+    @Test
+    void keywordUsageListsBoundProductsForDisableConfirmation() {
+        TrendKeyword keyword = TrendKeyword.builder()
+                .id(10L)
+                .keyword("巧克力")
+                .enabled(true)
+                .build();
+        when(trendKeywordRepository.findById(10L)).thenReturn(java.util.Optional.of(keyword));
+        when(productRepository.findAllByKeywordId(10L)).thenReturn(List.of(
+                Product.builder().id(21L).name("杜拜巧克力").build(),
+                Product.builder().id(22L).name("金沙巧克力").build()
+        ));
+
+        TrendKeywordUsageResponse result = service.getTrendKeywordUsage(10L);
+
+        assertEquals("巧克力", result.keyword());
+        assertEquals(List.of("杜拜巧克力", "金沙巧克力"), result.products().stream()
+                .map(TrendKeywordUsageResponse.BoundProductResponse::name)
+                .toList());
     }
 
     // festivalsAreDeduplicatedAcrossYears 已隨端點移至 FestivalQueryServiceTest（FR-17）。

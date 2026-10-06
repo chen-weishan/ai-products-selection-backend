@@ -237,6 +237,7 @@ private List<OverdueCampaignDto> getOverdueCampaigns(TrackType track) {
                             track);
             return overdue.stream()
                             .map(dr -> new OverdueCampaignDto(
+                                            dr.getId(),
                                             dr.getProduct().getId(),
                                             dr.getProduct().getName(),
                                             dr.getCampaignEndDate(),

@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,9 +108,7 @@ class OutboundPromptContractTest {
 
     private static void assertNoForbiddenKeys(JsonNode node) {
         if (node.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 assertFalse(FORBIDDEN_KEYS.contains(field.getKey()), "forbidden outbound key: " + field.getKey());
                 assertNoForbiddenKeys(field.getValue());
             }

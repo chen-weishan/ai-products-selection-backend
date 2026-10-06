@@ -61,9 +61,6 @@ public class ProductCommandService {
     private static final Set<String> EDIT_ROLES = Set.of(
             "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_DATA_ADMIN", "ROLE_SYS_ADMIN"
     );
-    private static final Set<String> DECISION_ROLES = Set.of(
-            "ROLE_BUYER", "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
-    );
     private static final Set<String> REVIEW_ROLES = Set.of(
             "ROLE_BUYER_LEAD", "ROLE_SYS_ADMIN"
     );
@@ -273,7 +270,6 @@ public class ProductCommandService {
         product.setShelfLifeDays(request.shelfLifeDays());
         product.getKeywords().clear();
         product.getKeywords().addAll(keywords);
-
         List<String> warnings = new ArrayList<>();
         if (productRepository.existsDuplicateName(
                 category.getId(),
@@ -434,9 +430,12 @@ public class ProductCommandService {
         );
     }
 
-    /** 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。 */
-    // TODO FR-11：決策模組完成後，觀察／採納／淘汰應由共用決策服務
-    // 在同一交易建立 decision_record 並更新品項；目前僅更新狀態及 AuditLog。
+    /**
+     * 依規格書 §7.4 執行狀態轉換，並留下轉換前後的稽核紀錄。
+     *
+     * <p>觀察／採納／淘汰不走這裡：其事件是「建立決策」（權限列 11），由
+     * {@code DecisionCommandService#create} 在同一交易建立 decision_record 並更新品項。
+     */
     public ProductStatusUpdateResponse changeStatus(
             Long productId,
             ProductStatusUpdateRequest request,
@@ -451,22 +450,8 @@ public class ProductCommandService {
 
         validateStatusTransition(product, targetStatus, authorities);
 
-        if (targetStatus == ProductStatus.REJECTED) {
-            String reason = normalizeNullable(request.rejectReason());
-            if (reason == null || reason.length() < 10) {
-                throw new BusinessException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "商品資料驗證失敗",
-                        List.of(new FieldError(
-                                "rejectReason",
-                                "淘汰原因至少需要 10 個字"
-                        ))
-                );
-            }
-            product.setRejectReason(reason);
-        } else {
-            product.setRejectReason(null);
-        }
+        // 目標不可能是 REJECTED（只能由決策進入），離開 REJECTED 時清掉淘汰原因
+        product.setRejectReason(null);
 
         if (targetStatus == ProductStatus.LISTED) {
             product.setListedAt(LocalDate.now(BUSINESS_ZONE));
@@ -579,10 +564,13 @@ public class ProductCommandService {
         if (trackType == TrackType.A) {
             return null;
         }
-        if (sourcingStatus == null) {
-            return SourcingStatus.PENDING;
+        if (sourcingStatus != null && sourcingStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "B 軌品項建立時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
         }
-        return sourcingStatus;
+        return SourcingStatus.PENDING;
     }
 
     private SourcingStatus resolveSourcingStatusForUpdate(
@@ -593,12 +581,22 @@ public class ProductCommandService {
         if (targetTrackType == TrackType.A) {
             return null;
         }
-        if (requestedStatus != null) {
-            return requestedStatus;
-        }
         if (product.getTrackType() == TrackType.B
                 && product.getSourcingStatus() != null) {
+            if (requestedStatus != null
+                    && requestedStatus != product.getSourcingStatus()) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_STATE_TRANSITION,
+                        "一般品項更新不可變更尋源狀態；請使用存為觀察或加入尋源優先序操作"
+                );
+            }
             return product.getSourcingStatus();
+        }
+        if (requestedStatus != null && requestedStatus != SourcingStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "轉為 B 軌時只能是待評估；請使用尋源優先序操作變更狀態"
+            );
         }
         return SourcingStatus.PENDING;
     }
@@ -783,13 +781,6 @@ public class ProductCommandService {
         );
     }
 
-    private String normalizeNullable(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
     private void validateDraftOperation(Product product, boolean saveAsDraft) {
         if (saveAsDraft && product.getStatus() != ProductStatus.DRAFT) {
             throw invalidTransition(product.getStatus(), ProductStatus.DRAFT);
@@ -799,10 +790,11 @@ public class ProductCommandService {
     private void validateTrackStatus(ProductStatus status, TrackType trackType) {
         if (trackType == TrackType.B
                 && status != ProductStatus.DRAFT
-                && status != ProductStatus.EVALUATING) {
+                && status != ProductStatus.EVALUATING
+                && status != ProductStatus.WATCHING) {
             throw new BusinessException(
                     ErrorCode.INVALID_STATE_TRANSITION,
-                    "B 軌品項狀態固定為 EVALUATING，實際進度請使用 sourcingStatus"
+                    "B 軌品項狀態僅允許 DRAFT、EVALUATING 或 WATCHING，實際尋源進度請使用 sourcingStatus"
             );
         }
     }
@@ -838,17 +830,13 @@ public class ProductCommandService {
                     );
                 }
             }
-            case EVALUATING -> {
-                allowed = targetStatus == ProductStatus.WATCHING
-                        || targetStatus == ProductStatus.ADOPTED
-                        || targetStatus == ProductStatus.REJECTED;
-                requiredRoles = DECISION_ROLES;
-            }
-            case WATCHING -> {
-                allowed = targetStatus == ProductStatus.ADOPTED
-                        || targetStatus == ProductStatus.REJECTED;
-                requiredRoles = DECISION_ROLES;
-            }
+            // §7.4：這兩個狀態往後的事件都是「建立決策」，由 POST /products/{id}/decisions 獨佔。
+            // 放行的話會跳過 decision_record／快照，品項變 ADOPTED 後也再補不了決策
+            case EVALUATING, WATCHING -> throw new BusinessException(
+                    ErrorCode.INVALID_STATE_TRANSITION,
+                    "品項狀態為 " + sourceStatus
+                            + "，觀察／採納／淘汰請改用建立決策（POST /products/{id}/decisions）"
+            );
             case ADOPTED -> {
                 allowed = targetStatus == ProductStatus.LISTED;
                 requiredRoles = EDIT_ROLES;

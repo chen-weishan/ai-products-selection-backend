@@ -8,6 +8,8 @@ public record AiTaskItemResponse(
         Long productId,
         Long keywordId,
         Long calibrationReportId,
+        String scoutKeyword,
+        Long scoutCategoryId,
         TaskItemStatus status,
         String errorMessage,
         Integer durationMs
@@ -18,6 +20,8 @@ public record AiTaskItemResponse(
                 item.getProduct() == null ? null : item.getProduct().getId(),
                 item.getKeyword() == null ? null : item.getKeyword().getId(),
                 item.getCalibrationReport() == null ? null : item.getCalibrationReport().getId(),
+                item.getScoutKeyword(),
+                item.getScoutCategory() == null ? null : item.getScoutCategory().getId(),
                 item.getStatus(),
                 item.getErrorMessage(),
                 item.getDurationMs());

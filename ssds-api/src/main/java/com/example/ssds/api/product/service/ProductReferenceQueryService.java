@@ -4,6 +4,7 @@ import com.example.ssds.api.product.dto.CategoryTreeResponse;
 import com.example.ssds.api.product.dto.CategoryMarginMedianResponse;
 import com.example.ssds.api.product.dto.SupplierResponse;
 import com.example.ssds.api.product.dto.TrendKeywordResponse;
+import com.example.ssds.api.product.dto.TrendKeywordUsageResponse;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Supplier;
 import com.example.ssds.infra.entity.TrendKeyword;
@@ -11,6 +12,7 @@ import com.example.ssds.infra.repository.CategoryRepository;
 import com.example.ssds.infra.dao.ProductMarginStatisticsDao;
 import com.example.ssds.infra.repository.SupplierRepository;
 import com.example.ssds.infra.repository.TrendKeywordRepository;
+import com.example.ssds.infra.repository.ProductRepository;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,17 +33,20 @@ public class ProductReferenceQueryService {
     private final ProductMarginStatisticsDao marginStatisticsDao;
     private final SupplierRepository supplierRepository;
     private final TrendKeywordRepository trendKeywordRepository;
+    private final ProductRepository productRepository;
 
     public ProductReferenceQueryService(
             CategoryRepository categoryRepository,
             ProductMarginStatisticsDao marginStatisticsDao,
             SupplierRepository supplierRepository,
-            TrendKeywordRepository trendKeywordRepository
+            TrendKeywordRepository trendKeywordRepository,
+            ProductRepository productRepository
     ) {
         this.categoryRepository = categoryRepository;
         this.marginStatisticsDao = marginStatisticsDao;
         this.supplierRepository = supplierRepository;
         this.trendKeywordRepository = trendKeywordRepository;
+        this.productRepository = productRepository;
     }
 
     public List<CategoryTreeResponse> getCategoryTree() {
@@ -93,6 +98,26 @@ public class ProductReferenceQueryService {
         return keywords.stream()
                 .map(this::toTrendKeywordResponse)
                 .toList();
+    }
+
+    public TrendKeywordUsageResponse getTrendKeywordUsage(Long id) {
+        TrendKeyword keyword = trendKeywordRepository.findById(id)
+                .orElseThrow(() -> new com.example.ssds.api.common.error.BusinessException(
+                        com.example.ssds.api.common.error.ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的趨勢關鍵字：" + id
+                ));
+        var products = productRepository.findAllByKeywordId(id).stream()
+                .map(product -> new TrendKeywordUsageResponse.BoundProductResponse(
+                        product.getId(),
+                        product.getName()
+                ))
+                .toList();
+        return new TrendKeywordUsageResponse(
+                keyword.getId(),
+                keyword.getKeyword(),
+                keyword.isEnabled(),
+                products
+        );
     }
 
     // getFestivals() 已移至 FestivalQueryService（FR-17），連同端點一起收攏。

@@ -277,7 +277,7 @@ public class AiTaskWorker {
                     }
                     case SOURCING_SCOUT -> {
                         var response = sourcingScoutService.scout(
-                                item.getProduct().getId(), event.forceRefresh());
+                                item, event.forceRefresh());
                         if (response != null && response.cacheHit() && dailyAiBudget != null) {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }

@@ -39,19 +39,19 @@ public class TrendInterpretationJob {
         this.objectMapper = objectMapper;
     }
 
-    public void enqueueSignificantKeywords(LocalDate businessDate) {
-        enqueueSignificantKeywords(businessDate, keywordRepository.findByEnabledTrue());
+    public Set<Long> enqueueSignificantKeywords(LocalDate businessDate) {
+        return enqueueSignificantKeywords(businessDate, keywordRepository.findByEnabledTrue());
     }
 
-    public void enqueueSignificantKeywords(
+    public Set<Long> enqueueSignificantKeywords(
             LocalDate businessDate, Collection<Long> keywordIds) {
         List<TrendKeyword> keywords = keywordRepository.findAllById(keywordIds).stream()
                 .filter(TrendKeyword::isEnabled)
                 .toList();
-        enqueueSignificantKeywords(businessDate, keywords);
+        return enqueueSignificantKeywords(businessDate, keywords);
     }
 
-    private void enqueueSignificantKeywords(
+    private Set<Long> enqueueSignificantKeywords(
             LocalDate businessDate, List<TrendKeyword> keywords) {
         List<Long> keywordIds = new ArrayList<>();
         for (TrendKeyword keyword : keywords) {
@@ -66,12 +66,26 @@ public class TrendInterpretationJob {
                         exception);
             }
         }
+        Set<Long> deferredKeywordIds = new LinkedHashSet<>();
         for (int from = 0; from < keywordIds.size(); from += TASK_CHUNK_SIZE) {
             List<Long> chunk = keywordIds.subList(
                     from, Math.min(from + TASK_CHUNK_SIZE, keywordIds.size()));
-            taskService.createScheduledTrendInterpretation(chunk);
+            try {
+                taskService.createScheduledTrendInterpretation(chunk);
+                // Optional.empty 表示關鍵字已在執行中的任務內，仍必須等該任務完成。
+                deferredKeywordIds.addAll(chunk);
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "TrendInterpreter task enqueue failed; using rule baseline for keywordIds={}",
+                        chunk,
+                        exception);
+            }
         }
-        log.info("TrendInterpreter daily enqueue completed: keywordCount={}", keywordIds.size());
+        log.info(
+                "TrendInterpreter daily enqueue completed: keywordCount={}, deferredTimeGapCount={}",
+                keywordIds.size(),
+                deferredKeywordIds.size());
+        return Collections.unmodifiableSet(deferredKeywordIds);
     }
 
     private boolean isSignificant(TrendKeyword keyword, LocalDate businessDate) {

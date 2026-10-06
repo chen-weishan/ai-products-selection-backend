@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
 
-    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport"})
+    @EntityGraph(attributePaths = {"product", "keyword", "calibrationReport", "scoutCategory"})
     List<AiTaskItem> findByTaskId(Long taskId);
 
     /** FR-07「重跑失敗項」的取件範圍。 */
@@ -32,6 +33,15 @@ public interface AiTaskItemRepository extends JpaRepository<AiTaskItem, Long> {
     @EntityGraph(attributePaths = {"task", "product", "product.category"})
     @Query("select i from AiTaskItem i where i.id = :id")
     java.util.Optional<AiTaskItem> findForProcessing(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"task", "product", "product.category", "scoutCategory"})
+    @Query("select i from AiTaskItem i where i.id = :id")
+    java.util.Optional<AiTaskItem> findSourcingResultById(@Param("id") Long id);
+
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"task", "product", "product.category", "product.keywords", "scoutCategory"})
+    @Query("select i from AiTaskItem i where i.id = :id")
+    java.util.Optional<AiTaskItem> findSourcingResultByIdForUpdate(@Param("id") Long id);
 
     long countByTaskIdAndStatus(Long taskId, TaskItemStatus status);
 

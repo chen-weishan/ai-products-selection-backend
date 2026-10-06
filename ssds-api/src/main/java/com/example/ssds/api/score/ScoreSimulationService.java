@@ -55,6 +55,7 @@ public class ScoreSimulationService {
     private final WeightVersionRepository weightVersionRepository;
     private final GradeThresholdRepository gradeThresholdRepository;
     private final SceneOverrideLookup sceneOverrideLookup;
+    private final DrivingTargetLookup drivingTargetLookup;
 
     /** §5.6 硬規則的門檻：扣分達此值（含）以上，分級最高只給 B。 */
     private static final BigDecimal PENALTY_CAP = BigDecimal.valueOf(20);
@@ -109,10 +110,12 @@ public class ScoreSimulationService {
         }
 
         // 6. 一次撈完全部因子再分組，避免 N+1
-        Map<Long, List<ScoreFactor>> factorsByScoreId = scoreFactorRepository
-                .findByScoreIdIn(scores.stream().map(ProductScore::getId).toList())
-                .stream()
+        List<ScoreFactor> allFactors = scoreFactorRepository
+                .findByScoreIdIn(scores.stream().map(ProductScore::getId).toList());
+        Map<Long, List<ScoreFactor>> factorsByScoreId = allFactors.stream()
                 .collect(Collectors.groupingBy(f -> f.getScore().getId()));
+        // 6c. 生效關鍵字／節慶名稱（AC-17-6），同樣一次查完
+        DrivingTargetLookup.DrivingTargets targets = drivingTargetLookup.resolve(allFactors);
 
         // 6b. §FR-04 顯示內容表：情境判定「經人工覆寫者附標記」。與排行同一份旗標
         Set<Long> overriddenProductIds = sceneOverrideLookup.overriddenProductIds(
@@ -130,7 +133,7 @@ public class ScoreSimulationService {
             }
             rows.add(ScoreMapper.toSimulatedRow(score, factors, simulated.effectiveWeights(),
                     overriddenProductIds.contains(score.getProduct().getId()),
-                    simulated.bonusSubtotal(), simulated.finalScore(), simulated.grade()));
+                    simulated.bonusSubtotal(), simulated.finalScore(), simulated.grade(), targets));
         }
 
         // 8. 分數變了，資料庫排的順序已失效，必須在 Java 端重排，排完才截 limit
