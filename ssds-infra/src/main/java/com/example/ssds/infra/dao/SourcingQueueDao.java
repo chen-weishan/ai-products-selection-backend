@@ -22,6 +22,21 @@ public class SourcingQueueDao {
               AND p.deleted_at IS NULL
             """;
 
+    // Sort the complete result before pagination; rejected items use the opposite gap order.
+    static final String ORDER_BY_SQL = """
+             ORDER BY CASE sourcing_status
+                          WHEN 'URGENT' THEN 0
+                          WHEN 'SOURCING' THEN 1
+                          WHEN 'PENDING' THEN 2
+                          WHEN 'PROMOTED' THEN 3
+                          WHEN 'REJECTED' THEN 4
+                          ELSE 5
+                      END,
+                      CASE WHEN sourcing_status = 'REJECTED' THEN time_gap_days END DESC NULLS LAST,
+                      CASE WHEN sourcing_status <> 'REJECTED' THEN time_gap_days END ASC NULLS LAST,
+                      product_id ASC
+            """;
+
     private final JdbcClient jdbcClient;
 
     public SourcingQueueDao(JdbcClient jdbcClient) {
@@ -32,6 +47,7 @@ public class SourcingQueueDao {
             Set<SourcingStatus> statuses, int page, int size) {
         Filter filter = filter(statuses);
         String sql = """
+                SELECT * FROM (
                 SELECT p.id AS product_id,
                        p.name AS keyword,
                        latest.stage AS heat_stage,
@@ -62,10 +78,9 @@ public class SourcingQueueDao {
                 """
                 + BASE_FILTER
                 + filter.sql()
+                + ") queue\n"
+                + ORDER_BY_SQL
                 + """
-                 ORDER BY CASE WHEN p.sourcing_status = 'REJECTED' THEN 1 ELSE 0 END,
-                          time_gap_days ASC NULLS LAST,
-                          p.id ASC
                  LIMIT :limit OFFSET :offset
                 """;
 
