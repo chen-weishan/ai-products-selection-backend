@@ -6,6 +6,7 @@ import com.example.ssds.infra.entity.ReportJob;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,7 +15,11 @@ import org.springframework.stereotype.Repository;
 public interface ReportJobRepository extends JpaRepository<ReportJob, Long> {
 
     /** §8.1 `GET /reports` 的清單來源；排序與 idx_report_job_requester 一致。 */
+    @EntityGraph(attributePaths = {"requestedBy"})
     Page<ReportJob> findByRequestedByIdOrderByRequestedAtDesc(Long userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"requestedBy"})
+    java.util.Optional<ReportJob> findByIdAndRequestedById(Long id, Long userId);
 
     List<ReportJob> findByStatus(TaskStatus status);
 

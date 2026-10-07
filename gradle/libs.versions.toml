@@ -15,6 +15,7 @@ shedlock = "7.8.0"
 commonsMath = "3.6.1"
 commonsCsv = "1.14.1"
 apachePoi = "5.4.1"
+openPdf = "2.0.3"
 # Resilience4j 不在 Spring Boot BOM 管理範圍內
 resilience4j = "2.4.0"
 # JJWT 不在 Spring Boot BOM 管理範圍內（FR-01 登入）
@@ -60,6 +61,7 @@ resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratel
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commonsCsv" }
 apache-poi-ooxml = { module = "org.apache.poi:poi-ooxml", version.ref = "apachePoi" }
+openpdf = { module = "com.github.librepdf:openpdf", version.ref = "openPdf" }
 
 # --- 需自行指定版本者 ---
 springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }

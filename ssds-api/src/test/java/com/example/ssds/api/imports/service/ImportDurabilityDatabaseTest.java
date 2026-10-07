@@ -111,12 +111,15 @@ class ImportDurabilityDatabaseTest {
         assertThat(integrity.retry(1L)).isEqualTo(1);
         assertThat(jdbc.queryForObject("select attempts from import_recalculation_task",Integer.class)).isZero();
     }
-    @Test void productInsertCreatesDurableTaskInTheSameStatement() {
+    @Test void productInsertCreatesDraftWithoutRecalculationTask() {
         // Explicit fixture ID must not collide with the generated identity.
         jdbc.execute("alter table product alter column id restart with 2");
         var row=new BulkImportDao.ProductRow("新商品",1L,null,BigDecimal.ONE,BigDecimal.TEN,new BigDecimal("0.9"),1,"ALL","A",null,null,null,null,null);
-        tx.executeWithoutResult(status->assertThat(bulkImportDao.batchInsertProducts(List.of(row),1L)).isEqualTo(1));
-        assertThat(count("import_recalculation_task")).isEqualTo(1);
+        tx.executeWithoutResult(status->assertThat(bulkImportDao.batchInsertProducts(List.of(row))).isEqualTo(1));
+        assertThat(jdbc.queryForObject("select status from product where name='新商品'",String.class))
+                .isEqualTo("DRAFT");
+        assertThat(count("import_recalculation_task")).isZero();
+        assertThat(integrity.recalculationSummary(1L)).isEmpty();
     }
     @Test void scheduledRecoveryProcessesPersistedWork() {
         integrity.enqueue(1L,List.of(1L));

@@ -43,6 +43,11 @@ public interface ProductRepository
     @Query("select p from Product p where p.id = :id")
     Optional<Product> findByIdForUpdate(@Param("id") Long id);
 
+    /** 批次修改評分輸入前依固定順序鎖定品項，與單筆分析建立共用同一把資料列鎖。 */
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id in :ids order by p.id")
+    List<Product> findAllByIdForUpdate(@Param("ids") java.util.Collection<Long> ids);
+
     /** 品項清單：類別與供應商同時取出，避免逐列觸發 lazy 查詢。 */
     @EntityGraph(attributePaths = {"category", "supplier"})
     Page<Product> findByStatus(ProductStatus status, Pageable pageable);

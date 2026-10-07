@@ -9,6 +9,7 @@ import com.example.ssds.api.product.dto.ProductBatchCategoryRequest;
 import com.example.ssds.api.product.dto.ProductBatchCategoryResponse;
 import com.example.ssds.api.product.dto.ProductBatchDisableRequest;
 import com.example.ssds.api.product.dto.ProductBatchDisableResponse;
+import com.example.ssds.api.product.dto.ProductAnalysisFinalizeResponse;
 import com.example.ssds.api.product.dto.ProductCreateRequest;
 import com.example.ssds.api.product.dto.ProductCreateResponse;
 import com.example.ssds.api.product.dto.ProductResponse;
@@ -181,7 +182,7 @@ public class ProductCommandService {
             Long productId,
             ProductUpdateRequest request
     ) {
-        return update(productId, request, null);
+        return update(productId, request, null, false);
     }
 
     public ProductUpdateResponse update(
@@ -189,7 +190,16 @@ public class ProductCommandService {
             ProductUpdateRequest request,
             String actorEmail
     ) {
-        Product product = findProduct(productId);
+        return update(productId, request, actorEmail, false);
+    }
+
+    public ProductUpdateResponse update(
+            Long productId,
+            ProductUpdateRequest request,
+            String actorEmail,
+            boolean deferAnalysis
+    ) {
+        Product product = findProductForUpdate(productId);
         String name = request.name().trim();
         Category category = findCategory(request.categoryId());
         Supplier supplier = findSupplier(request.supplierId());
@@ -210,7 +220,9 @@ public class ProductCommandService {
                 && trackType == TrackType.A;
         boolean scoringInputsChanged = hasScoringInputChanges(
                 product,
+                name,
                 category,
+                supplier,
                 request.cost(),
                 request.suggestedPrice(),
                 request.moq(),
@@ -222,6 +234,9 @@ public class ProductCommandService {
                 request.shelfLifeDays(),
                 keywords
         );
+        if (scoringInputsChanged) {
+            aiTaskService.assertFullAnalysisInputsEditable(productId);
+        }
         validateDraftOperation(product, saveAsDraft);
         validateSubmission(
                 trackType,
@@ -274,7 +289,7 @@ public class ProductCommandService {
         AppUser taskActor = enqueueAnalysis && actorEmail != null
                 ? findActor(actorEmail)
                 : null;
-        AiTaskResponse task = enqueueAnalysis
+        AiTaskResponse task = enqueueAnalysis && !deferAnalysis
                 ? aiTaskService.enqueueFullAnalysis(List.of(savedProduct), taskActor, false)
                 : null;
         return new ProductUpdateResponse(
@@ -283,6 +298,28 @@ public class ProductCommandService {
                 task == null ? null : task.taskId(),
                 task == null ? null : task.status()
         );
+    }
+
+    /**
+     * 前端完成主檔與補充資料的多段儲存後，由這個入口做最後一次排程判斷。
+     *
+     * <p>若輸入沒有異動且仍有現行分數，不會浪費額度重跑；若任一段寫入已讓
+     * 現行分數失效，則只建立一個 FULL_ANALYSIS 任務。
+     */
+    public ProductAnalysisFinalizeResponse finalizeAnalysis(
+            Long productId,
+            String actorEmail
+    ) {
+        Product product = findProductForUpdate(productId);
+        if (!eligibleForFullAnalysis(product)
+                || productScoreRepository.existsByProductIdAndActiveTrue(productId)) {
+            return new ProductAnalysisFinalizeResponse(null, null, false);
+        }
+        AppUser actor = actorEmail == null ? null : findActor(actorEmail);
+        AiTaskResponse task = aiTaskService.enqueueFullAnalysis(
+                List.of(product), actor, false);
+        return new ProductAnalysisFinalizeResponse(
+                task.taskId(), task.status(), true);
     }
 
     /**
@@ -296,7 +333,7 @@ public class ProductCommandService {
     ) {
         Category category = findCategory(request.categoryId());
         Set<Long> requestedIds = new LinkedHashSet<>(request.productIds());
-        List<Product> products = productRepository.findAllById(requestedIds);
+        List<Product> products = productRepository.findAllByIdForUpdate(requestedIds);
 
         Set<Long> missingIds = new LinkedHashSet<>(requestedIds);
         products.forEach(product -> missingIds.remove(product.getId()));
@@ -308,18 +345,23 @@ public class ProductCommandService {
             );
         }
 
-        products.forEach(product -> product.setCategory(category));
-        productRepository.saveAllAndFlush(products);
-        products.stream()
+        List<Product> changedProducts = products.stream()
+                .filter(product -> !Objects.equals(product.getCategory().getId(), category.getId()))
+                .toList();
+        changedProducts.forEach(product ->
+                aiTaskService.assertFullAnalysisInputsEditable(product.getId()));
+        changedProducts.forEach(product -> product.setCategory(category));
+        productRepository.saveAllAndFlush(changedProducts);
+        changedProducts.stream()
                 .filter(product -> product.getTrackType() == TrackType.A)
                 .forEach(product -> productScoreRepository.deactivateAllCurrent(product.getId()));
-        List<Product> analysisTargets = products.stream()
+        List<Product> analysisTargets = changedProducts.stream()
                 .filter(this::eligibleForFullAnalysis)
                 .toList();
         if (!analysisTargets.isEmpty()) {
             aiTaskService.enqueueFullAnalysis(analysisTargets, null, false);
         }
-        products.stream()
+        changedProducts.stream()
                 .filter(product -> product.getTrackType() == TrackType.B)
                 .forEach(sourcingCandidateService::synchronize);
 
@@ -429,6 +471,9 @@ public class ProductCommandService {
 
         if (targetStatus == ProductStatus.EVALUATING
                 && product.getTrackType() == TrackType.A) {
+            // 重新進入評估代表既有分數不再可視為目前結果；建立任務也統一走
+            // AiTaskService，避免不同入口各自建立重複任務。
+            productScoreRepository.deactivateAllCurrent(product.getId());
             aiTaskService.enqueueFullAnalysis(List.of(product), actor, false);
         }
 
@@ -443,6 +488,14 @@ public class ProductCommandService {
 
     private Product findProduct(Long productId) {
         return productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+    }
+
+    private Product findProductForUpdate(Long productId) {
+        return productRepository.findByIdForUpdate(productId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
@@ -550,7 +603,9 @@ public class ProductCommandService {
 
     private boolean hasScoringInputChanges(
             Product product,
+            String name,
             Category category,
+            Supplier supplier,
             BigDecimal cost,
             BigDecimal suggestedPrice,
             Integer moq,
@@ -568,7 +623,11 @@ public class ProductCommandService {
         Set<Long> requestedKeywordIds = keywords.stream()
                 .map(TrendKeyword::getId)
                 .collect(Collectors.toSet());
-        return !Objects.equals(product.getCategory().getId(), category.getId())
+        return !Objects.equals(product.getName(), name)
+                || !Objects.equals(product.getCategory().getId(), category.getId())
+                || !Objects.equals(
+                        product.getSupplier() == null ? null : product.getSupplier().getId(),
+                        supplier == null ? null : supplier.getId())
                 || !sameDecimal(product.getCost(), cost)
                 || !sameDecimal(product.getSuggestedPrice(), suggestedPrice)
                 || !Objects.equals(product.getMoq(), moq)

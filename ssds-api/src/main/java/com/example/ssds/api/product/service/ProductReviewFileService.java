@@ -1,5 +1,6 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -8,6 +9,10 @@ import com.example.ssds.api.product.dto.ProductReviewSummaryResponse;
 import com.example.ssds.infra.dao.BulkImportDao;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.ProductReviewRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
+import com.example.ssds.infra.entity.Product;
+import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.TrackType;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
@@ -46,24 +51,46 @@ public class ProductReviewFileService {
     private final ProductRepository productRepository;
     private final ProductReviewRepository reviewRepository;
     private final BulkImportDao bulkImportDao;
+    private final AiTaskService aiTaskService;
+    private final ProductScoreRepository productScoreRepository;
 
     public ProductReviewFileService(
             ProductRepository productRepository,
             ProductReviewRepository reviewRepository,
-            BulkImportDao bulkImportDao
+            BulkImportDao bulkImportDao,
+            AiTaskService aiTaskService,
+            ProductScoreRepository productScoreRepository
     ) {
         this.productRepository = productRepository;
         this.reviewRepository = reviewRepository;
         this.bulkImportDao = bulkImportDao;
+        this.aiTaskService = aiTaskService;
+        this.productScoreRepository = productScoreRepository;
     }
 
     @Transactional
     public ProductReviewFileUploadResponse upload(Long productId, MultipartFile file) {
-        requireProduct(productId);
+        return upload(productId, file, false);
+    }
+
+    @Transactional
+    public ProductReviewFileUploadResponse upload(
+            Long productId,
+            MultipartFile file,
+            boolean deferAnalysis
+    ) {
+        Product product = requireProductForUpdate(productId);
+        aiTaskService.assertFullAnalysisInputsEditable(productId);
         validateFile(file);
 
         List<BulkImportDao.ReviewRow> rows = parse(productId, file);
         int inserted = bulkImportDao.batchInsertReviews(rows);
+        if (inserted > 0) {
+            productScoreRepository.deactivateAllCurrent(productId);
+            if (!deferAnalysis && eligibleForFullAnalysis(product)) {
+                aiTaskService.enqueueFullAnalysis(List.of(product), null, false);
+            }
+        }
         long totalReviewCount = reviewRepository.countByProductId(productId);
         return new ProductReviewFileUploadResponse(
                 file.getOriginalFilename(),
@@ -89,6 +116,19 @@ public class ProductReviewFileService {
         productRepository.findById(productId).orElseThrow(() ->
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
         );
+    }
+
+    private Product requireProductForUpdate(Long productId) {
+        return productRepository.findByIdForUpdate(productId).orElseThrow(() ->
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "找不到指定的品項")
+        );
+    }
+
+    private boolean eligibleForFullAnalysis(Product product) {
+        return product.getTrackType() == TrackType.A
+                && product.getDeletedAt() == null
+                && product.getStatus() != ProductStatus.DRAFT
+                && product.getStatus() != ProductStatus.REJECTED;
     }
 
     private void validateFile(MultipartFile file) {

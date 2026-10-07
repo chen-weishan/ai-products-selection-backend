@@ -1,5 +1,6 @@
 package com.example.ssds.api.product.service;
 
+import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.common.response.FieldError;
@@ -12,6 +13,10 @@ import com.example.ssds.infra.entity.Product;
 import com.example.ssds.infra.repository.FestivalCalendarRepository;
 import com.example.ssds.infra.repository.ItemFestivalAffinityRepository;
 import com.example.ssds.infra.repository.ProductRepository;
+import com.example.ssds.infra.repository.ProductScoreRepository;
+import com.example.ssds.core.domain.ProductStatus;
+import com.example.ssds.core.domain.TrackType;
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,15 +34,21 @@ public class ProductFestivalAffinityService {
     private final ProductRepository productRepository;
     private final ItemFestivalAffinityRepository affinityRepository;
     private final FestivalCalendarRepository festivalRepository;
+    private final AiTaskService aiTaskService;
+    private final ProductScoreRepository productScoreRepository;
 
     public ProductFestivalAffinityService(
             ProductRepository productRepository,
             ItemFestivalAffinityRepository affinityRepository,
-            FestivalCalendarRepository festivalRepository
+            FestivalCalendarRepository festivalRepository,
+            AiTaskService aiTaskService,
+            ProductScoreRepository productScoreRepository
     ) {
         this.productRepository = productRepository;
         this.affinityRepository = affinityRepository;
         this.festivalRepository = festivalRepository;
+        this.aiTaskService = aiTaskService;
+        this.productScoreRepository = productScoreRepository;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +63,15 @@ public class ProductFestivalAffinityService {
             Long productId,
             ProductFestivalAffinityUpdateRequest request
     ) {
-        Product product = findProduct(productId);
+        return replace(productId, request, false);
+    }
+
+    public List<ProductFestivalAffinityResponse> replace(
+            Long productId,
+            ProductFestivalAffinityUpdateRequest request,
+            boolean deferAnalysis
+    ) {
+        Product product = findProductForUpdate(productId);
         Map<String, ProductFestivalAffinityItemRequest> normalized = new LinkedHashMap<>();
         for (ProductFestivalAffinityItemRequest item : request.affinities()) {
             String code = item.festivalCode().trim().toUpperCase(Locale.ROOT);
@@ -77,6 +96,15 @@ public class ProductFestivalAffinityService {
             );
         }
 
+
+        List<ItemFestivalAffinity> current =
+                affinityRepository.findByProductIdOrderByFestivalCodeAsc(productId);
+        if (affinitiesChanged(current, normalized)) {
+            aiTaskService.assertFullAnalysisInputsEditable(productId);
+        } else {
+            return toResponses(current);
+        }
+
         affinityRepository.deleteByProductId(productId);
         affinityRepository.flush();
         List<ItemFestivalAffinity> saved = affinityRepository.saveAllAndFlush(
@@ -88,7 +116,18 @@ public class ProductFestivalAffinityService {
                                 .build())
                         .toList()
         );
+        productScoreRepository.deactivateAllCurrent(productId);
+        if (!deferAnalysis && eligibleForFullAnalysis(product)) {
+            aiTaskService.enqueueFullAnalysis(List.of(product), null, false);
+        }
         return toResponses(saved);
+    }
+
+    private boolean eligibleForFullAnalysis(Product product) {
+        return product.getTrackType() == TrackType.A
+                && product.getDeletedAt() == null
+                && product.getStatus() != ProductStatus.DRAFT
+                && product.getStatus() != ProductStatus.REJECTED;
     }
 
     private List<ProductFestivalAffinityResponse> toResponses(
@@ -119,6 +158,31 @@ public class ProductFestivalAffinityService {
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "找不到指定的品項：" + productId
                 ));
+    }
+
+    private Product findProductForUpdate(Long productId) {
+        return productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "找不到指定的品項：" + productId
+                ));
+    }
+
+    private boolean affinitiesChanged(
+            List<ItemFestivalAffinity> current,
+            Map<String, ProductFestivalAffinityItemRequest> requested
+    ) {
+        if (current.size() != requested.size()) {
+            return true;
+        }
+        Map<String, BigDecimal> currentValues = current.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ItemFestivalAffinity::getFestivalCode,
+                        ItemFestivalAffinity::getAffinity));
+        return requested.entrySet().stream().anyMatch(entry -> {
+            BigDecimal existing = currentValues.get(entry.getKey());
+            return existing == null || existing.compareTo(entry.getValue().affinity()) != 0;
+        });
     }
 
     private BusinessException validationException(String message) {
