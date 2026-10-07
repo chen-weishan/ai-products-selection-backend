@@ -25,13 +25,71 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from RiskAlert r where r.id = :id")
+    Optional<RiskAlert> findForUpdate(@Param("id") Long id);
+
 
     /** 預設清單：未忽略者。 */
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     Page<RiskAlert> findByStatusNot(AlertStatus status, Pageable pageable);
 
-    @EntityGraph(attributePaths = { "product", "product.category" })
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
     Page<RiskAlert> findByStatusAndSeverity(AlertStatus status, Severity severity, Pageable pageable);
+
+     /** 篩選示警；未指定狀態時排除 IGNORED，並固定依嚴重度、偵測時間排序。 */
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
+    @Query(value = """
+            select r from RiskAlert r
+            where ((:status is not null and r.status = :status)
+               or (:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED))
+            order by case r.severity
+                         when com.example.ssds.core.domain.Severity.HIGH then 0
+                         when com.example.ssds.core.domain.Severity.MEDIUM then 1
+                         else 2 end,
+                     r.detectedAt desc,
+                     r.id desc
+            """,
+            countQuery = """
+            select count(r) from RiskAlert r
+            where ((:status is not null and r.status = :status)
+               or (:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED))
+            """)
+    Page<RiskAlert> findVisible(@Param("status") AlertStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = { "product", "product.category", "handledBy" })
+    @Query(value = """
+            select r from RiskAlert r
+            where ((:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED)
+                 or (:status is not null and r.status = :status))
+              and (:severity is null or r.severity = :severity)
+              and (:riskType is null or r.riskType = :riskType)
+              and (:categoryId is null or r.product.category.id = :categoryId)
+              and (:keyword = '' or locate(lower(:keyword), lower(r.product.name)) > 0)
+            order by case r.severity
+                         when com.example.ssds.core.domain.Severity.HIGH then 0
+                         when com.example.ssds.core.domain.Severity.MEDIUM then 1
+                         else 2 end,
+                     r.detectedAt desc,
+                     r.id desc
+            """,
+            countQuery = """
+            select count(r) from RiskAlert r
+            where ((:status is null and r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED)
+                 or (:status is not null and r.status = :status))
+              and (:severity is null or r.severity = :severity)
+              and (:riskType is null or r.riskType = :riskType)
+              and (:categoryId is null or r.product.category.id = :categoryId)
+              and (:keyword = '' or locate(lower(:keyword), lower(r.product.name)) > 0)
+            """)
+    // keyword 不可為 null：無關鍵字請傳空字串（避免 PostgreSQL 對 null 參數無法判斷型別）
+    Page<RiskAlert> search(
+            @Param("status") AlertStatus status,
+            @Param("severity") Severity severity,
+            @Param("riskType") String riskType,
+            @Param("categoryId") Long categoryId,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);
 
@@ -80,4 +138,49 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
      */
     Optional<RiskAlert> findFirstByProductIdAndRiskTypeAndStatusAndDetectedAtAfterOrderByDetectedAtDesc(
             Long productId, String riskType, AlertStatus status, Instant since);
+            
+    /**
+     * 去重窗：OPEN 以 detected_at 起算；ACKNOWLEDGED／IGNORED 以 handled_at 起算，
+     * 舊資料 handled_at 為空時回退 detected_at。OPEN 優先，避免較新的已處理列遮住仍有效的 OPEN。
+     *
+     * <p>命中的那一列會加上資料列寫入鎖（SELECT ... FOR UPDATE）：Writer 隨後會改寫它，
+     * 若此時使用者剛好確認／忽略同一筆，沒有列鎖就會用讀到的舊 OPEN 狀態整列覆寫回去。
+     * 有鎖時，後到的一方會等前一個交易提交，再讀到最新狀態。
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select r from RiskAlert r
+            where r.product.id = :productId
+              and r.riskType = :riskType
+              and ((r.status = com.example.ssds.core.domain.AlertStatus.OPEN and r.detectedAt > :since)
+                or (r.status <> com.example.ssds.core.domain.AlertStatus.OPEN
+                    and coalesce(r.handledAt, r.detectedAt) > :since))
+            order by case when r.status = com.example.ssds.core.domain.AlertStatus.OPEN then 0 else 1 end,
+                     case when r.status = com.example.ssds.core.domain.AlertStatus.OPEN then r.detectedAt else coalesce(r.handledAt, r.detectedAt) end desc
+            """)
+    List<RiskAlert> findWithinDedupWindow(
+            @Param("productId") Long productId,
+            @Param("riskType") String riskType,
+            @Param("since") Instant since,
+            Pageable pageable);
+
+    /** S-11 KPI：各嚴重度的未處理（OPEN）示警數。回傳 [Severity, Long]。 */
+    @Query("""
+            SELECT r.severity, COUNT(r) FROM RiskAlert r
+            WHERE r.status = com.example.ssds.core.domain.AlertStatus.OPEN
+            GROUP BY r.severity
+            """)
+    List<Object[]> countOpenGroupedBySeverity();
+
+    /** S-11 KPI：自 {@code since} 起已處理（確認或忽略）的示警數。 */
+    @Query("""
+            SELECT COUNT(r) FROM RiskAlert r
+            WHERE r.status <> com.example.ssds.core.domain.AlertStatus.OPEN
+              AND r.handledAt >= :since
+            """)
+    long countHandledSince(@Param("since") Instant since);
+
+    /** S-11「最後偵測」：全部示警中最近一次的偵測時間（去重更新也會推進 detected_at）。 */
+    @Query("SELECT MAX(r.detectedAt) FROM RiskAlert r")
+    Instant findLastDetectedAt();
 }

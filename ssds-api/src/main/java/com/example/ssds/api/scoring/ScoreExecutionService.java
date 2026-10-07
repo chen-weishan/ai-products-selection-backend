@@ -5,6 +5,7 @@ import com.example.ssds.api.scoring.ScoreEvaluationService.EvaluationResult;
 import com.example.ssds.api.scoring.ScoreEvaluationService.FactorInput;
 import com.example.ssds.api.scoring.factor.ScoringFactorBatchService;
 import com.example.ssds.api.scoring.factor.ScoringFactorBatchService.PreparedPopulation;
+import com.example.ssds.api.risk.RiskAlertEvaluator;
 import com.example.ssds.core.domain.FactorCode;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.core.domain.TrackType;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** 將權威資料的九因子批次結果交給正式評分快照交易。 */
 @Service
@@ -26,6 +28,7 @@ public class ScoreExecutionService {
     private final ProductRepository productRepository;
     private final ScoringFactorBatchService factorBatchService;
     private final ScoreEvaluationService evaluationService;
+    private RiskAlertEvaluator riskAlertEvaluator;
 
     public ScoreExecutionService(
             ProductRepository productRepository,
@@ -34,6 +37,12 @@ public class ScoreExecutionService {
         this.productRepository = productRepository;
         this.factorBatchService = factorBatchService;
         this.evaluationService = evaluationService;
+    }
+
+    /** Spring wiring; kept separate to preserve the small constructor used by scoring unit tests. */
+    @Autowired
+    public void setRiskAlertEvaluator(RiskAlertEvaluator riskAlertEvaluator) {
+        this.riskAlertEvaluator = riskAlertEvaluator;
     }
 
     /**
@@ -69,13 +78,17 @@ public class ScoreExecutionService {
 
     EvaluationResult evaluatePrepared(
             EvaluationCommand command, Map<FactorCode, FactorInput> factors) {
-        return evaluationService.evaluate(new EvaluationRequest(
+        EvaluationResult result = evaluationService.evaluate(new EvaluationRequest(
                 command.productId(),
                 command.primaryScene(),
                 command.alternativeScene(),
                 confidence(factors, command.sceneConfidence(), command.sceneFallbackApplied()),
                 command.attemptedAt(),
                 factors));
+        if (riskAlertEvaluator != null) {
+            riskAlertEvaluator.evaluate(command.productId(), result, command.attemptedAt());
+        }
+        return result;
     }
 
     /** §5.9 可由目前九因子與 Agent 1 輸出直接判定的信心度扣分。 */
