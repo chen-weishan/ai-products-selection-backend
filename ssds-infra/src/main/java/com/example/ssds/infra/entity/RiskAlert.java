@@ -5,13 +5,18 @@ import com.example.ssds.core.domain.Severity;
 import jakarta.persistence.*;
 import java.time.Instant;
 import lombok.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * 風險示警（規格書 §7.2 risk_alert、FR-10）。
  *
  * <p>AC-10-4：扣分達 20 分以上的品項必定出現於本清單。
  * AC-10-2：已忽略者不做實體刪除，只是預設清單不顯示，可用篩選查回來。
+ *
+ * <p>{@code @DynamicUpdate}：UPDATE 只寫入有變動的欄位。偵測程式更新既有示警（只改觸發值、偵測時間）時，
+ * 若同一瞬間有人剛確認或忽略，不能把 status、處理人員等欄位用舊值蓋回去。
  */
+@DynamicUpdate
 @Getter
 @Setter
 @Builder
