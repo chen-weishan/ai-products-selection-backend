@@ -15,6 +15,7 @@ import com.example.ssds.ai.resilience.RetryExecutionState;
 import com.example.ssds.ai.resilience.RetrySleeper;
 import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.model.sourcing.*;
 import com.example.ssds.ai.prompt.sourcing.SourcingScoutPromptFactory;
 import com.example.ssds.ai.prompt.sourcing.SourcingKeywordNormalizer;
@@ -31,18 +32,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
 @Component
-public class SourcingScoutAgent {
+public class SourcingScoutAgent implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(SourcingScoutAgent.class);
     private final MistralSourcingClient client;
     private final SourcingScoutPromptFactory promptFactory;
     private final SourcingScoutResponseParser parser;
     private final ObjectMapper mapper;
-    private final List<String> models;
-    private final int retryMax;
+    private volatile List<String> models;
+    private volatile int retryMax;
     private final TrackBSourcingBudget budget;
     private final GlobalAiRateLimiter rateLimiter;
     private final RetrySleeper retrySleeper;
-    private final Cache<CacheKey, SourcingScoutResult> cache;
+    private volatile Cache<CacheKey, SourcingScoutResult> cache;
     private final String configurationError;
 
     @Autowired
@@ -170,6 +171,16 @@ public class SourcingScoutAgent {
                 throw new IllegalStateException("Mistral 尋源探索服務暫時無法使用", exception);
             }
         }
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.models = catalog.reasoning().models();
+        this.retryMax = Math.max(0, retryMax);
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(sourcingCacheDays))
+                .maximumSize(10_000).build();
     }
     private boolean pause(long millis) {
         try { retrySleeper.sleep(millis); return true; }

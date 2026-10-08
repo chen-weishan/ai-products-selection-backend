@@ -11,6 +11,7 @@ import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.policy.ExternalLlmDisabledException;
 import com.example.ssds.ai.policy.OutboundDataPolicyException;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.scene.*;
 import com.example.ssds.ai.prompt.scene.SceneClassifierPromptFactory;
@@ -36,17 +37,17 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
 @Component
-public class SceneClassifierAgent {
+public class SceneClassifierAgent implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(SceneClassifierAgent.class);
-    private static final BigDecimal MIN_CONFIDENCE = new BigDecimal("0.5");
+    private volatile BigDecimal minimumConfidence = new BigDecimal("0.5");
     private final AiAccessRouter router;
     private final SceneClassifierPromptFactory promptFactory;
     private final SceneClassifierResponseParser parser;
     private final ObjectMapper objectMapper;
-    private final List<String> models;
-    private final int retryMax;
+    private volatile List<String> models;
+    private volatile int retryMax;
     private final RetrySleeper retrySleeper;
-    private final Cache<CacheKey, SceneClassificationResult> cache;
+    private volatile Cache<CacheKey, SceneClassificationResult> cache;
 
     @Autowired
     public SceneClassifierAgent(
@@ -143,7 +144,7 @@ public class SceneClassifierAgent {
                 AiClientResponse response = router.route(request);
                 raw = response.content();
                 SceneClassifierOutput output = parser.parse(raw, input);
-                return output.confidence().compareTo(MIN_CONFIDENCE) < 0
+                return output.confidence().compareTo(minimumConfidence) < 0
                         ? fallback(
                                 FallbackReason.LOW_CONFIDENCE,
                                 output.confidence(),
@@ -231,6 +232,21 @@ public class SceneClassifierAgent {
                 return unavailableFallback(raw, model, retry.requestCount());
             }
         }
+    }
+
+    @Override
+    public void reconfigureSceneAdoptConfidence(BigDecimal minimumConfidence) {
+        this.minimumConfidence = minimumConfidence;
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.models = catalog.classify().models();
+        this.retryMax = Math.max(0, retryMax);
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays))
+                .maximumSize(10_000).build();
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {

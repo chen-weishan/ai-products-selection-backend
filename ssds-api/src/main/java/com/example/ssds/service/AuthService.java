@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,13 +15,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.ssds.api.common.response.ApiError;
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.core.domain.UserStatus;
 import com.example.ssds.infra.entity.AppUser;
 import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.util.JwtUtils;
 
 @Service
-public class AuthService {
+public class AuthService implements OperationalRuntimeConfigurable {
+
+    private volatile int maxFailedAttempts = 5;
+    private volatile int lockDurationMinutes = 15;
 
     @Autowired
     private AppUserRepository userRepository;
@@ -67,12 +73,13 @@ public class AuthService {
             int newAttempts = user.getFailedAttempts() + 1;
             user.setFailedAttempts(newAttempts);
 
-            if (newAttempts >= 5) {
+            if (newAttempts >= maxFailedAttempts) {
                 user.setFailedAttempts(0); // 依規格書 v2.0，鎖定時次數重置為 0
-                user.setLockedUntil(Instant.now().plusSeconds(15 * 60)); // 鎖定 15 分鐘
+                user.setLockedUntil(Instant.now().plus(lockDurationMinutes, ChronoUnit.MINUTES));
                 userRepository.saveAndFlush(user); 
                 
-                return ResponseEntity.status(403).body(new ApiError("AUTH_LOCKED", "嘗試次數過多，帳號已被鎖定 15 分鐘。"));
+                return ResponseEntity.status(403).body(new ApiError(
+                        "AUTH_LOCKED", "嘗試次數過多，帳號已被鎖定 " + lockDurationMinutes + " 分鐘。"));
             } else {
                 userRepository.saveAndFlush(user); // 實打實將次數 +1 寫入資料庫
                 System.out.println("====== [測試驗收] 帳號 " + email + " 密碼輸入錯誤！當前累計失敗次數為: " + newAttempts + " ======");
@@ -98,5 +105,11 @@ public class AuthService {
         successPack.put("roles", rolesStrList); 
 
         return ResponseEntity.ok(successPack); 
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        maxFailedAttempts = config.loginMaxFailedAttempts();
+        lockDurationMinutes = config.loginLockDurationMinutes();
     }
 }

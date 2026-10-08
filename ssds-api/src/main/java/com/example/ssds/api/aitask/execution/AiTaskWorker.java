@@ -14,6 +14,8 @@ import com.example.ssds.ai.access.common.AiExecutionWarningContext;
 import com.example.ssds.ai.budget.AiBudgetExceededException;
 import com.example.ssds.ai.budget.AiBudgetExecutionContext;
 import com.example.ssds.ai.budget.DailyAiBudget;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
@@ -36,7 +38,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
-public class AiTaskWorker {
+public class AiTaskWorker implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(AiTaskWorker.class);
     private final AiTaskRepository taskRepository;
     private final AiTaskItemRepository itemRepository;
@@ -49,7 +51,7 @@ public class AiTaskWorker {
     private final WeightCalibrationService weightCalibrationService;
     private final FullAnalysisOrchestrator fullAnalysisOrchestrator;
     private final DailyAiBudget dailyAiBudget;
-    private final int batchItemCap;
+    private volatile int batchItemCap;
     private final Set<Long> activeTaskIds = ConcurrentHashMap.newKeySet();
     private PureScoringBatchService pureScoringBatchService;
 
@@ -84,6 +86,13 @@ public class AiTaskWorker {
         this.fullAnalysisOrchestrator = fullAnalysisOrchestrator;
         this.dailyAiBudget = dailyAiBudget;
         this.batchItemCap = Math.max(0, batchItemCap);
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.batchItemCap = Math.max(1, batchItemCap);
     }
 
     AiTaskWorker(

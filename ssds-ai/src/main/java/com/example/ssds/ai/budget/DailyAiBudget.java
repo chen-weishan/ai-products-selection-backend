@@ -18,7 +18,8 @@ import org.springframework.stereotype.Component;
 public class DailyAiBudget {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Taipei");
 
-    private final int dailyQuota;
+    private int dailyQuota;
+    private double warningRatio = 0.8d;
     private final EnumMap<AiTaskType.BudgetPool, Double> shares =
             new EnumMap<>(AiTaskType.BudgetPool.class);
     private final EnumMap<AiTaskType.BudgetPool, Integer> used =
@@ -122,13 +123,37 @@ public class DailyAiBudget {
                     int consumed = used.get(pool);
                     BudgetStatus status = consumed >= limit
                             ? BudgetStatus.EXHAUSTED
-                            : consumed >= Math.ceil(limit * 0.8d)
+                            : consumed >= Math.ceil(limit * warningRatio)
                                     ? BudgetStatus.WARNING : BudgetStatus.OK;
                     return new PoolSnapshot(
                             pool, shares.get(pool), limit, consumed, cacheHits.get(pool), status);
                 })
                 .toList();
         return new Snapshot(dailyQuota, resetAt(), "CONFIGURED", pools);
+    }
+
+    /** S-14 配額變更即時套用；當日已用量保留，不因調高或調低而重置。 */
+    public synchronized void reconfigure(
+            int dailyQuota,
+            double trackAShare,
+            double trackBShare,
+            double retryShare,
+            double warningRatio) {
+        if (dailyQuota < 0) throw new IllegalArgumentException("AI 每日配額不得為負數");
+        validateShare(trackAShare);
+        validateShare(trackBShare);
+        validateShare(retryShare);
+        if (trackAShare + trackBShare + retryShare > 1.000001d) {
+            throw new IllegalArgumentException("AI 三個預算池比例總和不得大於 1");
+        }
+        if (!Double.isFinite(warningRatio) || warningRatio <= 0 || warningRatio >= 1) {
+            throw new IllegalArgumentException("AI 配額警示比例必須大於 0 且小於 1");
+        }
+        this.dailyQuota = dailyQuota;
+        this.warningRatio = warningRatio;
+        shares.put(AiTaskType.BudgetPool.TRACK_A, trackAShare);
+        shares.put(AiTaskType.BudgetPool.TRACK_B, trackBShare);
+        shares.put(AiTaskType.BudgetPool.RETRY, retryShare);
     }
 
     /** 應用重啟時由每日用量帳本還原；取較大值避免覆蓋啟動後的新請求。 */

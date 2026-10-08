@@ -11,7 +11,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import com.example.ssds.api.risk.RiskHeatAlertService;
@@ -28,22 +27,11 @@ class RiskHeatAlertJobTest {
     private final RiskHeatAlertJob job = new RiskHeatAlertJob(service, composites);
 
     @Test
-    @DisplayName("排程預設每日 06:30、Asia/Taipei，cron 可由設定覆寫")
-    void scheduleIsSixThirtyTaipei() throws Exception {
+    @DisplayName("排程由 S-14 動態管理，不在工作類別硬編碼")
+    void scheduleIsManagedByRuntimeSettings() throws Exception {
         Scheduled scheduled = RiskHeatAlertJob.class.getMethod("run").getAnnotation(Scheduled.class);
 
-        assertThat(scheduled.cron()).isEqualTo("${ssds.risk.heat-alert.cron:0 30 6 * * *}");
-        assertThat(scheduled.zone()).isEqualTo("Asia/Taipei");
-    }
-
-    @Test
-    @DisplayName("預設啟用，可用 ssds.risk.heat-alert.schedule-enabled=false 關閉")
-    void enabledByDefaultAndSwitchable() {
-        ConditionalOnProperty condition = RiskHeatAlertJob.class.getAnnotation(ConditionalOnProperty.class);
-
-        assertThat(condition.name()).containsExactly("ssds.risk.heat-alert.schedule-enabled");
-        assertThat(condition.havingValue()).isEqualTo("true");
-        assertThat(condition.matchIfMissing()).isTrue();
+        assertThat(scheduled).isNull();
     }
 
     @Test
@@ -67,4 +55,3 @@ class RiskHeatAlertJobTest {
         assertThat(job.runFor(DAY, NOW)).isEqualTo(expected);
     }
 }
-    

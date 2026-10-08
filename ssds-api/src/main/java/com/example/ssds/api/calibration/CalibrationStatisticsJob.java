@@ -75,7 +75,6 @@ public class CalibrationStatisticsJob {
         return nineOClock.equals(CronExpression.parse(cron).next(nineOClock.minusSeconds(1)));
     }
 
-    @Scheduled(cron = "${ai.calibration.schedule-cron:" + DEFAULT_CRON + "}", zone = "Asia/Taipei")
     public void run() {
         ZonedDateTime now = ZonedDateTime.now(clock).withZoneSameInstant(CalibrationQuarter.ZONE);
         int expectedHour = now.getDayOfWeek() == DayOfWeek.MONDAY ? 9 : 8;

@@ -6,6 +6,8 @@ import com.example.ssds.ai.access.common.AiExecutionWarningContext;
 import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.core.domain.AiTaskType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,10 +35,12 @@ import org.springframework.web.client.RestClientResponseException;
 
 /** A 軌固定結構化任務：直連 Mistral Conversations API，不啟用任何外部工具。 */
 @Component
-public class MistralTrackAClient implements TrackAAiClient {
+public class MistralTrackAClient implements TrackAAiClient, AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(MistralTrackAClient.class);
 
-    private final RestClient restClient;
+    private volatile RestClient restClient;
+    private final String baseUrl;
+    private final int connectTimeoutSeconds;
     private final ObjectMapper objectMapper;
     private final String apiKey;
     private final ApplicationEventPublisher eventPublisher;
@@ -55,17 +59,23 @@ public class MistralTrackAClient implements TrackAAiClient {
             ApplicationEventPublisher eventPublisher,
             ExternalLlmPolicy externalLlmPolicy) {
         this.objectMapper = objectMapper;
+        this.baseUrl = baseUrl;
+        this.connectTimeoutSeconds = connectTimeoutSeconds;
         this.apiKey = apiKey;
         this.eventPublisher = eventPublisher;
         this.budget = budget;
         this.externalLlmPolicy = externalLlmPolicy;
+        this.restClient = buildClient(baseUrl, timeoutSeconds, connectTimeoutSeconds);
+    }
+
+    private static RestClient buildClient(String baseUrl, int timeoutSeconds, int connectTimeoutSeconds) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(
                                 effectiveConnectTimeout(connectTimeoutSeconds, timeoutSeconds)))
                         .build());
         requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
-        this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
+        return RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
     }
 
     MistralTrackAClient(ObjectMapper objectMapper, String baseUrl, String apiKey, int timeoutSeconds) {
@@ -109,6 +119,13 @@ public class MistralTrackAClient implements TrackAAiClient {
             throw new IllegalArgumentException("LLM_TIMEOUT_SECONDS 必須大於 0");
         }
         return Math.min(connectTimeoutSeconds, readTimeoutSeconds);
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.restClient = buildClient(baseUrl, timeoutSeconds, connectTimeoutSeconds);
     }
 
     @Override

@@ -58,7 +58,7 @@ class HeatCompositeCalibrationJobTest {
                 .getDeclaredMethod("run")
                 .getAnnotation(Scheduled.class);
 
-        assertEquals("${ssds.calibration.heat-composite.cron:0 0 6 * * *}", mainSchedule.cron());
+        assertNull(mainSchedule);
         assertEquals("${ssds.ingest.instagram.cron:0 30 3 * * MON}", instagramSchedule.cron());
         assertNull(SourcingTimeGapRecalculationJob.class
                 .getDeclaredMethod("recalculateAfterDailyHeatComposition")

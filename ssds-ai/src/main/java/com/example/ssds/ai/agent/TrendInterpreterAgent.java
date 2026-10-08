@@ -11,6 +11,7 @@ import com.example.ssds.ai.resilience.RetryExecutionState;
 import com.example.ssds.ai.resilience.RetrySleeper;
 import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.trend.*;
 import com.example.ssds.ai.prompt.trend.TrendInterpreterPromptFactory;
@@ -30,16 +31,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
 @Component
-public class TrendInterpreterAgent {
+public class TrendInterpreterAgent implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(TrendInterpreterAgent.class);
     private final AiAccessRouter router;
     private final TrendInterpreterPromptFactory promptFactory;
     private final TrendInterpreterResponseParser parser;
     private final ObjectMapper objectMapper;
-    private final List<String> models;
-    private final int retryMax;
+    private volatile List<String> models;
+    private volatile int retryMax;
     private final RetrySleeper retrySleeper;
-    private final Cache<CacheKey, TrendInterpreterResult> cache;
+    private volatile Cache<CacheKey, TrendInterpreterResult> cache;
 
     @Autowired
     public TrendInterpreterAgent(
@@ -169,6 +170,16 @@ public class TrendInterpreterAgent {
                 return fallback(ruleOutput, FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             }
         }
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.models = catalog.numeric().models();
+        this.retryMax = Math.max(0, retryMax);
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(trendCacheDays))
+                .maximumSize(10_000).build();
     }
 
     private static TrendInterpreterResult fallback(

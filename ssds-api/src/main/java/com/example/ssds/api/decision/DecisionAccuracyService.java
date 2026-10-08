@@ -1,5 +1,7 @@
 package com.example.ssds.api.decision;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.decision.DecisionQueryService.DecisionSearchCriteria;
 import com.example.ssds.api.decision.dto.DecisionAccuracyResponse;
 import com.example.ssds.core.domain.Grade;
@@ -29,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @Transactional(readOnly = true)
-public class DecisionAccuracyService {
+public class DecisionAccuracyService implements OperationalRuntimeConfigurable {
 
     /** §FR-11-3 必要揭露的固定文案，畫面照抄，不可關閉（AC-11-5）。 */
     static final String VALIDITY_WARNING = "樣本數不足，本數據僅供觀察趨勢，不足以支持權重調整";
@@ -38,13 +40,18 @@ public class DecisionAccuracyService {
     private static final int RATE_SCALE = 4;
 
     private final DecisionRecordRepository decisionRecordRepository;
-    private final int minSample;
+    private volatile int minSample;
 
     public DecisionAccuracyService(
             DecisionRecordRepository decisionRecordRepository,
             @Value("${ssds.calibration.min-sample:200}") int minSample) {
         this.decisionRecordRepository = decisionRecordRepository;
         this.minSample = minSample;
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        minSample = config.calibrationMinSample();
     }
 
     public DecisionAccuracyResponse analyze(LocalDate from, LocalDate to, Long categoryId, Long decidedBy) {

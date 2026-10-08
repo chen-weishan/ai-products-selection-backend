@@ -8,7 +8,7 @@ import java.util.List;
 
 /** §5.2.3 CVR：自身轉換率、同品類中位數填補及無曝光量時的相對表現。 */
 public class CvrFactorProvider {
-    private static final int MIN_CATEGORY_SAMPLES = 10;
+    private volatile int minCategorySamples = 10;
 
     public FactorComputation provide(CvrEvidence evidence, PercentileBasis basis) {
         if (evidence == null || evidence.productHistory() == null || evidence.categoryHistories() == null) {
@@ -18,8 +18,9 @@ public class CvrFactorProvider {
         if (own != null) {
             return FactorComputation.bonus(FactorCode.CVR, own, basis, false, "使用品項自身開團紀錄");
         }
-        if (evidence.categoryHistories().size() < MIN_CATEGORY_SAMPLES) {
-            return FactorComputation.unavailableBonus(FactorCode.CVR, "同品類有效歷史少於 10 筆");
+        if (evidence.categoryHistories().size() < minCategorySamples) {
+            return FactorComputation.unavailableBonus(
+                    FactorCode.CVR, "同品類有效歷史少於 " + minCategorySamples + " 筆");
         }
 
         List<BigDecimal> categoryConversions = evidence.categoryHistories().stream()
@@ -44,6 +45,10 @@ public class CvrFactorProvider {
         BigDecimal relative = BigDecimal.valueOf(ownQty).divide(averageQty, 6, RoundingMode.HALF_UP);
         return FactorComputation.bonus(
                 FactorCode.CVR, relative, basis, false, "曝光數未提供，以品項銷量／同品類平均銷量計算");
+    }
+
+    void reconfigure(int minCategorySamples) {
+        this.minCategorySamples = minCategorySamples;
     }
 
     private static BigDecimal conversion(List<SalesSample> history) {

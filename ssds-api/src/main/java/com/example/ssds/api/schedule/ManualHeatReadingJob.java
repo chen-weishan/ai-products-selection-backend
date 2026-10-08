@@ -1,5 +1,7 @@
 package com.example.ssds.api.schedule;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.core.domain.HeatSourceCode;
 import com.example.ssds.core.domain.ManualHeatTagCalculator;
 import com.example.ssds.core.domain.ManualHeatTagCalculator.Observation;
@@ -64,7 +66,7 @@ import org.springframework.transaction.annotation.Transactional;
  * （見 {@link #run()} 內的 {@code unmappableProducts} 計數）。
  */
 @Component
-public class ManualHeatReadingJob {
+public class ManualHeatReadingJob implements OperationalRuntimeConfigurable {
 
     private static final Logger log = LoggerFactory.getLogger(ManualHeatReadingJob.class);
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
@@ -74,8 +76,8 @@ public class ManualHeatReadingJob {
     private final HeatReadingRepository heatReadingRepository;
     private final TrendKeywordRepository trendKeywordRepository;
     private final ProductRepository productRepository;
-    private final int halveAfterDays;
-    private final int expireDays;
+    private volatile int halveAfterDays;
+    private volatile int expireDays;
 
     public ManualHeatReadingJob(
             ManualHeatTagRepository manualHeatTagRepository,
@@ -98,6 +100,12 @@ public class ManualHeatReadingJob {
     @Transactional
     public void run() {
         reconcile(LocalDate.now(TAIPEI), Instant.now());
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        halveAfterDays = config.heatTagHalveAfterDays();
+        expireDays = config.heatTagExpireDays();
     }
 
     /**

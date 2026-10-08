@@ -90,6 +90,19 @@ class FactorProvidersTest {
     }
 
     @Test
+    void cvrMinimumCategorySampleCanChangeAtRuntime() {
+        CvrFactorProvider provider = new CvrFactorProvider();
+        CvrEvidence evidence = new CvrEvidence(
+                List.of(new SalesSample(20, null)),
+                List.of(List.of(new SalesSample(10, null))));
+
+        assertFalse(provider.provide(evidence, BASIS).dataAvailable());
+        provider.reconfigure(1);
+
+        assertTrue(provider.provide(evidence, BASIS).dataAvailable());
+    }
+
+    @Test
     void priceFitMatchesSpecificationGoldenCaseAndRejectsInvalidShares() {
         PriceFitFactorProvider provider = new PriceFitFactorProvider();
         List<AudienceBand> bands = List.of(

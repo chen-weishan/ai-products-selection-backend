@@ -15,8 +15,8 @@ public class GlobalAiRateLimiter {
     private static final Duration REFRESH_PERIOD = Duration.ofMinutes(1);
     private static final Duration PERMISSION_WAIT = Duration.ofMinutes(1);
 
-    private final RateLimiter globalRateLimiter;
-    private final RateLimiter trendRateLimiter;
+    private volatile RateLimiter globalRateLimiter;
+    private volatile RateLimiter trendRateLimiter;
 
     @Autowired
     public GlobalAiRateLimiter(
@@ -79,6 +79,16 @@ public class GlobalAiRateLimiter {
             acquire(trendRateLimiter, "Agent 5 LLM 每分鐘請求上限已達，請稍後再試");
         }
         acquire();
+    }
+
+    /** 後續請求立即使用新速率；已取得的 permit 不會被追回。 */
+    public synchronized void reconfigure(int requestsPerMinute, int trendRequestsPerMinute) {
+        validateRate("LLM", requestsPerMinute);
+        validateRate("Agent 5", trendRequestsPerMinute);
+        globalRateLimiter = smoothLimiter(
+                "global-llm-runtime", requestsPerMinute, REFRESH_PERIOD, PERMISSION_WAIT);
+        trendRateLimiter = smoothLimiter(
+                "trend-interpret-runtime", trendRequestsPerMinute, REFRESH_PERIOD, PERMISSION_WAIT);
     }
 
     private static void acquire(RateLimiter limiter, String message) {

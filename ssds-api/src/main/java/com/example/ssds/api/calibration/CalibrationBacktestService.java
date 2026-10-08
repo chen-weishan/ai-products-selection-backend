@@ -1,5 +1,7 @@
 package com.example.ssds.api.calibration;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.calibration.dto.BacktestRequest;
 import com.example.ssds.api.calibration.dto.BacktestResponse;
 import com.example.ssds.calibration.Backtester;
@@ -19,10 +21,10 @@ import org.springframework.transaction.annotation.Transactional;
  * 樣本為請求當下以前已回填的全部決策。
  */
 @Service
-public class CalibrationBacktestService {
+public class CalibrationBacktestService implements OperationalRuntimeConfigurable {
 
     private final CalibrationDataLoader loader;
-    private final int minSample;
+    private volatile int minSample;
     private final Clock clock;
 
     @Autowired
@@ -35,6 +37,11 @@ public class CalibrationBacktestService {
         this.loader = loader;
         this.minSample = minSample;
         this.clock = clock;
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        minSample = config.calibrationMinSample();
     }
 
     @Transactional(readOnly = true)

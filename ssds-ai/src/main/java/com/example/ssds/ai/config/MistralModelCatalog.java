@@ -9,11 +9,11 @@ import org.springframework.stereotype.Component;
 /** §6.7.2 logical aliases resolved from one Spring configuration source. */
 @Component
 public class MistralModelCatalog {
-    private final ModelChain classify;
-    private final ModelChain longText;
-    private final ModelChain shortGeneration;
-    private final ModelChain numeric;
-    private final ModelChain reasoning;
+    private volatile ModelChain classify;
+    private volatile ModelChain longText;
+    private volatile ModelChain shortGeneration;
+    private volatile ModelChain numeric;
+    private volatile ModelChain reasoning;
 
     public MistralModelCatalog(
             @Value("${mistral.model-classify-primary}") String classifyPrimary,
@@ -38,6 +38,20 @@ public class MistralModelCatalog {
     public ModelChain shortGeneration() { return shortGeneration; }
     public ModelChain numeric() { return numeric; }
     public ModelChain reasoning() { return reasoning; }
+
+    /** S-14 儲存後替換整份快照；volatile 欄位確保後續任務立即讀到新路由。 */
+    public synchronized void replace(
+            ModelChain classify,
+            ModelChain longText,
+            ModelChain shortGeneration,
+            ModelChain numeric,
+            ModelChain reasoning) {
+        this.classify = required(classify);
+        this.longText = required(longText);
+        this.shortGeneration = required(shortGeneration);
+        this.numeric = required(numeric);
+        this.reasoning = required(reasoning);
+    }
 
     private static ModelChain required(ModelChain chain) {
         if (chain.primary().isBlank()) {

@@ -1,5 +1,7 @@
 package com.example.ssds.api.scoring;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.scoring.ScoreEvaluationService.EvaluationRequest;
 import com.example.ssds.api.scoring.ScoreEvaluationService.EvaluationResult;
 import com.example.ssds.api.scoring.ScoreEvaluationService.FactorInput;
@@ -22,13 +24,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /** 將權威資料的九因子批次結果交給正式評分快照交易。 */
 @Service
-public class ScoreExecutionService {
+public class ScoreExecutionService implements OperationalRuntimeConfigurable {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Taipei");
 
     private final ProductRepository productRepository;
     private final ScoringFactorBatchService factorBatchService;
     private final ScoreEvaluationService evaluationService;
     private RiskAlertEvaluator riskAlertEvaluator;
+    private volatile BigDecimal sceneScoringConfidence = new BigDecimal("0.70");
 
     public ScoreExecutionService(
             ProductRepository productRepository,
@@ -92,7 +95,7 @@ public class ScoreExecutionService {
     }
 
     /** §5.9 可由目前九因子與 Agent 1 輸出直接判定的信心度扣分。 */
-    private static int confidence(
+    private int confidence(
             Map<FactorCode, FactorInput> factors,
             BigDecimal sceneConfidence,
             boolean sceneFallbackApplied) {
@@ -108,10 +111,15 @@ public class ScoreExecutionService {
                 .sum();
         if (sceneFallbackApplied
                 || (sceneConfidence != null
-                        && sceneConfidence.compareTo(new BigDecimal("0.70")) < 0)) {
+                        && sceneConfidence.compareTo(sceneScoringConfidence) < 0)) {
             deductions += 10;
         }
         return Math.max(0, 100 - deductions);
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        sceneScoringConfidence = config.sceneScoringConfidence();
     }
 
     public record EvaluationCommand(

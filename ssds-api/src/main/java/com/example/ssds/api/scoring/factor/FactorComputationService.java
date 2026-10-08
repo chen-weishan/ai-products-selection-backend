@@ -1,5 +1,7 @@
 package com.example.ssds.api.scoring.factor;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.scoring.ScoreEvaluationService.FactorInput;
 import com.example.ssds.api.scoring.factor.CvrFactorProvider.CvrEvidence;
 import com.example.ssds.api.scoring.factor.FestivalFactorProvider.FestivalAffinity;
@@ -24,7 +26,7 @@ import org.springframework.stereotype.Service;
  * 不呼叫 LLM，因此相同 evidence 必定產生相同結果。
  */
 @Service
-public class FactorComputationService {
+public class FactorComputationService implements OperationalRuntimeConfigurable {
     private final TrendFactorProvider trend = new TrendFactorProvider();
     private final MarginFactorProvider margin = new MarginFactorProvider();
     private final CvrFactorProvider cvr = new CvrFactorProvider();
@@ -52,6 +54,11 @@ public class FactorComputationService {
                         evidence.logisticsConditions(), evidence.evaluationMonth(), evidence.logisticsRule()),
                 inventoryRisk.provide(
                         evidence.shelfLifeDays(), evidence.season(), evidence.moq(), evidence.inventoryRule())));
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        cvr.reconfigure(config.scoringMinCategorySample());
     }
 
     /**

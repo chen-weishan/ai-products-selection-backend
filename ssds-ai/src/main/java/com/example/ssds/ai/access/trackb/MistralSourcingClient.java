@@ -5,6 +5,8 @@ import com.example.ssds.ai.access.common.AiModelNotFoundException;
 import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.resilience.AiRateLimitException;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
+import com.example.ssds.ai.config.MistralModelCatalog;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
 import java.net.URI;
@@ -24,12 +26,14 @@ import org.springframework.web.client.*;
 
 /** B 軌直連 Mistral Conversations，每次請求只啟用一個搜尋 Connector。 */
 @Component
-public class MistralSourcingClient {
+public class MistralSourcingClient implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(MistralSourcingClient.class);
-    private final RestClient restClient;
+    private volatile RestClient restClient;
+    private final String baseUrl;
+    private final int connectTimeoutSeconds;
     private final ObjectMapper mapper;
     private final String apiKey;
-    private final int timeoutSeconds;
+    private volatile int timeoutSeconds;
     private final SourcingToolPolicy toolPolicy;
     private final ApplicationEventPublisher eventPublisher;
     private final List<String> connectors;
@@ -50,6 +54,7 @@ public class MistralSourcingClient {
             ApplicationEventPublisher eventPublisher,
             ExternalLlmPolicy externalLlmPolicy) {
         this.mapper = mapper;
+        this.baseUrl = baseUrl;
         this.toolPolicy = toolPolicy;
         this.apiKey = apiKey;
         this.externalLlmPolicy = externalLlmPolicy;
@@ -58,6 +63,7 @@ public class MistralSourcingClient {
         NumberSetting connectTimeout = positiveNumber(
                 connectTimeoutSeconds, 10, "LLM_CONNECT_TIMEOUT_SCOUT_SECONDS");
         this.timeoutSeconds = readTimeout.value();
+        this.connectTimeoutSeconds = connectTimeout.value();
         this.eventPublisher = eventPublisher;
         this.connectors = parseConnectors(connectors);
         String safeBaseUrl = baseUrl;
@@ -68,14 +74,18 @@ public class MistralSourcingClient {
             safeBaseUrl = "https://api.mistral.ai/v1";
         }
         this.configurationError = invalidConfiguration;
+        this.restClient = buildClient(safeBaseUrl, this.timeoutSeconds, this.connectTimeoutSeconds);
+    }
+
+    private static RestClient buildClient(String baseUrl, int timeoutSeconds, int connectTimeoutSeconds) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(Math.min(
-                                connectTimeout.value(),
-                                this.timeoutSeconds)))
+                                connectTimeoutSeconds,
+                                timeoutSeconds)))
                         .build());
-        factory.setReadTimeout(Duration.ofSeconds(this.timeoutSeconds));
-        this.restClient = RestClient.builder().baseUrl(safeBaseUrl).requestFactory(factory).build();
+        factory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
+        return RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
     }
 
     MistralSourcingClient(
@@ -144,6 +154,18 @@ public class MistralSourcingClient {
                         "B 軌 Connector 不在允許清單: " + connector, exception);
             }
         }
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        if (sourcingTimeoutSeconds < 1) throw new IllegalArgumentException("尋源逾時必須大於 0");
+        this.timeoutSeconds = sourcingTimeoutSeconds;
+        this.restClient = buildClient(
+                isHttpUrl(baseUrl) ? baseUrl : "https://api.mistral.ai/v1",
+                sourcingTimeoutSeconds,
+                connectTimeoutSeconds);
     }
 
     public ScoutClientResponse complete(String model, String prompt) {

@@ -11,6 +11,7 @@ import com.example.ssds.ai.resilience.RetryExecutionState;
 import com.example.ssds.ai.resilience.RetrySleeper;
 import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.review.*;
 import com.example.ssds.ai.prompt.review.ReviewRiskPromptFactory;
@@ -38,16 +39,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
 @Component
-public class ReviewRiskAgent {
+public class ReviewRiskAgent implements AiRuntimeConfigurable {
     private static final Logger log = LoggerFactory.getLogger(ReviewRiskAgent.class);
     private final AiAccessRouter router;
     private final ReviewRiskPromptFactory promptFactory;
     private final ReviewRiskResponseParser parser;
     private final ObjectMapper objectMapper;
-    private final List<String> models;
-    private final int retryMax;
+    private volatile List<String> models;
+    private volatile int retryMax;
     private final RetrySleeper retrySleeper;
-    private final Cache<CacheKey, ReviewRiskResult> cache;
+    private volatile Cache<CacheKey, ReviewRiskResult> cache;
 
     @Autowired
     public ReviewRiskAgent(
@@ -196,6 +197,16 @@ public class ReviewRiskAgent {
                 return fallback(FallbackReason.AI_UNAVAILABLE, model, retry.requestCount());
             }
         }
+    }
+
+    @Override
+    public void reconfigure(MistralModelCatalog catalog, int retryMax, int cacheDays,
+            int trendCacheDays, int sourcingCacheDays, int batchItemCap,
+            int timeoutSeconds, int sourcingTimeoutSeconds) {
+        this.models = catalog.longText().models();
+        this.retryMax = Math.max(0, retryMax);
+        this.cache = Caffeine.newBuilder().expireAfterWrite(Duration.ofDays(cacheDays))
+                .maximumSize(10_000).build();
     }
 
     private boolean pauseBeforeRetry(long delayMillis, Long productId, String model) {

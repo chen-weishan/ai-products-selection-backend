@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.ssds.api.scoring.ScoreEvaluationService.EvaluationRequest;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.scoring.ScoreEvaluationService.EvaluationResult;
 import com.example.ssds.api.scoring.ScoreEvaluationService.FactorInput;
 import com.example.ssds.api.scoring.ScoreExecutionService.EvaluationCommand;
@@ -122,6 +123,23 @@ class ScoreExecutionServiceTest {
 
         service.evaluate(new EvaluationCommand(
                 501L, SceneType.REPLENISHMENT, null, null, true, attemptedAt));
+
+        ArgumentCaptor<EvaluationRequest> request = ArgumentCaptor.forClass(EvaluationRequest.class);
+        verify(evaluation).evaluate(request.capture());
+        assertEquals(90, request.getValue().confidence());
+    }
+
+    @Test
+    void sceneScoringThresholdCanChangeAtRuntime() {
+        Map<FactorCode, FactorInput> factors = completeFactors();
+        when(factorBatch.prepare(any(), any())).thenReturn(Map.of(501L, factors));
+        when(evaluation.evaluate(any())).thenReturn(new EvaluationResult(
+                LastScoringStatus.SCORED, "2026W38", 9L, 701L, List.of(), null));
+        service.reconfigure(new OperationalConfig(5, 15, 14, 30, 10,
+                new BigDecimal("0.5"), new BigDecimal("0.8"), 200));
+
+        service.evaluate(new EvaluationCommand(
+                501L, SceneType.FESTIVAL, null, new BigDecimal("0.75"), attemptedAt));
 
         ArgumentCaptor<EvaluationRequest> request = ArgumentCaptor.forClass(EvaluationRequest.class);
         verify(evaluation).evaluate(request.capture());

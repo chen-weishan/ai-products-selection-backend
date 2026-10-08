@@ -7,8 +7,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.example.ssds.api.risk.RiskHeatAlertService;
@@ -29,7 +27,6 @@ import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
  * 第二次只會更新同一筆，不會多開。只是會白跑一次。
  */
 @Component
-@ConditionalOnProperty(name = "ssds.risk.heat-alert.schedule-enabled", havingValue = "true", matchIfMissing = true)
 public class RiskHeatAlertJob {
 
     private static final Logger log = LoggerFactory.getLogger(RiskHeatAlertJob.class);
@@ -43,7 +40,6 @@ public class RiskHeatAlertJob {
         this.compositeRepository = compositeRepository;
     }
 
-    @Scheduled(cron = "${ssds.risk.heat-alert.cron:0 30 6 * * *}", zone = "Asia/Taipei")
     public void run() {
         runFor(LocalDate.now(TAIPEI), Instant.now());
     }

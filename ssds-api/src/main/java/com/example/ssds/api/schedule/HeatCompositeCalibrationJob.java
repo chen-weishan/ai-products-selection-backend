@@ -21,7 +21,6 @@ import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -84,7 +83,6 @@ public class HeatCompositeCalibrationJob {
         this.trendInterpretationJobProvider = trendInterpretationJobProvider;
     }
 
-    @Scheduled(cron = "${ssds.calibration.heat-composite.cron:0 0 6 * * *}", zone = "Asia/Taipei")
     public void run() {
         runScheduled(LocalDate.now(TAIPEI));
     }

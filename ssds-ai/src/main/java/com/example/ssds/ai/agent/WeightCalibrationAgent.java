@@ -11,6 +11,7 @@ import com.example.ssds.ai.resilience.RetryExecutionState;
 import com.example.ssds.ai.resilience.RetrySleeper;
 import com.example.ssds.ai.resilience.SafeLogMessage;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.ai.model.calibration.*;
 import com.example.ssds.ai.prompt.calibration.WeightCalibrationPromptFactory;
@@ -27,11 +28,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
 @Component
-public class WeightCalibrationAgent {
+public class WeightCalibrationAgent implements AiRuntimeConfigurable {
     private static final Logger log=LoggerFactory.getLogger(WeightCalibrationAgent.class);
     private final AiAccessRouter router; private final WeightCalibrationPromptFactory prompts;
     private final WeightCalibrationResponseParser parser; private final ObjectMapper mapper;
-    private final List<String> models; private final int retryMax; private final RetrySleeper sleeper;
+    private volatile List<String> models; private volatile int retryMax; private final RetrySleeper sleeper;
 
     @Autowired
     public WeightCalibrationAgent(AiAccessRouter router,WeightCalibrationPromptFactory prompts,
@@ -91,6 +92,12 @@ public class WeightCalibrationAgent {
                 return fallback(FallbackReason.AI_UNAVAILABLE,model,retry.requestCount());
             }
         }
+    }
+    @Override
+    public void reconfigure(MistralModelCatalog catalog,int retryMax,int cacheDays,
+            int trendCacheDays,int sourcingCacheDays,int batchItemCap,
+            int timeoutSeconds,int sourcingTimeoutSeconds) {
+        this.models=catalog.reasoning().models();this.retryMax=Math.max(0,retryMax);
     }
     private WeightCalibrationResult fallback(FallbackReason reason,String model,int requests) {
         return new WeightCalibrationResult(new WeightCalibrationOutput(

@@ -1,5 +1,7 @@
 package com.example.ssds.api.calibration;
 
+import com.example.ssds.api.admin.OperationalRuntimeConfigurable;
+import com.example.ssds.api.admin.RuntimeSettingsService.OperationalConfig;
 import com.example.ssds.api.calibration.dto.CalibrationReportResponse;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
@@ -63,7 +65,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 兩者元素皆為 {@link Backtester.Outcome}，{@code backtests[]} 另以 {@code scheme} 欄位承載代碼。
  */
 @Service
-public class CalibrationReportService {
+public class CalibrationReportService implements OperationalRuntimeConfigurable {
 
     static final String VALIDITY_WARNING = "樣本數不足，統計上建議累積至 %d 筆以上再進行權重調整。本次建議僅供參考，不建議直接核准。";
 
@@ -77,7 +79,7 @@ public class CalibrationReportService {
     private final CalibrationDataLoader loader;
     private final CalibrationActors actors;
     private final EntityManager entityManager;
-    private final int minSample;
+    private volatile int minSample;
     /** 單一因子有效樣本低於此數視為「樣本不足」，建議權重不動。設計決定：預設 10，Spearman 在 n < 10 時幾乎不可能顯著。 */
     private final int minFactorSample;
     private final Clock clock;
@@ -108,6 +110,11 @@ public class CalibrationReportService {
         this.minSample = minSample;
         this.minFactorSample = minFactorSample;
         this.clock = clock;
+    }
+
+    @Override
+    public void reconfigure(OperationalConfig config) {
+        minSample = config.calibrationMinSample();
     }
 
     /**
