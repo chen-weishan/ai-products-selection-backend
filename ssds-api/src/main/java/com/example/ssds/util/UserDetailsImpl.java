@@ -41,6 +41,7 @@ import lombok.AllArgsConstructor;
 
 
 import lombok.Data;
+import com.example.ssds.core.domain.UserStatus;
 
 
 
@@ -82,6 +83,9 @@ public class UserDetailsImpl implements UserDetails {
 
 	private Collection<? extends GrantedAuthority> authorities;
 
+	/** FR-13 停用帳號：JwtAuthFilter 依此拒絕已停用者的舊 token。 */
+	private boolean active;
+
 
 
 
@@ -98,7 +102,8 @@ public class UserDetailsImpl implements UserDetails {
 				.map(role -> new SimpleGrantedAuthority(role.toAuthority()))
 				.collect(Collectors.toList());
 
-		return new UserDetailsImpl(user.getId(), user.getEmail(), user.getDisplayName(), user.getPasswordHash(), authorities);
+		return new UserDetailsImpl(user.getId(), user.getEmail(), user.getDisplayName(), user.getPasswordHash(), authorities,
+				user.getStatus() == UserStatus.ACTIVE);
 
 
 
@@ -202,7 +207,7 @@ public class UserDetailsImpl implements UserDetails {
 
 
 
-		return true;
+		return active;
 
 
 

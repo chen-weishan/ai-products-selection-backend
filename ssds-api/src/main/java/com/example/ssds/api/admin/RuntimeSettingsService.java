@@ -5,6 +5,8 @@ import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.config.MistralModelCatalog.ModelChain;
 import com.example.ssds.ai.config.AiRuntimeConfigurable;
 import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.security.CurrentUserId;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.RuntimeSetting;
@@ -40,6 +42,11 @@ public class RuntimeSettingsService {
     private static final String AI_KEY = "ai.config";
     private static final String SCHEDULE_KEY = "schedules.config";
     private static final String OPERATIONAL_KEY = "operational.config";
+    /** Mistral model ID 只含英數與 {@code . _ : / -}；擋掉空白、逗號等手動輸入誤植。 */
+    private static final java.util.regex.Pattern MODEL_ID = java.util.regex.Pattern.compile("[A-Za-z0-9._:/-]{1,100}");
+    /** §6.7.2 別名的固定顯示順序；JSON 物件與 Map.copyOf 都不保證順序。 */
+    private static final List<String> ALIAS_ORDER = List.of(
+            "MODEL_CLASSIFY", "MODEL_LONG_TEXT", "MODEL_SHORT_GEN", "MODEL_NUMERIC", "MODEL_REASONING");
 
     private final RuntimeSettingRepository settings;
     private final AuditLogRepository audits;
@@ -182,6 +189,18 @@ public class RuntimeSettingsService {
     @Transactional
     public ScheduleConfig updateSchedules(ScheduleConfig requested, String sourceIp) {
         validate(requested);
+        // 名稱以伺服器定義為準，cron 去頭尾空白；客戶端只能改 cron 與啟用狀態
+        Map<String, String> labels = new LinkedHashMap<>();
+        defaultSchedules.items().forEach(item -> labels.put(item.code(), item.label()));
+        List<ScheduleItem> incoming = requested.items();
+        ScheduleConfig normalized = new ScheduleConfig(defaultSchedules.items().stream()
+                .map(item -> incoming.stream().filter(r -> r.code().equals(item.code())).findFirst().orElseThrow())
+                .map(item -> new ScheduleItem(item.code(), labels.get(item.code()), item.cron().trim(), item.enabled()))
+                .toList());
+        return saveSchedules(normalized, sourceIp);
+    }
+
+    private ScheduleConfig saveSchedules(ScheduleConfig requested, String sourceIp) {
         ScheduleConfig before = schedules();
         save(SCHEDULE_KEY, "SCHEDULE", requested);
         audit("UPDATE_SCHEDULE_CONFIG", SCHEDULE_KEY, before, requested, sourceIp);
@@ -240,47 +259,55 @@ public class RuntimeSettingsService {
 
     private void validate(AiConfig config) {
         if (config == null || config.models() == null || !config.models().keySet().equals(defaultAi.models().keySet())) {
-            throw new IllegalArgumentException("模型別名必須完整且不可新增未支援的別名");
+            throw invalid("模型別名必須完整且不可新增未支援的別名");
         }
         config.models().forEach((alias, route) -> {
             if (route == null || route.primary() == null || route.primary().isBlank()) {
-                throw new IllegalArgumentException(alias + " 的主要模型不得為空");
+                throw invalid(alias + " 的主要模型不得為空");
             }
+            java.util.stream.Stream.concat(java.util.stream.Stream.of(route.primary()), route.fallbacks().stream())
+                    .filter(model -> model == null || !MODEL_ID.matcher(model.trim()).matches())
+                    .findFirst()
+                    .ifPresent(model -> {
+                        throw invalid(alias + " 的模型名稱格式不正確：" + model);
+                    });
         });
         if (config.dailyQuota() < 0 || config.batchItemCap() < 1 || config.retryMax() < 0) {
-            throw new IllegalArgumentException("配額、批次上限或重試次數不合法");
+            throw invalid("配額、批次上限或重試次數不合法");
         }
         if (config.timeoutSeconds() < 1 || config.sourcingTimeoutSeconds() < 1
                 || config.cacheDays() < 0 || config.trendCacheDays() < 0 || config.sourcingCacheDays() < 0) {
-            throw new IllegalArgumentException("逾時與快取天數不合法");
+            throw invalid("逾時與快取天數不合法");
         }
         if (config.rateLimitPerMinute() < 1 || config.trendRateLimitPerMinute() < 1) {
-            throw new IllegalArgumentException("每分鐘請求上限必須大於 0");
+            throw invalid("每分鐘請求上限必須大於 0");
         }
         double total = config.trackAShare() + config.trackBShare() + config.retryShare();
         if (config.trackAShare() < 0 || config.trackBShare() < 0 || config.retryShare() < 0
                 || Math.abs(total - 1d) > 0.000001d) {
-            throw new IllegalArgumentException("三個預算池比例總和必須等於 1");
+            throw invalid("三個預算池比例總和必須等於 1");
         }
         if (config.warningRatio() <= 0 || config.warningRatio() >= 1) {
-            throw new IllegalArgumentException("配額警示比例必須大於 0 且小於 1");
+            throw invalid("配額警示比例必須大於 0 且小於 1");
         }
     }
 
     private void validate(ScheduleConfig config) {
         if (config == null || config.items() == null || config.items().isEmpty()) {
-            throw new IllegalArgumentException("排程清單不得為空");
+            throw invalid("排程清單不得為空");
         }
         Map<String, ScheduleItem> allowed = new LinkedHashMap<>();
         defaultSchedules.items().forEach(item -> allowed.put(item.code(), item));
         if (config.items().size() != allowed.size()
                 || !new HashSet<>(config.items().stream().map(ScheduleItem::code).toList())
                         .equals(allowed.keySet())) {
-            throw new IllegalArgumentException("排程清單必須完整");
+            throw invalid("排程清單必須完整");
         }
         for (ScheduleItem item : config.items()) {
-            if (!allowed.containsKey(item.code())) throw new IllegalArgumentException("不支援的排程：" + item.code());
-            CronExpression.parse(item.cron());
+            if (!allowed.containsKey(item.code())) throw invalid("不支援的排程：" + item.code());
+            if (item.cron() == null || !CronExpression.isValidExpression(item.cron().trim())) {
+                throw invalid(item.label() + " 的排程格式不正確：" + item.cron());
+            }
         }
     }
 
@@ -292,13 +319,17 @@ public class RuntimeSettingsService {
                 || config.heatTagExpireDays() <= config.heatTagHalveAfterDays()
                 || config.scoringMinCategorySample() < 1
                 || config.calibrationMinSample() < 1) {
-            throw new IllegalArgumentException("營運參數必須為正數，且熱度標記失效天數須大於減半天數");
+            throw invalid("營運參數必須為正數，且熱度標記失效天數須大於減半天數");
         }
         if (outsideUnitInterval(config.sceneAdoptConfidence())
                 || outsideUnitInterval(config.sceneScoringConfidence())
                 || config.sceneScoringConfidence().compareTo(config.sceneAdoptConfidence()) < 0) {
-            throw new IllegalArgumentException("情境信心門檻須介於 0 到 1，且計分門檻不得低於採用門檻");
+            throw invalid("情境信心門檻須介於 0 到 1，且計分門檻不得低於採用門檻");
         }
+    }
+
+    private static BusinessException invalid(String message) {
+        return new BusinessException(ErrorCode.VALIDATION_FAILED, message);
     }
 
     private boolean outsideUnitInterval(BigDecimal value) {
@@ -355,8 +386,16 @@ public class RuntimeSettingsService {
     }
 
     public record ModelRoute(String primary, List<String> fallbacks) {
+        /** 去頭尾空白、去重，並移除與主模型相同的備援，避免同一模型重試兩次。 */
         public ModelRoute {
-            fallbacks = fallbacks == null ? List.of() : List.copyOf(fallbacks);
+            primary = primary == null ? null : primary.trim();
+            String main = primary;
+            fallbacks = fallbacks == null ? List.of() : fallbacks.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::trim)
+                    .filter(model -> !model.isEmpty() && !model.equals(main))
+                    .distinct()
+                    .toList();
         }
     }
 
@@ -377,7 +416,14 @@ public class RuntimeSettingsService {
             int trendCacheDays,
             int sourcingCacheDays) {
         public AiConfig {
-            models = models == null ? Map.of() : Map.copyOf(models);
+            Map<String, ModelRoute> ordered = new LinkedHashMap<>();
+            if (models != null) {
+                for (String alias : ALIAS_ORDER) {
+                    if (models.containsKey(alias)) ordered.put(alias, models.get(alias));
+                }
+                models.forEach(ordered::putIfAbsent);
+            }
+            models = java.util.Collections.unmodifiableMap(ordered);
         }
     }
     public record BudgetUpdate(
