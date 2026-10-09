@@ -14,14 +14,22 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('SYS_ADMIN')")
 public class RuntimeSettingsController {
     private final RuntimeSettingsService settings;
+    private final AiModelOptionsService modelOptions;
 
-    public RuntimeSettingsController(RuntimeSettingsService settings) {
+    public RuntimeSettingsController(RuntimeSettingsService settings, AiModelOptionsService modelOptions) {
         this.settings = settings;
+        this.modelOptions = modelOptions;
     }
 
     @GetMapping("/ai-config")
     public ApiResponse<RuntimeSettingsService.AiConfig> aiConfig() {
         return ApiResponse.success(settings.aiConfig());
+    }
+
+    /** S-14 下拉選項：別名說明與可選模型（不含金鑰）。 */
+    @GetMapping("/ai-config/options")
+    public ApiResponse<AiModelOptionsService.AiConfigOptions> aiConfigOptions() {
+        return ApiResponse.success(modelOptions.options());
     }
 
     @PutMapping("/ai-config")

@@ -87,7 +87,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
 			// 再次驗證 Token 簽名與是否過期，確保沒被竄改
 
-			if (jwtUtil.validateToken(jwt)) {
+			// FR-13：停用帳號的舊 token 不再放行（角色本來就每次重讀，停用狀態同理）
+			if (userDetails.isEnabled() && jwtUtil.validateToken(jwt)) {
 
 				UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
 
