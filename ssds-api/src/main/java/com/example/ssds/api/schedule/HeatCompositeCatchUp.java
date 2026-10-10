@@ -17,17 +17,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
 
 /** 應用啟動時，依各來源與每日合成的排程時間及資料完整度決定是否補跑。 */
 @Component
-@ConditionalOnProperty(
-        name = "ssds.calibration.heat-catch-up-enabled",
-        havingValue = "true")
 public class HeatCompositeCatchUp {
 
     private static final Logger log = LoggerFactory.getLogger(HeatCompositeCatchUp.class);
@@ -111,7 +105,6 @@ public class HeatCompositeCatchUp {
         this.clock = clock;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
     public void catchUpAfterStartup() {
         catchUp(ZonedDateTime.now(clock).withZoneSameInstant(BUSINESS_ZONE));
     }

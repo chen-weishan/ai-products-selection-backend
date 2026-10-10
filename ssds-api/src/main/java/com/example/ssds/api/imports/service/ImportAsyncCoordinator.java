@@ -14,9 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -36,7 +34,6 @@ public class ImportAsyncCoordinator {
     private final ApplicationEventPublisher eventPublisher;
     private final ImportTransactionExecutor transactions;
     private final Duration timeout;
-    private final boolean periodicRecoveryEnabled;
     private final ConcurrentMap<Long, TrackedTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, Instant> waitingSince = new ConcurrentHashMap<>();
 
@@ -47,8 +44,7 @@ public class ImportAsyncCoordinator {
             ImportBatchRepository batchRepository,
             ApplicationEventPublisher eventPublisher,
             ImportTransactionExecutor transactions,
-            @Value("${ssds.import.async-timeout:30m}") Duration timeout,
-            @Value("${ssds.import.periodic-recovery-enabled:false}") boolean periodicRecoveryEnabled
+            @Value("${ssds.import.async-timeout:30m}") Duration timeout
     ) {
         this.executor = executor;
         this.executionService = executionService;
@@ -57,7 +53,6 @@ public class ImportAsyncCoordinator {
         this.eventPublisher = eventPublisher;
         this.transactions = transactions;
         this.timeout = timeout;
-        this.periodicRecoveryEnabled = periodicRecoveryEnabled;
     }
 
     public synchronized void submit(Long batchId) {
@@ -90,14 +85,11 @@ public class ImportAsyncCoordinator {
     }
 
     /** server restart 後以 DB 的 RUNNING 狀態與 sidecar mapping 恢復未完成工作。 */
-    @EventListener(ApplicationReadyEvent.class)
     public void recoverRunningImports() {
         recoverRunningImportsFromDatabase();
     }
 
-    @Scheduled(fixedDelayString = "${ssds.import.recovery-delay:15s}", initialDelayString = "${ssds.import.recovery-delay:15s}")
     public void pollRunningImports() {
-        if (!periodicRecoveryEnabled) return;
         recoverRunningImportsFromDatabase();
     }
 

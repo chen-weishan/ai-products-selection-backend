@@ -1,7 +1,5 @@
 package com.example.ssds.api.schedule;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.inOrder;
@@ -23,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.scheduling.support.CronExpression;
@@ -33,16 +30,6 @@ class HeatCompositeCatchUpTest {
 
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 21);
-
-    @Test
-    void catchUpIsDisabledWhenPropertyIsMissing() {
-        ConditionalOnProperty condition = HeatCompositeCatchUp.class
-                .getAnnotation(ConditionalOnProperty.class);
-
-        assertEquals("ssds.calibration.heat-catch-up-enabled", condition.name()[0]);
-        assertEquals("true", condition.havingValue());
-        assertFalse(condition.matchIfMissing());
-    }
 
     @Test
     void runsAfterScheduledTimeWhenTodayIsIncomplete() {

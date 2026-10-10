@@ -36,4 +36,14 @@ class ExternalLlmPolicyTest {
         assertThrows(ExternalLlmDisabledException.class,
                 () -> policy.validateUserJson("not-json"));
     }
+
+    @Test
+    void runtimeReconfigurationTakesEffectImmediately() {
+        ExternalLlmPolicy policy = new ExternalLlmPolicy(true, mapper);
+
+        policy.reconfigure(false);
+
+        assertThrows(ExternalLlmDisabledException.class,
+                () -> policy.validateUserJson("{}"));
+    }
 }

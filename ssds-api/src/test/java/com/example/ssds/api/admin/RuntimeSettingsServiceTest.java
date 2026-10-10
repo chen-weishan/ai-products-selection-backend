@@ -10,9 +10,12 @@ import static org.mockito.Mockito.when;
 
 import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.ai.config.MistralModelCatalog;
+import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
+import com.example.ssds.api.trend.TrendInterpretationJob;
 import com.example.ssds.api.admin.RuntimeSettingsService.AiConfig;
 import com.example.ssds.api.admin.RuntimeSettingsService.ModelRoute;
+import com.example.ssds.api.admin.RuntimeSettingsService.RecoveryConfig;
 import com.example.ssds.api.admin.RuntimeSettingsService.ScheduleConfig;
 import com.example.ssds.api.admin.RuntimeSettingsService.ScheduleItem;
 import com.example.ssds.api.common.error.BusinessException;
@@ -23,6 +26,7 @@ import com.example.ssds.infra.repository.AppUserRepository;
 import com.example.ssds.infra.repository.AuditLogRepository;
 import com.example.ssds.infra.repository.RuntimeSettingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -44,6 +48,8 @@ class RuntimeSettingsServiceTest {
     private final AuditLogRepository audits = mock(AuditLogRepository.class);
     private final AppUserRepository users = mock(AppUserRepository.class);
     private final ObjectMapper mapper = new ObjectMapper();
+    private final ExternalLlmPolicy externalLlmPolicy = mock(ExternalLlmPolicy.class);
+    private final TrendInterpretationJob trendInterpretationJob = mock(TrendInterpretationJob.class);
     private RuntimeSettingsService service;
 
     @BeforeEach
@@ -54,11 +60,13 @@ class RuntimeSettingsServiceTest {
         service = new RuntimeSettingsService(repository, audits, users, mapper,
                 mock(MistralModelCatalog.class), mock(DailyAiBudget.class), mock(GlobalAiRateLimiter.class),
                 mock(ApplicationEventPublisher.class), List.of(), List.of(),
+                externalLlmPolicy, trendInterpretationJob,
                 "classify-a", "classify-b", "long-a", "long-b", "short-a", "short-b",
-                "num-a", "num-b", "reason-a", "reason-b",
+                "num-a", "num-b", "reason-a", "reason-b", true, true,
                 1000, 0.7, 0.2, 0.1, 20, 5, 150, 3, 30, 90, 6, 3, 3,
                 true, "0 0 7 * * MON", "0 0 7 * * TUE-SUN", false, "0 50 6 * * MON",
                 true, "0 0 8,9 1 1,4,7,10 *", true, "0 30 6 * * *", "0 0 6 * * *",
+                false, 300, false, 15, false, false,
                 5, Duration.ofMinutes(15), 14, 30, 10, new BigDecimal("0.5"), new BigDecimal("0.7"), 200);
     }
 
@@ -68,7 +76,8 @@ class RuntimeSettingsServiceTest {
     }
 
     private static AiConfig withModels(Map<String, ModelRoute> models) {
-        return new AiConfig(models, 1000, 0.7, 0.2, 0.1, 0.8, 20, 5, 150, 3, 30, 90, 6, 3, 3);
+        return new AiConfig(models, 1000, 0.7, 0.2, 0.1, 0.8, 20, 5, 150, 3, 30, 90, 6, 3, 3,
+                true, true);
     }
 
     private static void assertValidationFailed(Runnable action, String message) {
@@ -83,6 +92,62 @@ class RuntimeSettingsServiceTest {
     void aliasesInSpecOrder() {
         assertThat(service.aiConfig().models().keySet()).containsExactly(
                 "MODEL_CLASSIFY", "MODEL_LONG_TEXT", "MODEL_SHORT_GEN", "MODEL_NUMERIC", "MODEL_REASONING");
+    }
+
+    @Test
+    @DisplayName("AI 功能開關在設定提交後立即套用")
+    void runtimeFeatureSwitchesApplyImmediately() {
+        AiConfig current = service.aiConfig();
+        AiConfig disabled = new AiConfig(
+                current.models(), current.dailyQuota(), current.trackAShare(), current.trackBShare(),
+                current.retryShare(), current.warningRatio(), current.rateLimitPerMinute(),
+                current.trendRateLimitPerMinute(), current.batchItemCap(), current.retryMax(),
+                current.timeoutSeconds(), current.sourcingTimeoutSeconds(), current.cacheDays(),
+                current.trendCacheDays(), current.sourcingCacheDays(), false, false);
+
+        service.aiSettingsChanged(new RuntimeSettingsService.RuntimeAiChanged(disabled));
+
+        verify(externalLlmPolicy).reconfigure(false);
+        verify(trendInterpretationJob).reconfigure(false);
+    }
+
+    @Test
+    @DisplayName("舊版 AI 設定缺少功能開關時沿用 application properties 預設值")
+    void legacyAiConfigUsesPropertyDefaults() throws Exception {
+        ObjectNode legacyJson = mapper.valueToTree(service.aiConfig());
+        legacyJson.remove("externalLlmEnabled");
+        legacyJson.remove("trendScheduleEnabled");
+
+        AiConfig legacy = mapper.treeToValue(legacyJson, AiConfig.class);
+        AiConfig effective = legacy.withFeatureDefaults(false, true);
+
+        assertThat(effective.externalLlmEnabled()).isFalse();
+        assertThat(effective.trendScheduleEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("補跑與兜底設定以 properties 為預設並完整寫入資料庫")
+    void recoveryConfigDefaultsAndPersists() throws Exception {
+        assertThat(service.recoveryConfig()).isEqualTo(
+                new RecoveryConfig(false, 300, false, 15, false, false));
+        RecoveryConfig requested = new RecoveryConfig(true, 120, true, 45, true, true);
+
+        RecoveryConfig saved = service.updateRecovery(requested, null);
+
+        assertThat(saved).isEqualTo(requested);
+        ArgumentCaptor<RuntimeSetting> captor = ArgumentCaptor.forClass(RuntimeSetting.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getKey()).isEqualTo("recovery.config");
+        assertThat(mapper.readValue(captor.getValue().getValueJson(), RecoveryConfig.class)).isEqualTo(requested);
+    }
+
+    @Test
+    @DisplayName("恢復輪詢秒數須為正整數")
+    void recoveryPollingIntervalValidated() {
+        RecoveryConfig invalid = new RecoveryConfig(true, 0, true, 15, false, false);
+
+        assertValidationFailed(() -> service.updateRecovery(invalid, null), "輪詢間隔秒數至少為 1");
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -101,7 +166,8 @@ class RuntimeSettingsServiceTest {
     @DisplayName("比例總和不為 1 → VALIDATION_FAILED，不寫入")
     void shareSumValidated() {
         AiConfig current = service.aiConfig();
-        AiConfig bad = new AiConfig(current.models(), 1000, 0.5, 0.2, 0.1, 0.8, 20, 5, 150, 3, 30, 90, 6, 3, 3);
+        AiConfig bad = new AiConfig(current.models(), 1000, 0.5, 0.2, 0.1, 0.8, 20, 5, 150, 3, 30, 90, 6, 3, 3,
+                true, true);
 
         assertValidationFailed(() -> service.updateAi(bad, null), "三個預算池比例總和必須等於 1");
         verify(repository, never()).save(any());

@@ -20,26 +20,11 @@ class AiTaskRecoveryTest {
         when(tasks.findByStatus(TaskStatus.PENDING)).thenReturn(List.of(pending));
         when(tasks.findByStatus(TaskStatus.RUNNING)).thenReturn(List.of(running));
 
-        new AiTaskRecovery(tasks, worker, events, false).recoverInterruptedTasks();
+        new AiTaskRecovery(tasks, worker, events).recoverInterruptedTasks();
 
         verify(events).publishEvent(new AiTaskCreatedEvent(11L, false));
         verify(events).publishEvent(new AiTaskCreatedEvent(12L, false));
         verify(events, never()).publishEvent(new AiTaskCreatedEvent(11L, true));
-    }
-
-    @Test
-    void disabledPollingDoesNotQueryTasksButStartupRecoveryStillDoes() {
-        AiTaskRepository tasks = mock(AiTaskRepository.class);
-        AiTaskWorker worker = mock(AiTaskWorker.class);
-        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-        AiTaskRecovery recovery = new AiTaskRecovery(tasks, worker, events, false);
-
-        recovery.pollInterruptedTasks();
-
-        verifyNoInteractions(tasks, worker, events);
-        recovery.recoverInterruptedTasks();
-        verify(tasks).findByStatus(TaskStatus.PENDING);
-        verify(tasks).findByStatus(TaskStatus.RUNNING);
     }
 
     @Test
@@ -53,7 +38,7 @@ class AiTaskRecoveryTest {
         when(tasks.findByStatus(TaskStatus.RUNNING)).thenReturn(List.of(running));
         when(worker.isTaskActive(22L)).thenReturn(true);
 
-        new AiTaskRecovery(tasks, worker, events, true).pollInterruptedTasks();
+        new AiTaskRecovery(tasks, worker, events).pollInterruptedTasks();
 
         verify(events).publishEvent(new AiTaskCreatedEvent(21L, false));
         verify(events, never()).publishEvent(new AiTaskCreatedEvent(22L, false));

@@ -123,25 +123,12 @@ class ImportRecoveryTest {
                 .thenAnswer(i -> new CompletableFuture<Void>());
         var coordinator = new ImportAsyncCoordinator(executor, execution,
                 mock(ImportBatchLifecycleService.class), repository,
-                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30), true);
+                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30));
         assertThatCode(coordinator::recoverRunningImports).doesNotThrowAnyException();
         coordinator.pollRunningImports();
         verify(executor, times(3)).submit(any(Runnable.class));
         verify(execution, times(2)).expireQueued(eq(1L), any(java.time.Instant.class));
         verify(execution).expireQueued(eq(2L), any(java.time.Instant.class));
-    }
-
-    @Test void disabledPeriodicRecoveryDoesNotQueryRunningImports() {
-        var transactions = mock(ImportTransactionExecutor.class);
-        var repository = mock(ImportBatchRepository.class);
-        var coordinator = new ImportAsyncCoordinator(
-                mock(ThreadPoolTaskExecutor.class), mock(ImportExecutionService.class),
-                mock(ImportBatchLifecycleService.class), repository,
-                mock(ApplicationEventPublisher.class), transactions, Duration.ofMinutes(30), false);
-
-        coordinator.pollRunningImports();
-
-        verifyNoInteractions(transactions, repository);
     }
 
     @Test void advisoryLockIsReleasedBeforeConnectionReturnsToPool() throws Exception {

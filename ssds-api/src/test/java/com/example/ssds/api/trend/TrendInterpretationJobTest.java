@@ -19,6 +19,21 @@ import org.mockito.ArgumentCaptor;
 
 class TrendInterpretationJobTest {
     @Test
+    void disabledRuntimeSwitchSkipsEnqueueWithoutReadingKeywords() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        TrendInterpretationRepository interpretationRepository = mock(TrendInterpretationRepository.class);
+        AiTaskService taskService = mock(AiTaskService.class);
+        TrendInterpretationJob job = new TrendInterpretationJob(
+                keywordRepository, compositeRepository, interpretationRepository,
+                taskService, new ObjectMapper());
+        job.reconfigure(false);
+
+        assertEquals(Set.of(), job.enqueueSignificantKeywords(LocalDate.of(2026, 10, 9)));
+        verifyNoInteractions(keywordRepository, compositeRepository, interpretationRepository, taskService);
+    }
+
+    @Test
     void enqueuesKeywordWithoutPreviousInterpretation() {
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);

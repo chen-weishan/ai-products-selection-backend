@@ -8,9 +8,6 @@ import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import com.example.ssds.api.risk.RiskFestivalAlertService;
@@ -30,10 +27,9 @@ import com.example.ssds.api.risk.RiskSeasonAlertService;
  * 若啟動時間早於當天 06:00 的合成，熱度這一項會因當天沒有資料而略過並記警告，
  * 季節與節慶兩項不受影響。
  *
- * <p>環境變數 {@code RISK_STARTUP_RUN_ENABLED=false} 可關閉。
+ * <p>是否執行由 S-14「補跑與兜底」設定控制，properties／環境變數只提供初始預設值。
  */
 @Component
-@ConditionalOnProperty(name = "ssds.risk.startup-run.enabled", havingValue = "true", matchIfMissing = true)
 public class RiskAlertStartupRunner {
 
     private static final Logger log = LoggerFactory.getLogger(RiskAlertStartupRunner.class);
@@ -67,7 +63,6 @@ public class RiskAlertStartupRunner {
         this.executor = executor;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
         executor.execute(() -> runOnce(Instant.now()));
     }

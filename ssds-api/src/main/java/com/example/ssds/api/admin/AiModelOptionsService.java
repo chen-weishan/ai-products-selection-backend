@@ -1,5 +1,7 @@
 package com.example.ssds.api.admin;
 
+import com.example.ssds.api.common.error.BusinessException;
+import com.example.ssds.api.common.error.ErrorCode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.http.HttpClient;
@@ -9,7 +11,9 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,9 +25,9 @@ import org.springframework.web.client.RestClient;
 /**
  * S-14 AI 設定的下拉選項：§6.7.2 邏輯別名說明＋可選模型清單。
  *
- * <p>模型清單優先向 Mistral {@code GET /models} 查帳號實際可用的對話模型（快取 10 分鐘）；
- * 未設金鑰或查詢失敗時退回 {@code mistral.model-options} 設定清單。目前設定中的模型一律併入，
- * 避免已在用的模型因不在清單內而無法在下拉中顯示。
+ * <p>模型清單優先向 Mistral {@code GET /models} 查帳號實際可用且支援 reasoning 的對話模型（快取 10 分鐘）；
+ * 未設金鑰或查詢失敗時顯示 {@code mistral.model-options} 設定清單，但標為尚未驗證、不可直接選用。
+ * 目前設定中的模型一律併入，避免既有模型因不在清單內而無法辨識與修正。
  */
 @Service
 public class AiModelOptionsService {
@@ -48,6 +52,7 @@ public class AiModelOptionsService {
     private final List<String> configuredOptions;
     private final RestClient client;
     private final Clock clock;
+    private final Map<String, Instant> verifiedReasoningModels = new ConcurrentHashMap<>();
     private volatile CachedModels cache;
 
     @Autowired
@@ -85,9 +90,51 @@ public class AiModelOptionsService {
         Set<String> ids = new LinkedHashSet<>(models.ids());
         ids.addAll(inUse);
         List<ModelOption> options = ids.stream()
-                .map(id -> new ModelOption(id, models.ids().contains(id), inUse.contains(id)))
+                .map(id -> new ModelOption(id, models.verified() && models.ids().contains(id), inUse.contains(id)))
                 .toList();
         return new AiConfigOptions(ALIASES, options, models.source(), models.warning());
+    }
+
+    /** S-14 變更模型路由時逐一向 Mistral 確認 reasoning 能力；未知或不合格都不允許套用。 */
+    public void validateReasoningModelsIfChanged(
+            RuntimeSettingsService.AiConfig current,
+            RuntimeSettingsService.AiConfig requested) {
+        if (current != null && current.models().equals(requested.models())) return;
+        validateReasoningModels(requested);
+    }
+
+    public void validateReasoningModels(RuntimeSettingsService.AiConfig config) {
+        if (apiKey.isEmpty()) {
+            throw invalid("未設定 MISTRAL_API_KEY，無法驗證模型是否支援 reasoning=true");
+        }
+        LinkedHashSet<String> modelIds = new LinkedHashSet<>();
+        config.models().values().forEach(route -> {
+            modelIds.add(route.primary());
+            modelIds.addAll(route.fallbacks());
+        });
+        modelIds.forEach(this::validateReasoningModel);
+    }
+
+    private void validateReasoningModel(String model) {
+        Instant verifiedUntil = verifiedReasoningModels.get(model);
+        if (verifiedUntil != null && verifiedUntil.isAfter(clock.instant())) return;
+        try {
+            String body = client.get().uri(uri -> uri.pathSegment("models", model).build())
+                    .header("Authorization", "Bearer " + apiKey)
+                    .retrieve()
+                    .body(String.class);
+            JsonNode info = mapper.readTree(body);
+            if (!info.path("capabilities").path("reasoning").asBoolean(false)) {
+                throw invalid("模型 " + model + " 不支援 reasoning=true，無法儲存");
+            }
+            verifiedReasoningModels.put(model, clock.instant().plus(CACHE_TTL));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException | java.io.IOException exception) {
+            log.warn("驗證 Mistral 模型 reasoning 能力失敗：model={}, errorType={}",
+                    model, exception.getClass().getSimpleName());
+            throw invalid("無法驗證模型 " + model + " 的 reasoning 能力，請稍後再試");
+        }
     }
 
     private CachedModels availableModels() {
@@ -101,26 +148,27 @@ public class AiModelOptionsService {
     private CachedModels load() {
         Instant expiresAt = clock.instant().plus(CACHE_TTL);
         if (apiKey.isEmpty()) {
-            return new CachedModels(configuredOptions, "CONFIGURED_LIST",
-                    "未設定 MISTRAL_API_KEY，清單取自系統設定，未向 Mistral 確認可用性", expiresAt);
+            return new CachedModels(configuredOptions, false, "CONFIGURED_LIST",
+                    "未設定 MISTRAL_API_KEY，模型尚未驗證 reasoning 能力，請先完成金鑰設定", expiresAt);
         }
         try {
             String body = client.get().uri("/models")
                     .header("Authorization", "Bearer " + apiKey)
                     .retrieve()
                     .body(String.class);
-            List<String> ids = chatModelIds(mapper.readTree(body));
+            List<String> ids = reasoningChatModelIds(mapper.readTree(body));
             if (ids.isEmpty()) throw new IllegalStateException("Mistral 回傳的模型清單為空");
-            return new CachedModels(ids, "MISTRAL_API", null, expiresAt);
+            return new CachedModels(ids, true, "MISTRAL_API", null, expiresAt);
         } catch (RuntimeException | java.io.IOException exception) {
             log.warn("查詢 Mistral 模型清單失敗，改用設定清單：{}", exception.getClass().getSimpleName());
             // 失敗時只快取 1 分鐘，避免短暫斷線讓管理員十分鐘內都看不到真實清單
-            return new CachedModels(configuredOptions, "CONFIGURED_LIST",
-                    "無法連線 Mistral 查詢可用模型，清單取自系統設定", clock.instant().plus(Duration.ofMinutes(1)));
+            return new CachedModels(configuredOptions, false, "CONFIGURED_LIST",
+                    "無法連線 Mistral 驗證模型的 reasoning 能力，暫不允許選用未驗證模型",
+                    clock.instant().plus(Duration.ofMinutes(1)));
         }
     }
 
-    static List<String> chatModelIds(JsonNode root) {
+    static List<String> reasoningChatModelIds(JsonNode root) {
         JsonNode data = root == null ? null : root.get("data");
         if (data == null || !data.isArray()) return List.of();
         Set<String> ids = new LinkedHashSet<>();
@@ -129,6 +177,7 @@ public class AiModelOptionsService {
             if (id.isBlank() || model.path("deprecation").isTextual()) continue;
             JsonNode chat = model.path("capabilities").path("completion_chat");
             if (chat.isBoolean() && !chat.asBoolean()) continue;
+            if (!model.path("capabilities").path("reasoning").asBoolean(false)) continue;
             ids.add(id);
         }
         return ids.stream().sorted().toList();
@@ -146,13 +195,18 @@ public class AiModelOptionsService {
         return Arrays.stream(value.split(",")).map(String::trim).filter(v -> !v.isEmpty()).distinct().toList();
     }
 
-    private record CachedModels(List<String> ids, String source, String warning, Instant expiresAt) {}
+    private static BusinessException invalid(String message) {
+        return new BusinessException(ErrorCode.VALIDATION_FAILED, message);
+    }
+
+    private record CachedModels(
+            List<String> ids, boolean verified, String source, String warning, Instant expiresAt) {}
 
     /** 邏輯別名的中文名稱、用途與使用的 Agent（§6.7.2）。 */
     public record AliasInfo(String code, String label, String description, List<String> agents) {}
 
     /**
-     * @param available 是否出現在可用清單（Mistral 查詢結果或設定清單）
+     * @param available 是否已由 Mistral 確認為可對話且支援 reasoning 的模型
      * @param inUse 是否為目前設定中的主模型或備援模型
      */
     public record ModelOption(String id, boolean available, boolean inUse) {}

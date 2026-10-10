@@ -10,12 +10,12 @@ import java.math.*;
 import java.time.LocalDate;
 import java.util.*;
 import org.slf4j.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /** 每日合成完成後，把首次分析或跨階段／斜率分箱的關鍵字送入 AI task。 */
 @Component
-@ConditionalOnProperty(name = "ai.trend.schedule-enabled", havingValue = "true")
 public class TrendInterpretationJob {
     private static final Logger log = LoggerFactory.getLogger(TrendInterpretationJob.class);
     private static final int TASK_CHUNK_SIZE = 100;
@@ -25,6 +25,23 @@ public class TrendInterpretationJob {
     private final TrendInterpretationRepository interpretationRepository;
     private final AiTaskService taskService;
     private final ObjectMapper objectMapper;
+    private volatile boolean enabled;
+
+    @Autowired
+    public TrendInterpretationJob(
+            TrendKeywordRepository keywordRepository,
+            HeatCompositeDailyRepository compositeRepository,
+            TrendInterpretationRepository interpretationRepository,
+            AiTaskService taskService,
+            ObjectMapper objectMapper,
+            @Value("${ai.trend.schedule-enabled:true}") boolean enabled) {
+        this.keywordRepository = keywordRepository;
+        this.compositeRepository = compositeRepository;
+        this.interpretationRepository = interpretationRepository;
+        this.taskService = taskService;
+        this.objectMapper = objectMapper;
+        this.enabled = enabled;
+    }
 
     public TrendInterpretationJob(
             TrendKeywordRepository keywordRepository,
@@ -32,19 +49,25 @@ public class TrendInterpretationJob {
             TrendInterpretationRepository interpretationRepository,
             AiTaskService taskService,
             ObjectMapper objectMapper) {
-        this.keywordRepository = keywordRepository;
-        this.compositeRepository = compositeRepository;
-        this.interpretationRepository = interpretationRepository;
-        this.taskService = taskService;
-        this.objectMapper = objectMapper;
+        this(keywordRepository, compositeRepository, interpretationRepository, taskService, objectMapper, true);
+    }
+
+    public void reconfigure(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public Set<Long> enqueueSignificantKeywords(LocalDate businessDate) {
+        if (!enabled) return Set.of();
         return enqueueSignificantKeywords(businessDate, keywordRepository.findByEnabledTrue());
     }
 
     public Set<Long> enqueueSignificantKeywords(
             LocalDate businessDate, Collection<Long> keywordIds) {
+        if (!enabled) return Set.of();
         List<TrendKeyword> keywords = keywordRepository.findAllById(keywordIds).stream()
                 .filter(TrendKeyword::isEnabled)
                 .toList();

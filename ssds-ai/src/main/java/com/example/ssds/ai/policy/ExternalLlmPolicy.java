@@ -19,7 +19,7 @@ public class ExternalLlmPolicy {
             "cost", "price", "suggestedprice", "margin", "marginrate", "actualsales", "realizedmargin",
             "memberprofile", "customerpriceband");
 
-    private final boolean enabled;
+    private volatile boolean enabled;
     private final ObjectMapper objectMapper;
 
     public ExternalLlmPolicy(
@@ -31,6 +31,14 @@ public class ExternalLlmPolicy {
 
     public void requireEnabled() {
         if (!enabled) throw new ExternalLlmDisabledException("外部 AI 已依政策停用");
+    }
+
+    public void reconfigure(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public void validateUserJson(String json) {

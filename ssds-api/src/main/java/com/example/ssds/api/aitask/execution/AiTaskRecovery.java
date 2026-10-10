@@ -6,14 +6,9 @@ import com.example.ssds.infra.repository.AiTaskRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /** 應用重啟後接續尚未收斂的 AI 任務；worker 會略過已完成 items。 */
@@ -24,30 +19,21 @@ public class AiTaskRecovery {
     private final AiTaskRepository taskRepository;
     private final AiTaskWorker worker;
     private final ApplicationEventPublisher eventPublisher;
-    private final boolean pollingEnabled;
 
     public AiTaskRecovery(
             AiTaskRepository taskRepository,
             AiTaskWorker worker,
-            ApplicationEventPublisher eventPublisher,
-            @Value("${ai.task.recovery-polling-enabled:false}") boolean pollingEnabled) {
+            ApplicationEventPublisher eventPublisher) {
         this.taskRepository = taskRepository;
         this.worker = worker;
         this.eventPublisher = eventPublisher;
-        this.pollingEnabled = pollingEnabled;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
     public void recoverInterruptedTasks() {
         recoverLostTasks();
     }
 
-    @Scheduled(
-            fixedDelayString = "${ai.task.recovery-poll-seconds:300}",
-            initialDelayString = "${ai.task.recovery-poll-seconds:300}",
-            timeUnit = TimeUnit.SECONDS)
     public void pollInterruptedTasks() {
-        if (!pollingEnabled) return;
         recoverLostTasks();
     }
 

@@ -4,10 +4,12 @@ import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.ai.config.MistralModelCatalog;
 import com.example.ssds.ai.config.MistralModelCatalog.ModelChain;
 import com.example.ssds.ai.config.AiRuntimeConfigurable;
+import com.example.ssds.ai.policy.ExternalLlmPolicy;
 import com.example.ssds.ai.resilience.GlobalAiRateLimiter;
 import com.example.ssds.api.common.error.BusinessException;
 import com.example.ssds.api.common.error.ErrorCode;
 import com.example.ssds.api.security.CurrentUserId;
+import com.example.ssds.api.trend.TrendInterpretationJob;
 import com.example.ssds.infra.entity.AuditLog;
 import com.example.ssds.infra.entity.RuntimeSetting;
 import com.example.ssds.infra.repository.AppUserRepository;
@@ -41,6 +43,7 @@ public class RuntimeSettingsService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeSettingsService.class);
     private static final String AI_KEY = "ai.config";
     private static final String SCHEDULE_KEY = "schedules.config";
+    private static final String RECOVERY_KEY = "recovery.config";
     private static final String OPERATIONAL_KEY = "operational.config";
     /** Mistral model ID 只含英數與 {@code . _ : / -}；擋掉空白、逗號等手動輸入誤植。 */
     private static final java.util.regex.Pattern MODEL_ID = java.util.regex.Pattern.compile("[A-Za-z0-9._:/-]{1,100}");
@@ -58,8 +61,11 @@ public class RuntimeSettingsService {
     private final ApplicationEventPublisher events;
     private final List<AiRuntimeConfigurable> runtimeConsumers;
     private final List<OperationalRuntimeConfigurable> operationalConsumers;
+    private final ExternalLlmPolicy externalLlmPolicy;
+    private final TrendInterpretationJob trendInterpretationJob;
     private final AiConfig defaultAi;
     private final ScheduleConfig defaultSchedules;
+    private final RecoveryConfig defaultRecovery;
     private final OperationalConfig defaultOperational;
 
     public RuntimeSettingsService(
@@ -73,6 +79,8 @@ public class RuntimeSettingsService {
             ApplicationEventPublisher events,
             List<AiRuntimeConfigurable> runtimeConsumers,
             List<OperationalRuntimeConfigurable> operationalConsumers,
+            ExternalLlmPolicy externalLlmPolicy,
+            TrendInterpretationJob trendInterpretationJob,
             @Value("${mistral.model-classify-primary}") String classifyPrimary,
             @Value("${mistral.model-classify-fallbacks}") String classifyFallbacks,
             @Value("${mistral.model-long-text-primary}") String longTextPrimary,
@@ -83,6 +91,8 @@ public class RuntimeSettingsService {
             @Value("${mistral.model-numeric-fallbacks}") String numericFallbacks,
             @Value("${mistral.model-reasoning-primary}") String reasoningPrimary,
             @Value("${mistral.model-reasoning-fallbacks}") String reasoningFallbacks,
+            @Value("${ai.external-llm-enabled:true}") boolean externalLlmEnabled,
+            @Value("${ai.trend.schedule-enabled:true}") boolean trendScheduleEnabled,
             @Value("${ai.quota-daily:1000}") int dailyQuota,
             @Value("${ai.quota-share-track-a:0.7}") double trackAShare,
             @Value("${ai.quota-share-track-b:0.2}") double trackBShare,
@@ -106,6 +116,12 @@ public class RuntimeSettingsService {
             @Value("${ssds.risk.heat-alert.schedule-enabled:true}") boolean heatAlertEnabled,
             @Value("${ssds.risk.heat-alert.cron:0 30 6 * * *}") String heatAlertCron,
             @Value("${ssds.calibration.heat-composite.cron:0 0 6 * * *}") String heatCompositeCron,
+            @Value("${ai.task.recovery-polling-enabled:false}") boolean aiTaskRecoveryPollingEnabled,
+            @Value("${ai.task.recovery-poll-seconds:300}") int aiTaskRecoveryPollSeconds,
+            @Value("${ssds.import.periodic-recovery-enabled:false}") boolean importPeriodicRecoveryEnabled,
+            @Value("${ssds.import.recovery-poll-seconds:15}") int importRecoveryPollSeconds,
+            @Value("${ssds.calibration.heat-catch-up-enabled:false}") boolean heatCatchUpEnabled,
+            @Value("${ssds.risk.startup-run.enabled:false}") boolean riskStartupRunEnabled,
             @Value("${ssds.auth.login-max-failed-attempts:5}") int loginMaxFailedAttempts,
             @Value("${ssds.auth.login-lock-duration:15m}") Duration loginLockDuration,
             @Value("${ssds.heat-tag.halve-after-days:14}") int heatTagHalveAfterDays,
@@ -124,6 +140,8 @@ public class RuntimeSettingsService {
         this.events = events;
         this.runtimeConsumers = List.copyOf(runtimeConsumers);
         this.operationalConsumers = List.copyOf(operationalConsumers);
+        this.externalLlmPolicy = externalLlmPolicy;
+        this.trendInterpretationJob = trendInterpretationJob;
         Map<String, ModelRoute> routes = new LinkedHashMap<>();
         routes.put("MODEL_CLASSIFY", new ModelRoute(classifyPrimary, split(classifyFallbacks)));
         routes.put("MODEL_LONG_TEXT", new ModelRoute(longTextPrimary, split(longTextFallbacks)));
@@ -132,7 +150,8 @@ public class RuntimeSettingsService {
         routes.put("MODEL_REASONING", new ModelRoute(reasoningPrimary, split(reasoningFallbacks)));
         defaultAi = new AiConfig(routes, dailyQuota, trackAShare, trackBShare, retryShare, 0.8,
                 rateLimit, trendRateLimit, batchItemCap, retryMax, timeoutSeconds,
-                sourcingTimeoutSeconds, cacheDays, trendCacheDays, sourcingCacheDays);
+                sourcingTimeoutSeconds, cacheDays, trendCacheDays, sourcingCacheDays,
+                externalLlmEnabled, trendScheduleEnabled);
         defaultSchedules = new ScheduleConfig(List.of(
                 new ScheduleItem("FULL_ANALYSIS", "週選品 AI 分析", fullAnalysisCron, fullAnalysisEnabled),
                 new ScheduleItem("FULL_ANALYSIS_RESUME", "AI 待重跑續跑", fullAnalysisResumeCron, fullAnalysisEnabled),
@@ -140,6 +159,10 @@ public class RuntimeSettingsService {
                 new ScheduleItem("CALIBRATION", "季度權重校準", calibrationCron, calibrationEnabled),
                 new ScheduleItem("HEAT_COMPOSITE", "熱度採集與合成", heatCompositeCron, true),
                 new ScheduleItem("HEAT_ALERT", "熱度異常示警", heatAlertCron, heatAlertEnabled)));
+        defaultRecovery = new RecoveryConfig(
+                aiTaskRecoveryPollingEnabled, aiTaskRecoveryPollSeconds,
+                importPeriodicRecoveryEnabled, importRecoveryPollSeconds,
+                heatCatchUpEnabled, riskStartupRunEnabled);
         defaultOperational = new OperationalConfig(
                 loginMaxFailedAttempts,
                 Math.toIntExact(loginLockDuration.toMinutes()),
@@ -158,17 +181,25 @@ public class RuntimeSettingsService {
     }
 
     public AiConfig aiConfig() {
-        return read(AI_KEY, AiConfig.class, defaultAi);
+        return read(AI_KEY, AiConfig.class, defaultAi)
+                .withFeatureDefaults(defaultAi.externalLlmEnabled(), defaultAi.trendScheduleEnabled());
     }
 
     @Transactional
     public AiConfig updateAi(AiConfig requested, String sourceIp) {
+        requested = requested.withFeatureDefaults(
+                defaultAi.externalLlmEnabled(), defaultAi.trendScheduleEnabled());
         validate(requested);
         AiConfig before = aiConfig();
         save(AI_KEY, "AI", requested);
         audit("UPDATE_AI_CONFIG", AI_KEY, before, requested, sourceIp);
         events.publishEvent(new RuntimeAiChanged(requested));
         return requested;
+    }
+
+    /** 供 HTTP 邊界在執行外部模型能力驗證前先完成純本機欄位驗證。 */
+    public void validateAi(AiConfig requested) {
+        validate(requested);
     }
 
     @Transactional
@@ -179,11 +210,26 @@ public class RuntimeSettingsService {
                 request.retryShare(), request.warningRatio(), current.rateLimitPerMinute(),
                 current.trendRateLimitPerMinute(), current.batchItemCap(), current.retryMax(),
                 current.timeoutSeconds(), current.sourcingTimeoutSeconds(), current.cacheDays(),
-                current.trendCacheDays(), current.sourcingCacheDays()), sourceIp);
+                current.trendCacheDays(), current.sourcingCacheDays(),
+                current.externalLlmEnabled(), current.trendScheduleEnabled()), sourceIp);
     }
 
     public ScheduleConfig schedules() {
         return read(SCHEDULE_KEY, ScheduleConfig.class, defaultSchedules);
+    }
+
+    public RecoveryConfig recoveryConfig() {
+        return read(RECOVERY_KEY, RecoveryConfig.class, defaultRecovery);
+    }
+
+    @Transactional
+    public RecoveryConfig updateRecovery(RecoveryConfig requested, String sourceIp) {
+        validate(requested);
+        RecoveryConfig before = recoveryConfig();
+        save(RECOVERY_KEY, "RECOVERY", requested);
+        audit("UPDATE_RECOVERY_CONFIG", RECOVERY_KEY, before, requested, sourceIp);
+        events.publishEvent(new RuntimeRecoveryChanged(requested));
+        return requested;
     }
 
     @Transactional
@@ -233,6 +279,8 @@ public class RuntimeSettingsService {
     }
 
     private void applyAi(AiConfig config) {
+        externalLlmPolicy.reconfigure(Boolean.TRUE.equals(config.externalLlmEnabled()));
+        trendInterpretationJob.reconfigure(Boolean.TRUE.equals(config.trendScheduleEnabled()));
         models.replace(
                 chain(config, "MODEL_CLASSIFY"), chain(config, "MODEL_LONG_TEXT"),
                 chain(config, "MODEL_SHORT_GEN"), chain(config, "MODEL_NUMERIC"),
@@ -308,6 +356,13 @@ public class RuntimeSettingsService {
             if (item.cron() == null || !CronExpression.isValidExpression(item.cron().trim())) {
                 throw invalid(item.label() + " 的排程格式不正確：" + item.cron());
             }
+        }
+    }
+
+    private void validate(RecoveryConfig config) {
+        if (config == null) throw invalid("補跑與兜底設定不得為空");
+        if (config.aiTaskRecoveryPollSeconds() < 1 || config.importRecoveryPollSeconds() < 1) {
+            throw invalid("輪詢間隔秒數至少為 1");
         }
     }
 
@@ -414,7 +469,9 @@ public class RuntimeSettingsService {
             int sourcingTimeoutSeconds,
             int cacheDays,
             int trendCacheDays,
-            int sourcingCacheDays) {
+            int sourcingCacheDays,
+            Boolean externalLlmEnabled,
+            Boolean trendScheduleEnabled) {
         public AiConfig {
             Map<String, ModelRoute> ordered = new LinkedHashMap<>();
             if (models != null) {
@@ -424,6 +481,15 @@ public class RuntimeSettingsService {
                 models.forEach(ordered::putIfAbsent);
             }
             models = java.util.Collections.unmodifiableMap(ordered);
+        }
+
+        AiConfig withFeatureDefaults(boolean externalLlmDefault, boolean trendScheduleDefault) {
+            if (externalLlmEnabled != null && trendScheduleEnabled != null) return this;
+            return new AiConfig(models, dailyQuota, trackAShare, trackBShare, retryShare, warningRatio,
+                    rateLimitPerMinute, trendRateLimitPerMinute, batchItemCap, retryMax,
+                    timeoutSeconds, sourcingTimeoutSeconds, cacheDays, trendCacheDays, sourcingCacheDays,
+                    externalLlmEnabled == null ? externalLlmDefault : externalLlmEnabled,
+                    trendScheduleEnabled == null ? trendScheduleDefault : trendScheduleEnabled);
         }
     }
     public record BudgetUpdate(
@@ -440,6 +506,14 @@ public class RuntimeSettingsService {
         }
     }
     public record RuntimeSchedulesChanged(ScheduleConfig config) {}
+    public record RecoveryConfig(
+            boolean aiTaskRecoveryPollingEnabled,
+            int aiTaskRecoveryPollSeconds,
+            boolean importPeriodicRecoveryEnabled,
+            int importRecoveryPollSeconds,
+            boolean heatCatchUpEnabled,
+            boolean riskStartupRunEnabled) {}
+    public record RuntimeRecoveryChanged(RecoveryConfig config) {}
     public record RuntimeAiChanged(AiConfig config) {}
     public record OperationalConfig(
             int loginMaxFailedAttempts,

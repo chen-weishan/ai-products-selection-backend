@@ -36,6 +36,8 @@ public class RuntimeSettingsController {
     public ApiResponse<RuntimeSettingsService.AiConfig> updateAiConfig(
             @RequestBody RuntimeSettingsService.AiConfig request,
             HttpServletRequest servletRequest) {
+        settings.validateAi(request);
+        modelOptions.validateReasoningModelsIfChanged(settings.aiConfig(), request);
         return ApiResponse.success(settings.updateAi(request, servletRequest.getRemoteAddr()));
     }
 
@@ -49,6 +51,18 @@ public class RuntimeSettingsController {
             @RequestBody RuntimeSettingsService.ScheduleConfig request,
             HttpServletRequest servletRequest) {
         return ApiResponse.success(settings.updateSchedules(request, servletRequest.getRemoteAddr()));
+    }
+
+    @GetMapping("/recovery-config")
+    public ApiResponse<RuntimeSettingsService.RecoveryConfig> recoveryConfig() {
+        return ApiResponse.success(settings.recoveryConfig());
+    }
+
+    @PutMapping("/recovery-config")
+    public ApiResponse<RuntimeSettingsService.RecoveryConfig> updateRecoveryConfig(
+            @RequestBody RuntimeSettingsService.RecoveryConfig request,
+            HttpServletRequest servletRequest) {
+        return ApiResponse.success(settings.updateRecovery(request, servletRequest.getRemoteAddr()));
     }
 
     @GetMapping("/operational-config")
