@@ -50,18 +50,30 @@ public class GoogleTrendsBackfillService {
 
     @Transactional
     public void backfillKeyword(Long keywordId, String timeframe) {
+        List<LocalDate> touchedDates = backfillKeywordReadings(
+                keywordId, timeframe, LocalDate.MIN, LocalDate.MAX);
+        touchedDates.forEach(date -> {
+            percentileDao.applyPercentiles(date);
+            calibrationService.computeAndPersist(keywordId, date);
+        });
+    }
+
+    /** 僅回補指定日期範圍的讀值；百分位與合成由呼叫端在所有來源寫入後統一處理。 */
+    @Transactional
+    public List<LocalDate> backfillKeywordReadings(
+            Long keywordId, String timeframe, LocalDate from, LocalDate to) {
         TrendKeyword keyword = trendKeywordRepository.getReferenceById(keywordId);
         HeatSource source = heatSourceRepository.findBySourceCode(HeatSourceCode.GOOGLE_TRENDS)
                 .orElseThrow();
         // 回補不經過 ingest job，要自己擋：來源被停用或本月額度已用完時不打 Apify（只看資料庫記的用量，不連網）
         if (!source.isEnabled()) {
             log.info("GOOGLE_TRENDS 來源已停用（enabled=false），略過回補。");
-            return;
+            return List.of();
         }
         if (HeatSourceQuota.isExhausted(source)) {
             log.warn("GOOGLE_TRENDS 本月 Apify 額度已用完（{}/{} 美分），略過回補。",
                     source.getQuotaUsed(), source.getQuotaLimit());
-            return;
+            return List.of();
         }
 
         List<GoogleTrendsClient.DailyInterest> series =
@@ -69,6 +81,9 @@ public class GoogleTrendsBackfillService {
 
         List<LocalDate> touchedDates = new ArrayList<>();
         for (var point : series) {
+            if (point.date().isBefore(from) || point.date().isAfter(to)) {
+                continue;
+            }
             HeatReading reading = heatReadingRepository
                     .findByKeywordIdAndSourceIdAndReadingDate(keywordId, source.getId(), point.date())
                     .orElseGet(() -> HeatReading.builder()
@@ -78,9 +93,6 @@ public class GoogleTrendsBackfillService {
             touchedDates.add(point.date());
         }
 
-        touchedDates.stream().distinct().sorted().forEach(date -> {
-            percentileDao.applyPercentiles(date);
-            calibrationService.computeAndPersist(keywordId, date);
-        });
+        return touchedDates.stream().distinct().sorted().toList();
     }
 }

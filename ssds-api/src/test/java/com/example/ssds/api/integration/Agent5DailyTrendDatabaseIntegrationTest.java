@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -26,7 +28,11 @@ import com.example.ssds.api.aitask.execution.AiTaskCreatedEvent;
 import com.example.ssds.api.aitask.execution.AiTaskWorker;
 import com.example.ssds.api.aitask.service.AiTaskService;
 import com.example.ssds.api.sourcing.SourcingPriorityCommandService;
+import com.example.ssds.api.sourcing.SourcingKeywordHeatBackfillService;
 import com.example.ssds.api.sourcing.SourcingTimeGapRecalculationService;
+import com.example.ssds.api.schedule.GoogleTrendsBackfillService;
+import com.example.ssds.api.schedule.InstagramHeatIngestJob;
+import com.example.ssds.api.schedule.ThreadsBackfillService;
 import com.example.ssds.api.trend.TrendInterpretationJob;
 import com.example.ssds.api.trend.TrendInterpretationService;
 import com.example.ssds.core.domain.AiTaskType;
@@ -138,6 +144,12 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     private TrendInterpreterAgent trendInterpreterAgent;
     @MockitoBean
     private SourcingScoutAgent sourcingScoutAgent;
+    @MockitoBean
+    private ThreadsBackfillService threadsBackfillService;
+    @MockitoBean
+    private GoogleTrendsBackfillService googleTrendsBackfillService;
+    @MockitoBean
+    private InstagramHeatIngestJob instagramHeatIngestJob;
 
     @Autowired
     private EntityManager entityManager;
@@ -171,6 +183,8 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     private SourcingTimeGapRecalculationService sourcingRecalculationService;
     @Autowired
     private SourcingPriorityCommandService sourcingPriorityCommandService;
+    @Autowired
+    private SourcingKeywordHeatBackfillService sourcingKeywordHeatBackfillService;
     @Autowired
     private AiTaskService taskService;
     @Autowired
@@ -1064,6 +1078,96 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     }
 
     @Test
+    void sourcingObservationBackfillsSevenCompositesWithInstagramCategoryWeight() {
+        LocalDate monday = LocalDate.of(2026, 10, 5);
+        LocalDate sunday = monday.plusDays(6);
+        LocalDate sourceStart = monday.minusDays(7);
+        Category category = categories.saveAndFlush(
+                Category.builder().name("S-17 七日 IG 品類").build());
+        TrendKeyword keyword = keywords.saveAndFlush(
+                TrendKeyword.builder().keyword("S-17 七日 IG 關鍵字").enabled(true).build());
+        Product product = products.saveAndFlush(Product.builder()
+                .name("S-17 七日 IG 品項")
+                .category(category)
+                .trackType(TrackType.B)
+                .status(ProductStatus.WATCHING)
+                .sourcingStatus(SourcingStatus.PENDING)
+                .keywords(new LinkedHashSet<>(Set.of(keyword)))
+                .build());
+        SourcingCandidate candidate = candidates.saveAndFlush(SourcingCandidate.builder()
+                .product(product)
+                .keyword(keyword)
+                .category(category)
+                .leadTimeDays(20)
+                .build());
+        HeatSource threads = saveSource(
+                HeatSourceCode.THREADS,
+                HeatGranularity.KEYWORD,
+                "0.400",
+                SourceAvailability.AVAILABLE);
+        HeatSource google = saveSource(
+                HeatSourceCode.GOOGLE_TRENDS,
+                HeatGranularity.KEYWORD,
+                "0.400",
+                SourceAvailability.AVAILABLE);
+        HeatSource instagram = saveSource(
+                HeatSourceCode.INSTAGRAM,
+                HeatGranularity.CATEGORY,
+                "0.200",
+                SourceAvailability.AVAILABLE);
+
+        doAnswer(invocation -> {
+            LocalDate from = invocation.getArgument(1);
+            LocalDate to = invocation.getArgument(2);
+            for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+                saveRawReading(threads, keyword, null, date, "40.00");
+            }
+            return null;
+        }).when(threadsBackfillService).backfillRangeForKeyword(
+                eq(keyword.getId()), eq(sourceStart), eq(sunday));
+        when(googleTrendsBackfillService.backfillKeywordReadings(
+                eq(keyword.getId()), eq("now 14-d"), eq(sourceStart), eq(sunday)))
+                .thenAnswer(invocation -> {
+                    for (LocalDate date = sourceStart;
+                            !date.isAfter(sunday);
+                            date = date.plusDays(1)) {
+                        saveRawReading(google, keyword, null, date, "60.00");
+                    }
+                    return sourceStart.datesUntil(sunday.plusDays(1)).toList();
+                });
+        when(instagramHeatIngestJob.runMissingForWeek(any(LocalDate.class))).thenAnswer(invocation -> {
+            LocalDate readingDate = invocation.getArgument(0);
+            saveRawReading(instagram, null, category, readingDate, "80.00");
+            return true;
+        });
+
+        sourcingKeywordHeatBackfillService.backfill(keyword.getId(), sunday);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<HeatCompositeDaily> daily = composites
+                .findByKeywordIdAndStatDateBetweenOrderByStatDateAsc(
+                        keyword.getId(), monday, sunday);
+        assertAll(
+                () -> assertEquals(7, daily.size()),
+                () -> assertTrue(daily.stream().allMatch(row -> row.getSlope7d() != null)),
+                () -> assertTrue(daily.stream().allMatch(row ->
+                        row.getAppliedWeights().contains("INSTAGRAM"))),
+                () -> assertTrue(daily.stream().allMatch(row ->
+                        row.getAppliedWeights().contains("THREADS"))),
+                () -> assertTrue(daily.stream().allMatch(row ->
+                        row.getAppliedWeights().contains("GOOGLE_TRENDS"))));
+        SourcingCandidate updatedCandidate = candidates.findById(candidate.getId()).orElseThrow();
+        assertAll(
+                () -> assertEquals(keyword.getId(), updatedCandidate.getDrivingKeyword().getId()),
+                () -> assertEquals(22, updatedCandidate.getTimeGapDays()),
+                () -> assertEquals(HeatStage.PLATEAU, daily.getLast().getStage()),
+                () -> assertEquals(42, daily.getLast().getEstimatedLifespanDays()));
+        verify(instagramHeatIngestJob).runMissingForWeek(sourceStart);
+        verify(instagramHeatIngestJob).runMissingForWeek(monday);
+    }
+
+    @Test
     void lateInstagramCategoryCatchUpRecalculatesPercentilesAcrossTheWholeWeek() {
         LocalDate monday = LocalDate.of(2026, 9, 21);
         LocalDate tuesday = monday.plusDays(1);
@@ -1312,6 +1416,21 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                 .readingDate(date)
                 .rawValue(new BigDecimal(percentile))
                 .percentileWithinSource(new BigDecimal(percentile))
+                .build());
+    }
+
+    private void saveRawReading(
+            HeatSource source,
+            TrendKeyword keyword,
+            Category category,
+            LocalDate date,
+            String rawValue) {
+        heatReadings.save(HeatReading.builder()
+                .source(source)
+                .keyword(keyword)
+                .category(category)
+                .readingDate(date)
+                .rawValue(new BigDecimal(rawValue))
                 .build());
     }
 

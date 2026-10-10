@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import org.slf4j.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,18 +31,20 @@ public class SourcingScoutService {
     private final SourcingPriorityCommandService priorityCommands;
     private final AiTaskService tasks; private final PromptSanitizer sanitizer;
     private final SourcingScoutAgent agent; private final ObjectMapper mapper;
+    private final ApplicationEventPublisher events;
 
     public SourcingScoutService(CategoryRepository categories, CategoryLeadTimeRepository leadTimes,
             TrendKeywordRepository keywords, ProductRepository products, SourcingCandidateRepository candidates,
             AiTaskItemRepository taskItems,
             SourcingPriorityCommandService priorityCommands,
             AiTaskService tasks, PromptSanitizer sanitizer,
-            SourcingScoutAgent agent, ObjectMapper mapper) {
+            SourcingScoutAgent agent, ObjectMapper mapper,
+            ApplicationEventPublisher events) {
         this.categories=categories; this.leadTimes=leadTimes; this.keywords=keywords; this.products=products;
         this.candidates=candidates; this.taskItems=taskItems;
         this.priorityCommands=priorityCommands;
         this.tasks=tasks; this.sanitizer=sanitizer;
-        this.agent=agent; this.mapper=mapper;
+        this.agent=agent; this.mapper=mapper; this.events=events;
     }
 
     @Transactional
@@ -129,9 +132,9 @@ public class SourcingScoutService {
         CategoryLeadTime leadTime = leadTimes.findById(category.getId()).orElseThrow(() ->
                 new BusinessException(ErrorCode.VALIDATION_FAILED, "此品類尚未設定尋源前置天數"));
 
-        TrendKeyword keyword = keywords.findByKeyword(item.getScoutKeyword())
-                .orElseGet(() -> keywords.save(TrendKeyword.builder()
-                        .keyword(item.getScoutKeyword()).enabled(true).build()));
+        Optional<TrendKeyword> existingKeyword = keywords.findByKeyword(item.getScoutKeyword());
+        TrendKeyword keyword = existingKeyword.orElseGet(() -> keywords.save(TrendKeyword.builder()
+                .keyword(item.getScoutKeyword()).enabled(true).build()));
 
         Product product = item.getProduct();
         if (product == null) {
@@ -165,6 +168,9 @@ public class SourcingScoutService {
         item.setProduct(product);
         item.setKeyword(keyword);
         taskItems.save(item);
+        if (existingKeyword.isEmpty()) {
+            events.publishEvent(new SourcingKeywordObservedEvent(keyword.getId()));
+        }
         return response(candidate, item.getId(), false);
     }
 

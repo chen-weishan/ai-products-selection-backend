@@ -65,6 +65,25 @@ public class HeatCompositeCalibrationService {
      */
     @Transactional
     public Optional<HeatCompositeDaily> computeAndPersist(Long keywordId, LocalDate date) {
+        return computeAndPersist(keywordId, date, null);
+    }
+
+    /**
+     * 新關鍵字回補使用：尚無歷史合成列時，直接以已百分位化的 t-7 原始來源
+     * 重建精確錨點；只保存要求的七日合成列，不額外製造更早的合成快照。
+     */
+    @Transactional
+    public Optional<HeatCompositeDaily> computeAndPersistWithRawSevenDayAnchor(
+            Long keywordId, LocalDate date) {
+        Double rawAnchor = trendQueryDao.findCompositeHeat(keywordId, date.minusDays(7));
+        BigDecimal exactAnchor = rawAnchor == null
+                ? null
+                : BigDecimal.valueOf(rawAnchor).setScale(2, RoundingMode.HALF_UP);
+        return computeAndPersist(keywordId, date, exactAnchor);
+    }
+
+    private Optional<HeatCompositeDaily> computeAndPersist(
+            Long keywordId, LocalDate date, BigDecimal exactSevenDayAnchor) {
         Double heat = trendQueryDao.findCompositeHeat(keywordId, date);
         if (heat == null) {
             log.info("關鍵字 id={} 於 {} 無任何可用來源讀值，略過（不視為熱度 0）。", keywordId, date);
@@ -88,7 +107,8 @@ public class HeatCompositeCalibrationService {
         BigDecimal anchorT7 = HeatTrendCalculator.resolveAnchor(series, anchorT7Target);
         BigDecimal anchorT30 = HeatTrendCalculator.resolveAnchor(series, anchorT30Target);
 
-        BigDecimal slope7d = HeatTrendCalculator.slope(heatT, anchorT7);
+        BigDecimal slope7d = HeatTrendCalculator.slope(
+                heatT, exactSevenDayAnchor == null ? anchorT7 : exactSevenDayAnchor);
         BigDecimal slope30d = HeatTrendCalculator.slope(heatT, anchorT30);
 
         HeatStage stage = HeatTrendCalculator.determineStage(slope30d);

@@ -116,6 +116,43 @@ class TrendInterpretationJobTest {
     }
 
     @Test
+    void historicalBackfillEnqueuesWhenAnyComposedDateIsSignificant() {
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);
+        TrendInterpretationRepository interpretationRepository = mock(TrendInterpretationRepository.class);
+        AiTaskService taskService = mock(AiTaskService.class);
+        TrendKeyword keyword = TrendKeyword.builder()
+                .id(30L).keyword("新增關鍵字").enabled(true).build();
+        LocalDate firstDate = LocalDate.of(2026, 10, 4);
+        LocalDate significantDate = LocalDate.of(2026, 10, 7);
+        when(keywordRepository.findAllById(List.of(30L))).thenReturn(List.of(keyword));
+        when(compositeRepository.findByKeywordIdAndStatDate(30L, firstDate))
+                .thenReturn(Optional.empty());
+        when(compositeRepository.findByKeywordIdAndStatDate(30L, significantDate))
+                .thenReturn(Optional.of(HeatCompositeDaily.builder()
+                        .keyword(keyword)
+                        .statDate(significantDate)
+                        .stage(HeatStage.RISING)
+                        .slope30d(new BigDecimal("0.20"))
+                        .build()));
+        when(interpretationRepository.findByKeywordIdAndCurrentTrue(30L))
+                .thenReturn(Optional.empty());
+
+        Set<Long> deferred = new TrendInterpretationJob(
+                keywordRepository,
+                compositeRepository,
+                interpretationRepository,
+                taskService,
+                new ObjectMapper())
+                .enqueueSignificantKeywordsForDates(
+                        List.of(firstDate, significantDate), List.of(30L));
+
+        assertEquals(Set.of(30L), deferred);
+        verify(taskService).createScheduledTrendInterpretation(List.of(30L));
+        verify(compositeRepository, never()).findFirstByKeywordIdOrderByStatDateDesc(anyLong());
+    }
+
+    @Test
     void enqueuesOnlyKeywordCrossingSlopeBucket() throws Exception {
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
         HeatCompositeDailyRepository compositeRepository = mock(HeatCompositeDailyRepository.class);

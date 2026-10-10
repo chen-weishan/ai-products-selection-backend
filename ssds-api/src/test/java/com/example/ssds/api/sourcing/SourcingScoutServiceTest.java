@@ -16,6 +16,7 @@ import com.example.ssds.infra.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 class SourcingScoutServiceTest {
     @Test
@@ -195,6 +196,7 @@ class SourcingScoutServiceTest {
                         && candidate.getKeyword() == createdKeyword
                         && candidate.getLeadTimeDays() == 20));
         verify(fixture.taskItems).save(item);
+        verify(fixture.events).publishEvent(new SourcingKeywordObservedEvent(41L));
     }
 
     @Test
@@ -225,6 +227,7 @@ class SourcingScoutServiceTest {
                 () -> assertEquals(-3, fixture.candidate.getTimeGapDays()));
         verify(fixture.products, never()).save(any());
         verify(fixture.audits).save(any(AuditLog.class));
+        verify(fixture.events, never()).publishEvent(any(SourcingKeywordObservedEvent.class));
     }
 
     private static SourcingScoutResult result() {
@@ -246,6 +249,7 @@ class SourcingScoutServiceTest {
         private final AppUserRepository users = mock(AppUserRepository.class);
         private final AiTaskService tasks = mock(AiTaskService.class);
         private final SourcingScoutAgent agent = mock(SourcingScoutAgent.class);
+        private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
         private final Category category = Category.builder().id(10L).name("零食").build();
         private final CategoryLeadTime leadTime = CategoryLeadTime.builder()
                 .category(category).leadTimeDays(20).build();
@@ -270,7 +274,7 @@ class SourcingScoutServiceTest {
             service = new SourcingScoutService(
                     categories, leadTimes, keywords, products, candidates, taskItems,
                     priorityCommands, tasks,
-                    new PromptSanitizer(), agent, new ObjectMapper());
+                    new PromptSanitizer(), agent, new ObjectMapper(), events);
         }
 
         private AiTaskItem completedRawItem() {

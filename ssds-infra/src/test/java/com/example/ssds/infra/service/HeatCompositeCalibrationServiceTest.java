@@ -31,6 +31,37 @@ import org.mockito.ArgumentCaptor;
 class HeatCompositeCalibrationServiceTest {
 
     @Test
+    void rawSevenDayAnchorProducesSlopeWithoutPersistingAnchorComposite() {
+        TrendQueryDao queryDao = mock(TrendQueryDao.class);
+        TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
+        HeatCompositeDailyRepository dailyRepository = mock(HeatCompositeDailyRepository.class);
+        HeatCompositeCalibrationService service =
+                new HeatCompositeCalibrationService(queryDao, keywordRepository, dailyRepository);
+        long keywordId = 6L;
+        LocalDate date = LocalDate.of(2026, 10, 10);
+        TrendKeyword keyword = TrendKeyword.builder().id(keywordId).keyword("七日斜率").build();
+        when(queryDao.findCompositeHeat(keywordId, date.minusDays(7))).thenReturn(50.0);
+        when(queryDao.findCompositeHeat(keywordId, date)).thenReturn(75.0);
+        when(queryDao.findAppliedWeights(keywordId, date)).thenReturn(Map.of("google", BigDecimal.ONE));
+        when(queryDao.findCompositeSeries(keywordId, date.minusDays(34), date.minusDays(5)))
+                .thenReturn(Map.of());
+        when(keywordRepository.getReferenceById(keywordId)).thenReturn(keyword);
+        when(dailyRepository.findByKeywordIdAndStatDate(keywordId, date)).thenReturn(Optional.empty());
+        when(dailyRepository.findByKeywordIdAndStatDateBeforeOrderByStatDateDesc(keywordId, date))
+                .thenReturn(List.of());
+        when(dailyRepository.save(any(HeatCompositeDaily.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        HeatCompositeDaily result = service
+                .computeAndPersistWithRawSevenDayAnchor(keywordId, date)
+                .orElseThrow();
+
+        assertEquals(new BigDecimal("0.5000"), result.getSlope7d());
+        verify(dailyRepository, never()).findByKeywordIdAndStatDate(
+                keywordId, date.minusDays(7));
+    }
+
+    @Test
     void sameDateRuleRerunDoesNotIncreaseStageWeeks() {
         TrendQueryDao queryDao = mock(TrendQueryDao.class);
         TrendKeywordRepository keywordRepository = mock(TrendKeywordRepository.class);
