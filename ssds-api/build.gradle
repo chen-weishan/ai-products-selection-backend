@@ -21,6 +21,7 @@ dependencies {
 	implementation libs.apache.poi.ooxml
 	implementation libs.openpdf
     implementation libs.jjwt.api
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
 	developmentOnly libs.spring.boot.devtools
 	runtimeOnly libs.postgresql
