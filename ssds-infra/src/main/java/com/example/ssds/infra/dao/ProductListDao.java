@@ -58,7 +58,9 @@ public class ProductListDao {
                 WHERE ps.product_id = p.id
                   AND ps.is_primary = TRUE
                   AND ps.is_active = TRUE
-                ORDER BY ps.calculated_at DESC, ps.id DESC
+                -- 補跑舊週期時 calculated_at 可能比本週分數新；清單的「最新分數」
+                -- 必須先以評分週期判定，再於同週期取最後一次計算結果。
+                ORDER BY ps.period DESC, ps.calculated_at DESC, ps.id DESC
                 LIMIT 1
             ) latest_score ON TRUE
             """;

@@ -101,6 +101,40 @@ class DashboardServiceTest {
 private static final ZoneId DISPLAY_ZONE = ZoneId.of("Asia/Taipei");
      private static final AtomicLong CALCULATED_AT_COUNTER = new AtomicLong(System.currentTimeMillis() * 1_000_000);
 
+    @Test
+    void dashboardKpiReflectsNewProductsAndOnlyOpenHighRisks() {
+        Category category = categoryRepository.save(Category.builder()
+                .name("Dashboard KPI Category " + System.nanoTime())
+                .build());
+
+        DashboardKpiResponseDto before = dashboardService.getKpi("2099W01", TrackType.A);
+
+        Product product = productRepository.saveAndFlush(Product.builder()
+                .name("Dashboard KPI Product " + System.nanoTime())
+                .category(category)
+                .trackType(TrackType.A)
+                .build());
+
+        RiskAlert alert = riskAlertRepository.saveAndFlush(RiskAlert.builder()
+                .product(product)
+                .severity(Severity.HIGH)
+                .riskType("INVENTORY_RISK")
+                .status(AlertStatus.OPEN)
+                .detectedAt(Instant.now())
+                .build());
+
+        DashboardKpiResponseDto withOpenRisk = dashboardService.getKpi("2099W01", TrackType.A);
+        assertEquals(before.weeklyNewCount() + 1, withOpenRisk.weeklyNewCount());
+        assertEquals(before.kpi().openRiskCount() + 1, withOpenRisk.kpi().openRiskCount());
+
+        alert.setStatus(AlertStatus.ACKNOWLEDGED);
+        alert.setHandledAt(Instant.now());
+        riskAlertRepository.saveAndFlush(alert);
+
+        DashboardKpiResponseDto afterAcknowledgement = dashboardService.getKpi("2099W01", TrackType.A);
+        assertEquals(before.kpi().openRiskCount(), afterAcknowledgement.kpi().openRiskCount());
+    }
+
 
      // Helper to create a ProductScore
     private ProductScore createProductScore(Product product, String period, SceneType sceneType, Grade grade, BigDecimal finalScore, boolean active) {
@@ -360,6 +394,7 @@ DecisionRecord dr = createDecisionRecord(product, campaignEndDate);
            assertEquals(dr.getId(), dto.getDecisionId());
            // overdueDays = (today - campaignEndDate) - 7 = (10) - 7 = 3
            assertEquals(3, dto.getOverdueDays());
+           assertEquals(3, dashboardService.getKpi("2026W30", TrackType.A).kpi().maxOverdueDays());
     }
 
     // ---------- Test 第 1 點: 同品項 HIGH + MEDIUM 未處理風險 => riskLevel == HIGH ----------

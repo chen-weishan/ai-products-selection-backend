@@ -291,8 +291,17 @@ public class AiTaskWorker implements AiRuntimeConfigurable {
                             dailyAiBudget.recordCacheHit(task.getBudgetPool());
                         }
                     }
-                    case WEIGHT_CALIBRATION -> weightCalibrationService.interpret(
-                            item.getCalibrationReport().getId(), event.forceRefresh());
+                    case WEIGHT_CALIBRATION -> {
+                        var response = weightCalibrationService.interpret(
+                                item.getCalibrationReport().getId(), event.forceRefresh());
+                        if (response.fallbackApplied()) {
+                            String detail = response.failureDetail() == null
+                                    ? ""
+                                    : "（" + response.failureDetail() + "）";
+                            throw new IncompleteItemException(
+                                    "權重校準 AI 解讀未完成：" + response.fallbackReason() + detail);
+                        }
+                    }
                     default -> throw new IllegalStateException("尚未支援的 AI 任務類型");
                 }
                 warning = mergeWarnings(warning, AiExecutionWarningContext.consumeMessage());

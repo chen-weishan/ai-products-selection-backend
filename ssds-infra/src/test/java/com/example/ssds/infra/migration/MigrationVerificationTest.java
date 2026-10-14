@@ -59,7 +59,7 @@ class MigrationVerificationTest {
 
     @Test
     @DisplayName("dev 版面：db/migration 加上 db/dev 假資料，從空庫建到最新")
-    void devLayoutBuildsFromScratch() {
+    void devLayoutBuildsFromScratch() throws Exception {
         // 對齊 application-dev.properties 的設定
         Flyway flyway = Flyway.configure()
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
@@ -73,6 +73,20 @@ class MigrationVerificationTest {
         flyway.validate();
         assertEquals(0, flyway.info().pending().length, "仍有未套用的 migration");
         assertAllApplied(flyway);
+        try (Connection conn = DriverManager.getConnection(
+                     postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             Statement stmt = conn.createStatement();
+             ResultSet rows = stmt.executeQuery("""
+                     SELECT COUNT(*)
+                     FROM calibration_report
+                     WHERE ai_interpretation LIKE '%PRICE_FIT%'
+                        OR ai_interpretation LIKE '%price_fit%'
+                        OR ai_interpretation LIKE '%§%'
+                        OR ai_interpretation LIKE '%SceneClassifierAgent%'
+                     """)) {
+            assertTrue(rows.next());
+            assertEquals(0, rows.getInt(1), "Agent 7 的開發展示文字不得洩漏內部代碼或章節索引");
+        }
     }
 
     @Test

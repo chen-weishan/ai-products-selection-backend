@@ -186,4 +186,17 @@ public interface ProductRepository
          */
         @Query("select count(p) from Product p where p.trackType = :trackType and p.deletedAt IS NULL")
         long countByTrackTypeAndDeletedAtIsNull(@Param("trackType") TrackType trackType);
+
+        /** FR-02 KPI：指定軌別於台北時區本週建立、且尚未刪除的品項數。 */
+        @Query("""
+                        select count(p) from Product p
+                        where p.trackType = :trackType
+                          and p.deletedAt is null
+                          and p.createdAt >= :from
+                          and p.createdAt < :to
+                        """)
+        long countCreatedInRangeByTrackType(
+                        @Param("trackType") TrackType trackType,
+                        @Param("from") Instant from,
+                        @Param("to") Instant to);
 }

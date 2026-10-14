@@ -7,5 +7,6 @@ import java.util.List;
  */
 public record DashboardKpiResponseDto(
         KpiDto kpi,
+        long weeklyNewCount,
         boolean scoringExecuted) {
 }

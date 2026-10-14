@@ -10,6 +10,7 @@ import com.example.ssds.api.scoring.factor.ScoringFactorBatchService.PreparedPop
 
 import com.example.ssds.api.insight.ProductInsightService;
 import com.example.ssds.api.calibration.WeightCalibrationService;
+import com.example.ssds.api.calibration.dto.WeightCalibrationResponse;
 import com.example.ssds.api.insight.dto.ProductInsightResponse;
 import com.example.ssds.api.recommendation.RecommendationService;
 import com.example.ssds.api.recommendation.dto.RecommendationResponse;
@@ -26,6 +27,7 @@ import com.example.ssds.ai.access.common.AiModelUnavailableEvent;
 import com.example.ssds.ai.access.trackb.SourcingConnectorQuotaExceededException;
 import com.example.ssds.ai.budget.DailyAiBudget;
 import com.example.ssds.ai.budget.AiBudgetExceededException;
+import com.example.ssds.ai.model.FallbackReason;
 import com.example.ssds.core.domain.AiTaskType;
 import com.example.ssds.core.domain.TaskItemStatus;
 import com.example.ssds.core.domain.TaskStatus;
@@ -750,6 +752,8 @@ class AiTaskWorkerTest {
                 .calibrationReport(report).build();
         when(taskRepository.findById(714L)).thenReturn(Optional.of(task));
         when(itemRepository.findByTaskId(714L)).thenReturn(List.of(item));
+        WeightCalibrationResponse response = mock(WeightCalibrationResponse.class);
+        when(calibrationService.interpret(7L, true)).thenReturn(response);
         AiTaskWorker worker = new AiTaskWorker(
                 taskRepository, itemRepository, sceneService, reviewRiskService,
                 productInsightService, recommendationService, trendService, sourcingService,
@@ -760,6 +764,38 @@ class AiTaskWorkerTest {
         verify(calibrationService).interpret(7L, true);
         assertEquals(TaskItemStatus.SUCCEEDED, item.getStatus());
         assertEquals(TaskStatus.SUCCEEDED, task.getStatus());
+    }
+
+    @Test
+    void calibrationFallbackIsReportedAsFailedTaskItem() {
+        AiTaskRepository taskRepository = mock(AiTaskRepository.class);
+        AiTaskItemRepository itemRepository = mock(AiTaskItemRepository.class);
+        WeightCalibrationService calibrationService = mock(WeightCalibrationService.class);
+        WeightCalibrationResponse response = mock(WeightCalibrationResponse.class);
+        CalibrationReport report = CalibrationReport.builder().id(7L).quarter("2026Q4").build();
+        AiTask task = AiTask.builder().id(716L)
+                .taskType(AiTaskType.WEIGHT_CALIBRATION)
+                .budgetPool(AiTaskType.BudgetPool.RETRY)
+                .totalCount(1).build();
+        AiTaskItem item = AiTaskItem.builder().id(717L).task(task)
+                .calibrationReport(report).build();
+        when(taskRepository.findById(716L)).thenReturn(Optional.of(task));
+        when(itemRepository.findByTaskId(716L)).thenReturn(List.of(item));
+        when(calibrationService.interpret(7L, true)).thenReturn(response);
+        when(response.fallbackApplied()).thenReturn(true);
+        when(response.fallbackReason()).thenReturn(FallbackReason.SCHEMA_INVALID);
+        AiTaskWorker worker = new AiTaskWorker(
+                taskRepository, itemRepository,
+                mock(SceneClassificationService.class), mock(ReviewRiskService.class),
+                mock(ProductInsightService.class), mock(RecommendationService.class),
+                mock(TrendInterpretationService.class), mock(SourcingScoutService.class),
+                calibrationService);
+
+        worker.run(new AiTaskCreatedEvent(716L, true));
+
+        assertEquals(TaskItemStatus.FAILED, item.getStatus());
+        assertEquals("權重校準 AI 解讀未完成：SCHEMA_INVALID", item.getErrorMessage());
+        assertEquals(TaskStatus.FAILED, task.getStatus());
     }
 
     @Test

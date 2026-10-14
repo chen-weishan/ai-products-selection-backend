@@ -93,10 +93,10 @@ public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
 
     List<RiskAlert> findByProductIdOrderByDetectedAtDesc(Long productId);
 
-    /** 儀表板的高風險計數（排除 IGNORED）。 */
+    /** 儀表板的高風險計數：只計入尚未處理的 OPEN 示警。 */
     @Query("""
             SELECT COUNT(r) FROM RiskAlert r
-            WHERE r.status <> com.example.ssds.core.domain.AlertStatus.IGNORED
+            WHERE r.status = com.example.ssds.core.domain.AlertStatus.OPEN
               AND r.severity = :severity
               AND r.product.trackType = :trackType
               AND r.product.deletedAt IS NULL

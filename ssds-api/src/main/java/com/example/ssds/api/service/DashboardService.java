@@ -36,6 +36,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -69,18 +70,30 @@ public class DashboardService {
     public DashboardKpiResponseDto getKpi(String period, TrackType track) {
         long totalCandidates = productRepository.countByTrackTypeAndDeletedAtIsNull(track);
         LocalDate today = LocalDate.now(DISPLAY_ZONE);
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        Instant weekStartInstant = weekStart.atStartOfDay(DISPLAY_ZONE).toInstant();
+        Instant nextWeekStartInstant = weekStart.plusWeeks(1).atStartOfDay(DISPLAY_ZONE).toInstant();
+        long weeklyNewCount = productRepository.countCreatedInRangeByTrackType(
+                        track, weekStartInstant, nextWeekStartInstant);
         LocalDate cutoff = today.minusDays(7);
-        long overdueCount = decisionRecordRepository.countOverdueCampaigns(DecisionType.ADOPT, cutoff, track);
+        List<DecisionRecord> overdueCampaigns = decisionRecordRepository.findOverdueCampaigns(
+                        DecisionType.ADOPT, cutoff, track);
+        long overdueCount = overdueCampaigns.size();
+        long maxOverdueDays = overdueCampaigns.stream()
+                        .mapToLong(dr -> ChronoUnit.DAYS.between(dr.getCampaignEndDate(), today) - 7)
+                        .max()
+                        .orElse(0);
 
         KpiDto kpi = new KpiDto(
                         totalCandidates,
                         productScoreRepository.countAGradeByPeriod(period, track),
                         riskAlertRepository.countActiveBySeverityAndTrackType(Severity.HIGH, track),
-                        overdueCount);
+                        overdueCount,
+                        maxOverdueDays);
 
         boolean scoringExecuted = productScoreRepository.existsByPeriodAndActiveTrue(period, track);
 
-        return new DashboardKpiResponseDto(kpi, scoringExecuted);
+        return new DashboardKpiResponseDto(kpi, weeklyNewCount, scoringExecuted);
     }
 
 /** §8.2 GET /dashboard/rankings */

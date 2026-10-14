@@ -72,7 +72,8 @@ public class WeightCalibrationAgent implements AiRuntimeConfigurable {
                 retry.retryInstruction(prompts.retryInstruction(validationCode(e)));
                 if(retry.beginSchemaRetry()&&pause(2000))continue;
                 if(retry.moveToSchemaFallback())continue;
-                return fallback(FallbackReason.SCHEMA_INVALID,model,retry.requestCount());
+                return fallback(FallbackReason.SCHEMA_INVALID,model,retry.requestCount(),
+                        SafeLogMessage.sanitize(e.getMessage()));
             } catch(ExternalLlmDisabledException|OutboundDataPolicyException e) {
                 log.warn("WeightCalibration external request blocked by policy: quarter={}, reason={}",input.quarter(),SafeLogMessage.sanitize(e.getMessage()));
                 return fallback(FallbackReason.AI_UNAVAILABLE,"policy-blocked",Math.max(0,retry.requestCount()-1));
@@ -100,10 +101,13 @@ public class WeightCalibrationAgent implements AiRuntimeConfigurable {
         this.models=catalog.reasoning().models();this.retryMax=Math.max(0,retryMax);
     }
     private WeightCalibrationResult fallback(FallbackReason reason,String model,int requests) {
+        return fallback(reason,model,requests,null);
+    }
+    private WeightCalibrationResult fallback(FallbackReason reason,String model,int requests,String failureDetail) {
         return new WeightCalibrationResult(new WeightCalibrationOutput(
                 "AI 解讀未完成，請直接查看統計原始結果表。",List.of(),List.of()),true,reason,false,
-                model,WeightCalibrationPromptFactory.PROMPT_VERSION,null,null,requests);
+                model,WeightCalibrationPromptFactory.PROMPT_VERSION,null,null,requests,failureDetail);
     }
     private boolean pause(long ms){try{sleeper.sleep(ms);return true;}catch(InterruptedException e){Thread.currentThread().interrupt();return false;}}
-    private static String validationCode(AiSchemaValidationException e){String m=e.getMessage();if(m==null)return"SCHEMA_INVALID";if(m.contains("report"))return"REPORT_NOT_STRING";if(m.contains("數字"))return"NUMBER_NOT_IN_INPUT";return"SCHEMA_INVALID";}
+    private static String validationCode(AiSchemaValidationException e){String m=e.getMessage();if(m==null)return"SCHEMA_INVALID";if(m.contains("繁體中文")||m.contains("內部名稱")||m.contains("開發章節"))return"LANGUAGE_INVALID";if(m.contains("report"))return"REPORT_NOT_STRING";if(m.contains("數字"))return"NUMBER_NOT_IN_INPUT";return"SCHEMA_INVALID";}
 }

@@ -80,6 +80,21 @@ class PromptSchemaContractTest {
                         .contains("支持該風險的則數")));
     }
 
+    @Test
+    void weightCalibrationRequiresChineseBusinessLanguageWithoutDevelopmentReferences() {
+        WeightCalibrationPromptFactory factory = new WeightCalibrationPromptFactory(mapper);
+        String prompt = factory.systemPrompt();
+        String retry = factory.retryInstruction("LANGUAGE_INVALID");
+
+        assertAll(
+                () -> assertEquals("calibration-v4", WeightCalibrationPromptFactory.PROMPT_VERSION),
+                () -> assertTrue(prompt.contains("自然、流暢的繁體中文")),
+                () -> assertTrue(prompt.contains("英文內部欄位、列舉、因子代碼")),
+                () -> assertTrue(prompt.contains("價格帶適配度")),
+                () -> assertTrue(prompt.contains("不得輸出 §、FR-、AC- 等章節索引")),
+                () -> assertTrue(retry.contains("不得提及規格書、需求編號、開發章節")));
+    }
+
     private List<Contract> contracts() {
         return List.of(
                 new Contract("Agent 1", new SceneClassifierPromptFactory(mapper)::systemPrompt,

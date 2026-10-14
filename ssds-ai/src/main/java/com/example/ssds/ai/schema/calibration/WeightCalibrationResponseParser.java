@@ -1,6 +1,7 @@
 package com.example.ssds.ai.schema.calibration;
 
 import com.example.ssds.ai.schema.AiSchemaValidationException;
+import com.example.ssds.ai.schema.ChineseNarrativeValidator;
 import com.example.ssds.ai.schema.NumericTokenValidator;
 
 import com.example.ssds.ai.model.calibration.*;
@@ -8,12 +9,24 @@ import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import java.io.IOException;
 import java.util.*;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 @Component
 public class WeightCalibrationResponseParser {
     private static final Set<String> ROOT = Set.of("report", "adjustmentAdvice", "attentionNotes");
     private static final Set<String> ADVICE = Set.of("factorCode", "explanation");
+    private static final Set<String> NARRATIVE_INTERNAL_TERMS = Set.of(
+            "TREND", "MARGIN", "CVR", "PRICE_FIT", "FESTIVAL", "CLIMATE",
+            "VIRAL", "REPLENISHMENT", "SEASONAL",
+            "sampleSize", "regressionMethod", "factors", "factorCode", "correlation",
+            "currentWeight", "suggestedWeight", "pValue", "regressionNote", "sceneOverrides",
+            "totalClassifications", "overrideCount", "overrideRate", "concentratedCategories",
+            "backtests", "scheme", "gradeAHitRate", "backtestNote",
+            "WeightCalibrationAgent", "SceneClassifierAgent", "Prompt", "Schema",
+            "規格書", "需求編號", "開發章節", "驗收條件");
+    private static final Pattern DEVELOPMENT_REFERENCE = Pattern.compile("(?i)§|\\b(?:FR|AC)-?\\d");
+    private static final Pattern QUARTER = Pattern.compile("^(\\d{4})Q([1-4])$");
     private final ObjectMapper mapper;
     public WeightCalibrationResponseParser(ObjectMapper mapper) { this.mapper=mapper; }
 
@@ -36,41 +49,64 @@ public class WeightCalibrationResponseParser {
             }
             JsonNode notes=array(root,"attentionNotes",1,6);
             List<String> attention=new ArrayList<>(); notes.forEach(v->attention.add(textValue(v,"attentionNotes[]",500)));
+            validateNarratives(report, advice, attention, input);
             rejectInventedNumbers(report, advice, attention, input);
             return new WeightCalibrationOutput(report,List.copyOf(advice),List.copyOf(attention));
         } catch(AiSchemaValidationException e) { throw e; }
         catch(JsonProcessingException|IllegalArgumentException e) { throw new AiSchemaValidationException("WeightCalibration 回應不是有效 Schema",e); }
         catch(IOException e) { throw new AiSchemaValidationException("WeightCalibration 回應無法讀取",e); }
     }
+    private static void validateNarratives(String report,List<WeightCalibrationOutput.AdjustmentAdvice> advice,
+            List<String> notes,WeightCalibrationInput input) {
+        Set<String> internalTerms=new HashSet<>(NARRATIVE_INTERNAL_TERMS);
+        addInternalTerm(internalTerms,input.regressionMethod());
+        input.factors().forEach(value->addInternalTerm(internalTerms,value.factorCode()));
+        input.backtests().forEach(value->addInternalTerm(internalTerms,value.scheme()));
+        requireReadableNarrative(report,"report",internalTerms);
+        advice.forEach(value->requireReadableNarrative(value.explanation(),"adjustmentAdvice[].explanation",internalTerms));
+        notes.forEach(value->requireReadableNarrative(value,"attentionNotes[]",internalTerms));
+    }
+    private static void requireReadableNarrative(String text,String field,Set<String> internalTerms) {
+        ChineseNarrativeValidator.requireReadableChinese(text,field,internalTerms);
+        if(DEVELOPMENT_REFERENCE.matcher(text).find()) fail(field+" 不得包含開發章節索引");
+    }
+    private static void addInternalTerm(Set<String> internalTerms,String value) {
+        if(value!=null&&!value.isBlank()) internalTerms.add(value);
+    }
     private void rejectInventedNumbers(String report,List<WeightCalibrationOutput.AdjustmentAdvice> advice,List<String> notes,WeightCalibrationInput input) {
         Set<String> allowed = allowedNumbers(input);
         StringBuilder output=new StringBuilder(report); advice.forEach(v->output.append(' ').append(v.explanation())); notes.forEach(v->output.append(' ').append(v));
-        NumericTokenValidator.requireAllowed(output.toString(), allowed, "WeightCalibration 輸出");
+        NumericTokenValidator.requireEquivalent(output.toString(), allowed, "WeightCalibration 輸出");
     }
     private static Set<String> allowedNumbers(WeightCalibrationInput input) {
-        Set<String> allowed=NumericTokenValidator.tokensFrom(input.quarter(),input.regressionMethod(),input.regressionNote(),input.backtestNote());
-        NumericTokenValidator.add(allowed,input.sampleSize());
+        Set<String> allowed=NumericTokenValidator.equivalentTokensFrom(input.quarter(),input.regressionMethod(),input.regressionNote(),input.backtestNote());
+        var quarter=QUARTER.matcher(input.quarter()==null?"":input.quarter());
+        if(quarter.matches()) {
+            NumericTokenValidator.addEquivalent(allowed,Long.parseLong(quarter.group(1)));
+            NumericTokenValidator.addEquivalent(allowed,Long.parseLong(quarter.group(2)));
+        }
+        NumericTokenValidator.addEquivalent(allowed,input.sampleSize());
         input.factors().forEach(value->{
-            allowed.addAll(NumericTokenValidator.tokensFrom(value.factorCode()));
-            NumericTokenValidator.add(allowed,value.correlation());
-            NumericTokenValidator.add(allowed,value.currentWeight());
-            NumericTokenValidator.add(allowed,value.suggestedWeight());
-            NumericTokenValidator.add(allowed,value.pValue());
+            allowed.addAll(NumericTokenValidator.equivalentTokensFrom(value.factorCode()));
+            NumericTokenValidator.addEquivalent(allowed,value.correlation());
+            NumericTokenValidator.addEquivalent(allowed,value.currentWeight());
+            NumericTokenValidator.addEquivalent(allowed,value.suggestedWeight());
+            NumericTokenValidator.addEquivalent(allowed,value.pValue());
         });
         WeightCalibrationInput.OverrideStatistics overrides=input.sceneOverrides();
-        NumericTokenValidator.add(allowed,overrides.totalClassifications());
-        NumericTokenValidator.add(allowed,overrides.overrideCount());
-        NumericTokenValidator.add(allowed,overrides.overrideRate());
+        NumericTokenValidator.addEquivalent(allowed,overrides.totalClassifications());
+        NumericTokenValidator.addEquivalent(allowed,overrides.overrideCount());
+        NumericTokenValidator.addEquivalent(allowed,overrides.overrideRate());
         overrides.concentratedCategories().forEach(value->{
-            allowed.addAll(NumericTokenValidator.tokensFrom(value.category()));
-            NumericTokenValidator.add(allowed,value.totalClassifications());
-            NumericTokenValidator.add(allowed,value.overrideCount());
-            NumericTokenValidator.add(allowed,value.overrideRate());
+            allowed.addAll(NumericTokenValidator.equivalentTokensFrom(value.category()));
+            NumericTokenValidator.addEquivalent(allowed,value.totalClassifications());
+            NumericTokenValidator.addEquivalent(allowed,value.overrideCount());
+            NumericTokenValidator.addEquivalent(allowed,value.overrideRate());
         });
         input.backtests().forEach(value->{
-            allowed.addAll(NumericTokenValidator.tokensFrom(value.scheme()));
-            NumericTokenValidator.add(allowed,value.correlation());
-            NumericTokenValidator.add(allowed,value.gradeAHitRate());
+            allowed.addAll(NumericTokenValidator.equivalentTokensFrom(value.scheme()));
+            NumericTokenValidator.addEquivalent(allowed,value.correlation());
+            NumericTokenValidator.addEquivalent(allowed,value.gradeAHitRate());
         });
         return allowed;
     }
