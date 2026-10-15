@@ -3,13 +3,16 @@ package com.example.ssds.ingest.Threads;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -34,13 +37,24 @@ import org.springframework.web.client.RestClient;
 public class ThreadsSearchClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
 
     private final RestClient restClient;
     private final ThreadsIngestProperties properties;
+    private final Clock clock;
 
+    @Autowired
     public ThreadsSearchClient(RestClient threadsRestClient, ThreadsIngestProperties properties) {
+        this(threadsRestClient, properties, Clock.system(TAIPEI));
+    }
+
+    ThreadsSearchClient(
+            RestClient threadsRestClient,
+            ThreadsIngestProperties properties,
+            Clock clock) {
         this.restClient = threadsRestClient;
         this.properties = properties;
+        this.clock = clock;
     }
 
     /** 查詢關鍵字最近的貼文，回傳互動熱度加總（讚+留言+轉發+引用+分享）。查無資料回傳 null。 */
@@ -100,7 +114,7 @@ public class ThreadsSearchClient {
         if (startDate.isAfter(endDateInclusive)) {
             throw new IllegalArgumentException("startDate 不能晚於 endDateInclusive");
         }
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today = LocalDate.now(clock);
         if (endDateInclusive.isAfter(today)) {
             throw new IllegalArgumentException("endDateInclusive 不能是未來日期：" + endDateInclusive);
         }

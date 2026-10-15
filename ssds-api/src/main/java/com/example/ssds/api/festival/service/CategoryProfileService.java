@@ -21,6 +21,7 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -57,16 +58,22 @@ public class CategoryProfileService {
     private final ClimateProperties climateProperties;
 
     /**
-     * S-20 標記 3、5 兩張表的現值，依品類 id 排序。
+     * S-20 標記 3、5 兩張表的葉節點品類現值，依品類 id 排序。
      *
-     * <p>三次查詢撈完全部品類：品類本身、前置天數、適溫區間，之後在記憶體合併。
-     * 逐品類查會變成 1 + 2N 次。
+     * <p>三次查詢撈完全部品類：品類本身、前置天數、適溫區間，之後在記憶體排除
+     * 有子類別的父類別並合併設定。逐品類查會變成 1 + 2N 次。
      *
      * <p>規格書 §9 沒有這支端點，是為了讓 S-20 顯示現值而新增的設計決定。
      */
     @Transactional(readOnly = true)
     public List<CategoryProfileResponse> listProfiles() {
 
+        List<Category> categories = categoryRepository.findAll();
+        Set<Long> parentCategoryIds = categories.stream()
+                .map(Category::getParent)
+                .filter(parent -> parent != null)
+                .map(Category::getId)
+                .collect(Collectors.toSet());
         Map<Long, CategoryLeadTime> leadTimes = categoryLeadTimeRepository.findAll().stream()
                 .collect(Collectors.toMap(CategoryLeadTime::getCategoryId, row -> row, (a, b) -> a));
         Map<Long, CategoryClimateProfile> profiles =
@@ -74,7 +81,8 @@ public class CategoryProfileService {
                         .collect(Collectors.toMap(
                                 CategoryClimateProfile::getCategoryId, row -> row, (a, b) -> a));
 
-        return categoryRepository.findAll().stream()
+        return categories.stream()
+                .filter(category -> !parentCategoryIds.contains(category.getId()))
                 .sorted(Comparator.comparing(Category::getId))
                 .map(category -> {
                     CategoryLeadTime leadTime = leadTimes.get(category.getId());

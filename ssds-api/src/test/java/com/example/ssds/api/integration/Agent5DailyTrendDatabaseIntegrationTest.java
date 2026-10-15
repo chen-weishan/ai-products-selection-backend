@@ -1081,7 +1081,7 @@ class Agent5DailyTrendDatabaseIntegrationTest {
     void sourcingObservationBackfillsSevenCompositesWithInstagramCategoryWeight() {
         LocalDate monday = LocalDate.of(2026, 10, 5);
         LocalDate sunday = monday.plusDays(6);
-        LocalDate sourceStart = monday.minusDays(7);
+        LocalDate sourceStart = sunday.minusDays(7);
         Category category = categories.saveAndFlush(
                 Category.builder().name("S-17 七日 IG 品類").build());
         TrendKeyword keyword = keywords.saveAndFlush(
@@ -1126,7 +1126,7 @@ class Agent5DailyTrendDatabaseIntegrationTest {
         }).when(threadsBackfillService).backfillRangeForKeyword(
                 eq(keyword.getId()), eq(sourceStart), eq(sunday));
         when(googleTrendsBackfillService.backfillKeywordReadings(
-                eq(keyword.getId()), eq("now 14-d"), eq(sourceStart), eq(sunday)))
+                eq(keyword.getId()), eq("now 7-d"), eq(sourceStart), eq(sunday)))
                 .thenAnswer(invocation -> {
                     for (LocalDate date = sourceStart;
                             !date.isAfter(sunday);
@@ -1150,7 +1150,8 @@ class Agent5DailyTrendDatabaseIntegrationTest {
                         keyword.getId(), monday, sunday);
         assertAll(
                 () -> assertEquals(7, daily.size()),
-                () -> assertTrue(daily.stream().allMatch(row -> row.getSlope7d() != null)),
+                () -> assertEquals(1, daily.stream().filter(row -> row.getSlope7d() != null).count()),
+                () -> assertTrue(daily.getLast().getSlope7d() != null),
                 () -> assertTrue(daily.stream().allMatch(row ->
                         row.getAppliedWeights().contains("INSTAGRAM"))),
                 () -> assertTrue(daily.stream().allMatch(row ->

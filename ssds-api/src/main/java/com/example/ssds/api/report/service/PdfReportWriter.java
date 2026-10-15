@@ -50,7 +50,7 @@ public class PdfReportWriter {
             PdfWriter writer = PdfWriter.getInstance(document, output);
             writer.setPageEvent(new FooterPageEvent(bodyFont));
             document.addTitle(dataset.title());
-            document.addCreator("莊敬選品決策系統");
+            document.addCreator("SELECTRA");
             document.open();
             Paragraph title = new Paragraph(dataset.title(), titleFont);
             title.setSpacingAfter(4);
@@ -207,7 +207,7 @@ public class PdfReportWriter {
 
         @Override
         public void onEndPage(PdfWriter writer, Document document) {
-            String value = "莊敬選品決策系統 · 第 " + writer.getPageNumber() + " 頁";
+            String value = "SELECTRA · 第 " + writer.getPageNumber() + " 頁";
             ColumnText.showTextAligned(
                     writer.getDirectContent(), Element.ALIGN_CENTER, new Phrase(value, font),
                     (document.left() + document.right()) / 2, 13, 0);

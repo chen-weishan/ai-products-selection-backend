@@ -61,9 +61,13 @@ class CategoryProfileServiceTest {
      */
     @Test
     void unsetFieldsAreNullNotZero() {
+        Category food = Category.builder().id(1L).name("食品").build();
+        Category appliances = Category.builder().id(4L).name("家電").build();
         when(categoryRepository.findAll()).thenReturn(List.of(
-                Category.builder().id(SNACK).name("零食").build(),
-                Category.builder().id(40L).name("小家電").build()));
+                food,
+                appliances,
+                Category.builder().id(SNACK).name("零食").parent(food).build(),
+                Category.builder().id(40L).name("小家電").parent(appliances).build()));
         when(categoryLeadTimeRepository.findAll()).thenReturn(List.of(
                 CategoryLeadTime.builder().categoryId(40L).leadTimeDays(30).build()));
         when(categoryClimateProfileRepository.findAll()).thenReturn(List.of(
@@ -76,6 +80,7 @@ class CategoryProfileServiceTest {
 
         var rows = service.listProfiles();
 
+        // 父類別不屬於可設定的品類，不回傳給 S-20 的兩張設定表。
         assertEquals(2, rows.size());
         // 零食：有適溫、沒前置天數
         assertNull(rows.getFirst().leadTimeDays());

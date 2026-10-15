@@ -6,8 +6,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import com.example.ssds.api.schedule.GoogleTrendsBackfillService;
+import com.example.ssds.api.schedule.GoogleTrendsHeatIngestJob;
 import com.example.ssds.api.schedule.InstagramHeatIngestJob;
 import com.example.ssds.api.schedule.ThreadsBackfillService;
+import com.example.ssds.api.schedule.ThreadsHeatIngestJob;
 import com.example.ssds.api.trend.TrendInterpretationJob;
 import com.example.ssds.infra.dao.HeatReadingPercentileDao;
 import com.example.ssds.infra.entity.HeatCompositeDaily;
@@ -21,27 +23,31 @@ import org.mockito.ArgumentCaptor;
 class SourcingKeywordHeatBackfillServiceTest {
 
     @Test
-    void backfillsExactlyTodayAndPreviousSixDaysThenChecksAgentFive() {
+    void backfillsEightSourceDatesAndSevenCompositeDatesThenChecksAgentFive() {
         ThreadsBackfillService threads = mock(ThreadsBackfillService.class);
         GoogleTrendsBackfillService google = mock(GoogleTrendsBackfillService.class);
+        ThreadsHeatIngestJob threadsToday = mock(ThreadsHeatIngestJob.class);
+        GoogleTrendsHeatIngestJob googleToday = mock(GoogleTrendsHeatIngestJob.class);
         InstagramHeatIngestJob instagram = mock(InstagramHeatIngestJob.class);
         HeatReadingPercentileDao percentiles = mock(HeatReadingPercentileDao.class);
         HeatCompositeCalibrationService calibration = mock(HeatCompositeCalibrationService.class);
         TrendInterpretationJob agentFive = mock(TrendInterpretationJob.class);
         SourcingTimeGapRecalculationService timeGap = mock(SourcingTimeGapRecalculationService.class);
         SourcingKeywordHeatBackfillService service = new SourcingKeywordHeatBackfillService(
-                threads, google, instagram, percentiles, calibration, agentFive, timeGap);
+                threads, google, threadsToday, googleToday, instagram,
+                percentiles, calibration, agentFive, timeGap);
         LocalDate today = LocalDate.of(2026, 10, 10);
         when(calibration.computeAndPersistWithRawSevenDayAnchor(eq(41L), any(LocalDate.class)))
                 .thenReturn(Optional.of(mock(HeatCompositeDaily.class)));
 
         service.backfill(41L, today);
 
-        verify(threads).backfillRangeForKeyword(41L, LocalDate.of(2026, 9, 27), today);
+        verify(threads).backfillRangeForKeyword(41L, LocalDate.of(2026, 10, 3), today);
         verify(google).backfillKeywordReadings(
-                41L, "now 14-d", LocalDate.of(2026, 9, 27), today);
-        verify(instagram).runMissingForWeek(LocalDate.of(2026, 9, 27));
-        verify(instagram).runMissingForWeek(LocalDate.of(2026, 9, 28));
+                41L, "now 7-d", LocalDate.of(2026, 10, 3), today);
+        verify(threadsToday).runForKeywordIds(List.of(41L), today);
+        verify(googleToday).runForKeywordIds(List.of(41L), today);
+        verify(instagram).runMissingForWeek(LocalDate.of(2026, 10, 3));
         verify(instagram).runMissingForWeek(LocalDate.of(2026, 10, 5));
         verifyNoMoreInteractions(instagram);
         ArgumentCaptor<LocalDate> dates = ArgumentCaptor.forClass(LocalDate.class);
@@ -62,13 +68,16 @@ class SourcingKeywordHeatBackfillServiceTest {
     void oneFailedSourceDoesNotPreventSevenDayComposition() {
         ThreadsBackfillService threads = mock(ThreadsBackfillService.class);
         GoogleTrendsBackfillService google = mock(GoogleTrendsBackfillService.class);
+        ThreadsHeatIngestJob threadsToday = mock(ThreadsHeatIngestJob.class);
+        GoogleTrendsHeatIngestJob googleToday = mock(GoogleTrendsHeatIngestJob.class);
         InstagramHeatIngestJob instagram = mock(InstagramHeatIngestJob.class);
         HeatReadingPercentileDao percentiles = mock(HeatReadingPercentileDao.class);
         HeatCompositeCalibrationService calibration = mock(HeatCompositeCalibrationService.class);
         TrendInterpretationJob agentFive = mock(TrendInterpretationJob.class);
         SourcingTimeGapRecalculationService timeGap = mock(SourcingTimeGapRecalculationService.class);
         SourcingKeywordHeatBackfillService service = new SourcingKeywordHeatBackfillService(
-                threads, google, instagram, percentiles, calibration, agentFive, timeGap);
+                threads, google, threadsToday, googleToday, instagram,
+                percentiles, calibration, agentFive, timeGap);
         doThrow(new IllegalStateException("source unavailable"))
                 .when(instagram).runMissingForWeek(any(LocalDate.class));
 
